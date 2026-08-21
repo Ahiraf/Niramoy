@@ -1,0 +1,344 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Icon } from "../icons.js";
+import {
+  Avatar, PageHeading, Empty, Loading, Modal, Field, StatusPill, Rating, Banner,
+} from "../ui.js";
+
+const TABS = [
+  { id: "upcoming", label: "Upcoming", match: (a) => ["confirmed", "pending"].includes(a.status) },
+  { id: "past", label: "Past visits", match: (a) => ["completed", "no_show"].includes(a.status) },
+  { id: "cancelled", label: "Cancelled", match: (a) => a.status === "cancelled" },
+];
+
+export function Appointments({
+  loading, appointments, waitlist, onNavigate, onCancel, onReschedule,
+  onJoinCall, onReview, onLeaveWaitlist,
+}) {
+  const [tab, setTab] = useState("upcoming");
+  const [reviewing, setReviewing] = useState(null);
+  const [cancelling, setCancelling] = useState(null);
+
+  const shown = appointments.filter(TABS.find((t) => t.id === tab).match);
+
+  return (
+    <>
+      <PageHeading
+        title="My appointments"
+        subtitle="Consultations, follow-ups and everything you've booked."
+        actions={
+          <button className="button primary" onClick={() => onNavigate("doctors")}>
+            <Icon name="plus" size={14} />Book appointment
+          </button>
+        }
+      />
+
+      {waitlist.length > 0 && (
+        <div className="section-card card">
+          <h3 className="waitlist-head">
+            <Icon name="bell" size={15} /> You&apos;re on {waitlist.length} waitlist
+            {waitlist.length === 1 ? "" : "s"}
+          </h3>
+          {waitlist.map((w) => (
+            <div className="appointment-row" key={w.id}>
+              <Avatar person={w.doctor} size="sm" />
+              <div className="appt-main">
+                <strong>{w.doctor?.name}</strong>
+                <span>Waiting for a slot on {w.dateKey}</span>
+              </div>
+              <button className="button ghost small" onClick={() => onLeaveWaitlist(w.id)}>
+                Leave
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="card tabs-card">
+        <div className="appointment-tabs" role="tablist">
+          {TABS.map((t) => {
+            const count = appointments.filter(t.match).length;
+            return (
+              <button
+                key={t.id}
+                role="tab"
+                aria-selected={tab === t.id}
+                className={`tab ${tab === t.id ? "active" : ""}`}
+                onClick={() => setTab(t.id)}
+              >
+                {t.label} {count > 0 && <em>({count})</em>}
+              </button>
+            );
+          })}
+        </div>
+
+        {loading ? (
+          <Loading rows={3} />
+        ) : shown.length ? (
+          shown.map((a) => (
+            <div className="appointment-card card" key={a.id}>
+              <div className="appt-date">
+                <strong>{a.date}</strong>
+                <span>{a.day}</span>
+                <em>{a.month}</em>
+              </div>
+
+              <Avatar person={a.doctor} />
+
+              <div className="appt-main">
+                <strong>{a.doctor?.name}</strong>
+                <span>{a.doctor?.specialty} · {a.type}</span>
+                {a.reason && <span className="appt-reason">“{a.reason}”</span>}
+                <div style={{ marginTop: 8 }}><StatusPill status={a.status} /></div>
+              </div>
+
+              <div className="appt-time">
+                <strong>{a.time}</strong>
+                <span>{a.day}, {a.date} {a.month}</span>
+                <em>{a.doctor?.feeLabel}</em>
+              </div>
+
+              <div className="appt-actions">
+                {a.status === "confirmed" && (
+                  <>
+                    <button className="button secondary small" onClick={() => onJoinCall(a)}>
+                      <Icon name="video" size={12} />Join call
+                    </button>
+                    <button className="button ghost small" onClick={() => onReschedule(a)}>
+                      Reschedule
+                    </button>
+                    <button
+                      className="button ghost small danger"
+                      disabled={!a.canCancel}
+                      title={a.canCancel ? "" : "Too close to the appointment to cancel"}
+                      onClick={() => setCancelling(a)}
+                    >
+                      Cancel
+                    </button>
+                  </>
+                )}
+                {a.status === "completed" && (
+                  <>
+                    <button className="button ghost small" onClick={() => onNavigate("records")}>
+                      <Icon name="file" size={12} />View notes
+                    </button>
+                    <button className="button secondary small" onClick={() => setReviewing(a)}>
+                      <Icon name="star" size={12} />Leave review
+                    </button>
+                  </>
+                )}
+                {a.status === "cancelled" && (
+                  <button className="button ghost small" onClick={() => onNavigate("doctors")}>
+                    Book again
+                  </button>
+                )}
+              </div>
+            </div>
+          ))
+        ) : (
+          <Empty
+            icon="calendar"
+            title={`No ${tab} appointments`}
+            hint={tab === "upcoming" ? "Book a consultation and it will show up here." : "Nothing in this view yet."}
+            action={
+              tab === "upcoming" ? (
+                <button className="button primary small" onClick={() => onNavigate("doctors")}>
+                  Find a doctor
+                </button>
+              ) : null
+            }
+          />
+        )}
+      </div>
+
+      <ReviewModal
+        appointment={reviewing}
+        onClose={() => setReviewing(null)}
+        onSubmit={async (payload) => {
+          await onReview(payload);
+          setReviewing(null);
+        }}
+      />
+
+      <Modal
+        open={Boolean(cancelling)}
+        title="Cancel this appointment?"
+        onClose={() => setCancelling(null)}
+        footer={
+          <>
+            <button className="button ghost" onClick={() => setCancelling(null)}>Keep it</button>
+            <button
+              className="button primary danger"
+              onClick={async () => {
+                await onCancel(cancelling.id);
+                setCancelling(null);
+              }}
+            >
+              Yes, cancel
+            </button>
+          </>
+        }
+      >
+        <p>
+          Your consultation with <strong>{cancelling?.doctor?.name}</strong> on{" "}
+          <strong>{cancelling?.day}, {cancelling?.date} {cancelling?.month} at {cancelling?.time}</strong>{" "}
+          will be released.
+        </p>
+        <p className="muted-note">
+          The slot goes back into the doctor&apos;s calendar, and anyone waiting for that day is notified.
+        </p>
+      </Modal>
+    </>
+  );
+}
+
+function ReviewModal({ appointment, onClose, onSubmit }) {
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState("");
+
+  useEffect(() => {
+    if (appointment) { setRating(5); setComment(""); }
+  }, [appointment]);
+
+  if (!appointment) return null;
+
+  return (
+    <Modal
+      open
+      title={`Review your visit with ${appointment.doctor?.name}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="button ghost" onClick={onClose}>Not now</button>
+          <button
+            className="button primary"
+            onClick={() =>
+              onSubmit({
+                appointmentId: appointment.id,
+                doctorId: appointment.doctorId,
+                rating,
+                comment,
+              })
+            }
+          >
+            Submit review
+          </button>
+        </>
+      }
+    >
+      <Field label="How was your consultation?">
+        <div className="star-picker">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button
+              key={n}
+              className={`star-button ${n <= rating ? "on" : ""}`}
+              onClick={() => setRating(n)}
+              aria-label={`${n} star${n === 1 ? "" : "s"}`}
+            >
+              <Icon name="star" size={22} strokeWidth={n <= rating ? 0 : 1.6} style={n <= rating ? { fill: "currentColor" } : undefined} />
+            </button>
+          ))}
+        </div>
+      </Field>
+
+      <Field label="Anything you'd like to add?" hint="Optional. Visible to other patients.">
+        <textarea
+          className="field textarea"
+          rows={4}
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          placeholder="Was the doctor clear? Did the call run on time?"
+        />
+      </Field>
+    </Modal>
+  );
+}
+
+export function Consultation({ appointment, onNavigate, onComplete }) {
+  const [elapsed, setElapsed] = useState(0);
+  const [micOn, setMicOn] = useState(true);
+  const [camOn, setCamOn] = useState(true);
+
+  useEffect(() => {
+    const t = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const mmss = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
+  const doctor = appointment?.doctor;
+
+  return (
+    <>
+      <PageHeading
+        title="Video consultation"
+        subtitle="Your secure consultation room."
+        actions={
+          <button className="button ghost" onClick={() => onNavigate("appointments")}>
+            Leave room
+          </button>
+        }
+      />
+
+      <div className="card consult-shell">
+        <div className="consult-stage">
+          <div className="consult-status">
+            <span className="live-dot" /> Secure room · {mmss}
+          </div>
+
+          <div className="consult-peer">
+            <div className={`avatar ${doctor?.avatar || "teal"}`} style={{ width: 76, height: 76, fontSize: 21, margin: "0 auto 14px" }}>
+              {doctor?.initials || "DR"}
+            </div>
+            <strong>{doctor?.name || "Your doctor"}</strong>
+            <span>{doctor?.specialty}</span>
+            <p className="consult-hint">
+              This is a placeholder for the embedded Jitsi/Daily room
+              {appointment?.videoRoomId ? ` (${appointment.videoRoomId})` : ""}.
+            </p>
+          </div>
+
+          <div className="consult-self">You</div>
+
+          <div className="consult-controls">
+            <button
+              className={`consult-button ${micOn ? "" : "off"}`}
+              onClick={() => setMicOn((v) => !v)}
+              aria-label={micOn ? "Mute microphone" : "Unmute microphone"}
+            >
+              <Icon name="mic" size={17} />
+            </button>
+            <button
+              className={`consult-button ${camOn ? "" : "off"}`}
+              onClick={() => setCamOn((v) => !v)}
+              aria-label={camOn ? "Turn camera off" : "Turn camera on"}
+            >
+              <Icon name="video" size={17} />
+            </button>
+            <button
+              className="button leave-button"
+              onClick={async () => {
+                if (appointment) await onComplete(appointment.id);
+                onNavigate("appointments");
+              }}
+            >
+              End consultation
+            </button>
+          </div>
+        </div>
+
+        <div className="consult-footer">
+          <span>Recording is off · This conversation is private and encrypted.</span>
+          <button className="button secondary small" onClick={() => onNavigate("records")}>
+            <Icon name="file" size={12} />View medical history
+          </button>
+        </div>
+      </div>
+
+      <Banner tone="info" icon="info" title="What happens next">
+        When the doctor ends the consultation they can generate an AI visit summary and a
+        prescription draft, review it, and publish it to your records.
+      </Banner>
+    </>
+  );
+}
