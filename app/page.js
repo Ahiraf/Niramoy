@@ -9,7 +9,8 @@ import { FindDoctors, DoctorProfile } from "./components/patient/find-doctors.js
 import { Booking } from "./components/patient/booking.js";
 import { Appointments, Consultation } from "./components/patient/appointments.js";
 import { Assistant } from "./components/patient/assistant.js";
-import { Records, Family, Settings } from "./components/patient/records.js";
+import { Records, Family } from "./components/patient/records.js";
+import { Settings } from "./components/settings.js";
 import { JoinAsDoctor, DoctorPending } from "./components/join-as-doctor.js";
 import { Icon } from "./components/icons.js";
 import { DoctorWorkspace, useDoctorSelf } from "./components/doctor-workspace.js";
@@ -299,6 +300,18 @@ export default function Home() {
   /* View routing                                                            */
   /* ---------------------------------------------------------------------- */
 
+  // Settings is one component for all three roles; it renders from the session.
+  const settingsProps = {
+    user,
+    role,
+    doctor: role === "doctor" ? doctorSelf : null,
+    reference,
+    api,
+    onNavigate: navigate,
+    onUserChange: setUser,
+    notify: showToast,
+  };
+
   const counts = useMemo(() => ({
     appointments: appointments.filter((a) => ["confirmed", "pending"].includes(a.status)).length,
     pending: reference?.stats?.pendingVerifications ?? 0,
@@ -411,7 +424,7 @@ export default function Home() {
     if (active === "consultation") {
       view = <Consultation appointment={activeCall} onNavigate={navigate} onComplete={completeCall} />;
     }
-    if (active === "profile") view = <Settings onNavigate={navigate} />;
+    if (active === "profile") view = <Settings {...settingsProps} />;
   } else if (role === "admin") {
     view = (
       <AdminWorkspace
@@ -422,7 +435,7 @@ export default function Home() {
         onRefresh={refreshReference}
       />
     );
-    if (active === "profile") view = <Settings onNavigate={navigate} />;
+    if (active === "profile") view = <Settings {...settingsProps} />;
   } else {
     switch (active) {
       case "doctors":
@@ -504,7 +517,7 @@ export default function Home() {
         );
         break;
       case "profile":
-        view = <Settings onNavigate={navigate} />;
+        view = <Settings {...settingsProps} />;
         break;
       case "join-as-doctor":
         view = <JoinAsDoctor reference={reference} api={api} onNavigate={navigate} notify={showToast} />;

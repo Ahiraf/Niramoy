@@ -36,6 +36,7 @@ export const api = {
   login: (body) => request("/api/auth/login", { method: "POST", body }),
   register: (body) => request("/api/auth/register", { method: "POST", body }),
   logout: () => request("/api/auth", { method: "DELETE" }),
+  updateProfile: (body) => request("/api/auth", { method: "PATCH", body }),
 
   reference: () => request("/api/reference"),
 

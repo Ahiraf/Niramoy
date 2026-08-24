@@ -819,3 +819,13 @@ textarea.field, .textarea { height: auto; padding: 10px 12px; line-height: 1.55;
   .pending-actions .button { width: 100%; }
   .onboarding-top { padding: 13px 20px; }
 }
+
+/* --- Settings: role-specific blocks ---------------------------------------- */
+.field:disabled, .field[readonly] { background: #f4f7f6; color: #8b9b9f; cursor: not-allowed; }
+.settings-registration { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+.settings-registration .section-subhead { margin-bottom: 12px; }
+.settings-reg-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 0; border-top: 1px solid #f0f3f2; }
+.settings-reg-row:first-of-type { border-top: 0; }
+.settings-reg-row span:first-child { color: var(--muted); font-size: 11px; }
+.settings-reg-row strong { font-size: 11.5px; }
+.settings-registration .muted-note { margin-top: 12px; }
