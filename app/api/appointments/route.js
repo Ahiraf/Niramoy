@@ -1,5 +1,5 @@
-import { listAppointments, bookAppointment, CURRENT_PATIENT } from "../../../lib/store.js";
-import { boot, ok, fail, query, explain } from "../_lib.js";
+import { listAppointments, bookAppointment } from "../../../lib/store.js";
+import { boot, ok, fail, query, explain, patientIdFor } from "../_lib.js";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +9,7 @@ export async function GET(request) {
   const q = query(request);
   return ok({
     appointments: listAppointments({
-      patientId: q.doctorId ? undefined : (q.patientId ?? CURRENT_PATIENT.id),
+      patientId: q.doctorId ? undefined : (q.patientId ?? patientIdFor(request)),
       doctorId: q.doctorId,
     }),
   });
@@ -21,7 +21,7 @@ export async function POST(request) {
   const body = await request.json();
   const result = bookAppointment({
     doctorId: body.doctorId,
-    patientId: body.patientId ?? CURRENT_PATIENT.id,
+    patientId: body.patientId ?? patientIdFor(request),
     startUtc: body.startUtc,
     forMember: body.forMember ?? null,
     reason: body.reason ?? "",

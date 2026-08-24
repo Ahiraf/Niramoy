@@ -15,11 +15,48 @@ const BMDC_ERRORS = {
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 /**
+ * Shown to a doctor whose application is with an admin. Deliberately not a
+ * half-working workspace: until the BM&DC number is confirmed there is no
+ * bookable profile, so there is nothing to schedule against.
+ */
+export function DoctorPending({ user, onRefresh, onSignOut }) {
+  return (
+    <div className="pending-screen">
+      <div className="pending-card card">
+        <div className="pending-icon"><Icon name="clock" size={22} /></div>
+        <h1>Your application is being verified</h1>
+        <p>
+          Thanks, {user.name}. An admin is confirming your BM&amp;DC registration against the
+          official register at verify.bmdc.org.bd. This is a human check, not an automatic one —
+          it usually takes under two working days.
+        </p>
+
+        <ol className="step-list pending-steps">
+          <li className="done"><strong>Account created</strong><span>{user.email}</span></li>
+          <li className="done"><strong>Application submitted</strong><span>Format of your registration number checked.</span></li>
+          <li className="current"><strong>Admin verification</strong><span>In progress — you&apos;ll be notified by email.</span></li>
+          <li><strong>Profile goes live</strong><span>Patients can find and book you.</span></li>
+        </ol>
+
+        <div className="pending-actions">
+          <button className="button primary" onClick={onRefresh}>
+            <Icon name="refresh" size={14} /> Check status
+          </button>
+          <button className="button ghost" onClick={onSignOut}>
+            <Icon name="logout" size={14} /> Sign out
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
  * The real onboarding path. A doctor supplies their BM&DC registration number;
  * it is shape-checked here and on the server, then queued for a human admin to
  * confirm against verify.bmdc.org.bd. Nothing auto-approves.
  */
-export function JoinAsDoctor({ reference, api, onNavigate, notify }) {
+export function JoinAsDoctor({ reference, api, onNavigate, notify, defaults = {}, onSubmitted, showBack = true }) {
   const [form, setForm] = useState({
     name: "", email: "", phone: "",
     bmdcNumber: "", registrationType: "mbbs",
@@ -30,6 +67,9 @@ export function JoinAsDoctor({ reference, api, onNavigate, notify }) {
     languages: ["Bangla", "English"],
     days: [0, 1, 2, 3, 4],
     startHour: "17", endHour: "21", slotMinutes: "20",
+    // A doctor who just signed up arrives with name, email and BM&DC number
+    // already filled in — no reason to ask twice.
+    ...Object.fromEntries(Object.entries(defaults).filter(([, v]) => v !== "" && v != null)),
   });
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -81,7 +121,7 @@ export function JoinAsDoctor({ reference, api, onNavigate, notify }) {
       <PageHeading
         title="Join Niramoy as a doctor"
         subtitle="Every doctor on Niramoy is verified against the BM&DC register before their profile goes live."
-        back={{ label: "Back to dashboard", onClick: () => onNavigate("dashboard") }}
+        back={showBack ? { label: "Back to dashboard", onClick: () => onNavigate("dashboard") } : undefined}
       />
 
       <Banner tone="info" icon="shield" title="Why we ask for your BM&DC number">
@@ -267,9 +307,12 @@ export function JoinAsDoctor({ reference, api, onNavigate, notify }) {
       <Modal
         open={Boolean(done)}
         title="Application submitted"
-        onClose={() => { setDone(null); onNavigate("dashboard"); }}
+        onClose={() => { setDone(null); onSubmitted ? onSubmitted() : onNavigate("dashboard"); }}
         footer={
-          <button className="button primary" onClick={() => { setDone(null); onNavigate("dashboard"); }}>
+          <button
+            className="button primary"
+            onClick={() => { setDone(null); onSubmitted ? onSubmitted() : onNavigate("dashboard"); }}
+          >
             Done
           </button>
         }
@@ -280,8 +323,9 @@ export function JoinAsDoctor({ reference, api, onNavigate, notify }) {
         </p>
         <p className="muted-note">{done?.lookup?.reason}</p>
         <Banner tone="info" icon="info">
-          Switch to the <strong>admin</strong> role in the sidebar to see your application in the
-          verification queue and approve it — that&apos;s the flow a real Niramoy admin would follow.
+          Verification is done by a person, so it isn&apos;t instant. Signing in with an{" "}
+          <strong>admin</strong> account shows the same application in the verification queue — that
+          is the flow a real Niramoy admin would follow.
         </Banner>
       </Modal>
     </>

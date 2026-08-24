@@ -1,14 +1,14 @@
 import {
-  listRecords, addRecord, listPrescriptions, addPrescription, CURRENT_PATIENT,
+  listRecords, addRecord, listPrescriptions, addPrescription,
 } from "../../../lib/store.js";
-import { boot, ok, query } from "../_lib.js";
+import { boot, ok, query, patientIdFor } from "../_lib.js";
 
 export const dynamic = "force-dynamic";
 
 /** GET /api/records — the medical-history timeline plus prescriptions. */
 export async function GET(request) {
   boot();
-  const patientId = query(request).patientId ?? CURRENT_PATIENT.id;
+  const patientId = query(request).patientId ?? patientIdFor(request);
   return ok({
     records: listRecords(patientId),
     prescriptions: listPrescriptions(patientId),
@@ -19,7 +19,7 @@ export async function GET(request) {
 export async function POST(request) {
   boot();
   const body = await request.json();
-  const patientId = body.patientId ?? CURRENT_PATIENT.id;
+  const patientId = body.patientId ?? patientIdFor(request);
 
   if (body.kind === "prescription") {
     return ok({ prescription: addPrescription({ ...body, patientId }) }, { status: 201 });

@@ -323,11 +323,6 @@ a { color: inherit; text-decoration: none; }
 .topbar-heading span { display: block; font-size: 10px; color: var(--muted); margin-top: 3px; }
 .topbar-search { display: flex; align-items: center; }
 
-.role-switch { padding: 12px 8px 4px; }
-.role-switch-label { display: block; color: #a2afb1; font-size: 9px; text-transform: uppercase; font-weight: 800; letter-spacing: 1px; margin-bottom: 8px; }
-.role-switch-buttons { display: flex; gap: 4px; background: #f4f7f6; border-radius: 9px; padding: 3px; }
-.role-chip { flex: 1; border: 0; background: transparent; border-radius: 7px; height: 27px; font-size: 10px; font-weight: 750; color: #7d8f92; text-transform: capitalize; transition: .15s ease; }
-.role-chip.active { background: #fff; color: var(--teal-dark); box-shadow: 0 2px 6px rgba(31,75,78,.1); }
 
 .notification.unread strong { color: var(--teal-dark); }
 .notification i { background: #d9e2e2; }
@@ -645,3 +640,182 @@ textarea.field, .textarea { height: auto; padding: 10px 12px; line-height: 1.55;
 .appt-main .status,
 .appt-main .verified,
 .appt-main .demo-badge { display: inline-flex; width: fit-content; }
+
+/* ========================================================================== */
+/* Public pages — landing, auth, doctor onboarding                            */
+/* ========================================================================== */
+
+.boot-screen { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 14px; color: var(--muted); font-size: 12px; }
+.boot-screen .brand-mark { animation: boot-pulse 1.4s ease-in-out infinite; }
+@keyframes boot-pulse { 0%, 100% { transform: scale(1); opacity: .85; } 50% { transform: scale(1.09); opacity: 1; } }
+
+/* --- Landing -------------------------------------------------------------- */
+.landing { min-height: 100vh; background: var(--cream); }
+.landing-nav { position: sticky; top: 0; z-index: 9; display: flex; align-items: center; gap: 28px; padding: 15px 44px; background: rgba(248,250,248,.88); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+.landing-nav .brand { padding: 0; }
+.landing-links { display: flex; gap: 24px; margin-left: 12px; }
+.landing-links a { color: #6b7d82; font-size: 12px; font-weight: 650; }
+.landing-links a:hover { color: var(--teal); }
+.landing-nav-actions { margin-left: auto; display: flex; gap: 9px; }
+
+.landing-eyebrow { display: inline-flex; align-items: center; gap: 6px; background: #fff; border: 1px solid var(--mint); color: var(--teal-dark); border-radius: 50px; padding: 6px 12px; font-size: 10.5px; font-weight: 750; }
+.landing-eyebrow.plain { background: var(--teal-soft); border-color: transparent; }
+
+.landing-hero { max-width: 1220px; margin: 0 auto; padding: 62px 44px 34px; display: grid; grid-template-columns: 1.08fr .92fr; gap: 40px; align-items: center; }
+.landing-hero h1 { font-size: 50px; line-height: 1.05; letter-spacing: -1.8px; margin: 20px 0 16px; }
+.landing-hero h1 em { font-style: normal; color: var(--teal); }
+.landing-hero-copy > p { color: var(--muted); font-size: 14px; line-height: 1.7; max-width: 500px; margin: 0; }
+.landing-cta-row { display: flex; gap: 11px; margin: 26px 0 34px; flex-wrap: wrap; }
+.landing-cta-row.center { justify-content: center; margin-bottom: 0; }
+.landing-cta-row .button { height: 43px; padding: 0 19px; font-size: 12.5px; }
+.landing-figures { display: flex; gap: 34px; border-top: 1px solid var(--line); padding-top: 22px; flex-wrap: wrap; }
+.landing-figures strong { display: block; font-size: 25px; letter-spacing: -.8px; }
+.landing-figures span { display: block; color: var(--muted); font-size: 10.5px; margin-top: 4px; }
+
+.landing-hero-art { position: relative; min-height: 420px; }
+.landing-hero-art:before { content: ""; position: absolute; inset: 26px 0 26px 18px; border-radius: 26px; background: linear-gradient(150deg, #0b847a 0%, #2f9488 55%, #7cbda6 100%); box-shadow: var(--shadow); }
+.landing-card-float { position: absolute; background: #fff; border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 14px 32px rgba(31,75,78,.13); padding: 13px 15px; }
+.landing-card-float.top { top: 4px; left: -14px; display: flex; align-items: center; gap: 11px; }
+.landing-card-float.top strong { display: block; font-size: 12px; }
+.landing-card-float.top span:not(.verified) { display: block; color: var(--muted); font-size: 10px; margin-top: 3px; }
+.landing-card-float.mid { top: 132px; right: -10px; width: 218px; }
+.landing-card-float.mid strong { display: block; font-size: 14px; margin-top: 6px; letter-spacing: -.3px; }
+.landing-card-float.mid p { color: var(--muted); font-size: 10.5px; margin: 5px 0 12px; }
+.landing-slotline { display: flex; gap: 5px; }
+.landing-slotline span { flex: 1; text-align: center; border-radius: 7px; background: #f3f7f5; color: #8d9ea1; font-size: 9.5px; font-weight: 700; padding: 5px 0; }
+.landing-slotline span.on { background: var(--teal); color: #fff; }
+.landing-card-float.low { bottom: 12px; left: 6px; display: flex; align-items: center; gap: 11px; max-width: 268px; }
+.landing-card-float.low strong { display: block; font-size: 11.5px; }
+.landing-card-float.low span { display: block; color: var(--muted); font-size: 10px; margin-top: 3px; }
+.landing-triage-icon { width: 32px; height: 32px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 10px; background: #f1effc; color: var(--purple); }
+
+.landing-section { max-width: 1220px; margin: 0 auto; padding: 58px 44px; }
+.landing-section.tinted { max-width: none; background: #fff; border-block: 1px solid var(--line); }
+.landing-section.tinted > * { max-width: 1220px; margin-inline: auto; }
+.landing-head { max-width: 620px; margin-bottom: 32px; }
+.landing-head h2 { font-size: 30px; letter-spacing: -1.1px; margin: 14px 0 10px; line-height: 1.15; }
+.landing-head p { color: var(--muted); font-size: 13px; line-height: 1.65; margin: 0; }
+
+.landing-role-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 17px; }
+.landing-role-card { padding: 26px 24px; display: flex; flex-direction: column; }
+.landing-role-card h3 { font-size: 17px; letter-spacing: -.4px; margin: 16px 0 8px; }
+.landing-role-card > p { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 0 0 16px; }
+.landing-role-card ul { list-style: none; margin: 0 0 22px; padding: 0; display: grid; gap: 9px; }
+.landing-role-card li { display: flex; gap: 8px; align-items: flex-start; font-size: 11.5px; color: #55686d; line-height: 1.45; }
+.landing-role-card li svg { color: var(--teal); flex: 0 0 auto; margin-top: 2px; }
+.landing-role-card .button { margin-top: auto; width: 100%; }
+.landing-role-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 13px; background: var(--teal-soft); color: var(--teal); }
+.landing-role-card.doctor .landing-role-icon { background: #eaf3fa; color: #5683a2; }
+.landing-role-card.admin .landing-role-icon { background: #f1effc; color: var(--purple); }
+
+.landing-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 17px; counter-reset: none; }
+.landing-steps li { background: var(--cream); border: 1px solid var(--line); border-radius: 14px; padding: 22px 20px; }
+.landing-step-icon { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 11px; background: #fff; border: 1px solid var(--line); color: var(--teal); margin-bottom: 14px; }
+.landing-step-no { color: #a2afb1; font-size: 9.5px; text-transform: uppercase; letter-spacing: 1.1px; font-weight: 800; }
+.landing-steps strong { display: block; font-size: 13px; margin: 7px 0 7px; letter-spacing: -.2px; }
+.landing-steps p { color: var(--muted); font-size: 11.5px; line-height: 1.6; margin: 0; }
+
+.landing-feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+.landing-feature { padding: 21px; }
+.landing-feature strong { display: block; font-size: 13px; margin: 14px 0 7px; letter-spacing: -.2px; }
+.landing-feature p { color: var(--muted); font-size: 11.5px; line-height: 1.6; margin: 0; }
+.landing-feature-icon { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 11px; background: var(--teal-soft); color: var(--teal); }
+
+.landing-note { display: flex; gap: 17px; padding: 26px 28px; }
+.landing-note-icon { width: 42px; height: 42px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 13px; background: #fff1e5; color: var(--orange); }
+.landing-note h3 { margin: 0 0 10px; font-size: 16px; letter-spacing: -.3px; }
+.landing-note p { color: var(--muted); font-size: 12px; line-height: 1.7; margin: 0 0 10px; max-width: 780px; }
+.landing-note p:last-child { margin-bottom: 0; }
+
+.landing-final { text-align: center; padding: 60px 44px 66px; background: #fff; border-top: 1px solid var(--line); }
+.landing-final h2 { font-size: 29px; letter-spacing: -1px; margin: 0 0 10px; }
+.landing-final p { color: var(--muted); font-size: 13px; margin: 0 0 26px; }
+
+.landing-footer { display: grid; justify-items: center; gap: 12px; text-align: center; padding: 32px 44px 44px; border-top: 1px solid var(--line); }
+.landing-footer .brand { padding: 0; }
+.landing-footer p { color: var(--muted-2); font-size: 11px; line-height: 1.65; margin: 0; max-width: 620px; }
+
+/* --- Auth ----------------------------------------------------------------- */
+.auth-page { min-height: 100vh; display: grid; grid-template-columns: 460px 1fr; }
+.auth-aside { position: relative; display: flex; flex-direction: column; gap: 26px; padding: 30px 38px 34px; color: #fff; background: linear-gradient(160deg, #0b847a 0%, #12776f 52%, #0a5a54 100%); }
+.auth-aside:before { content: ""; position: absolute; width: 340px; height: 340px; right: -140px; top: -110px; border: 1px solid rgba(255,255,255,.14); border-radius: 50%; box-shadow: 0 0 0 34px rgba(255,255,255,.045); }
+.auth-aside .brand-mark { background: rgba(255,255,255,.16); box-shadow: none; }
+.auth-aside .brand-name, .auth-aside .brand-name span { color: #fff; }
+.auth-back { align-self: flex-start; display: inline-flex; align-items: center; gap: 7px; border: 1px solid rgba(255,255,255,.28); background: rgba(255,255,255,.1); color: #fff; border-radius: 50px; padding: 7px 13px; font-size: 11px; font-weight: 700; position: relative; z-index: 1; }
+.auth-back:hover { background: rgba(255,255,255,.18); }
+.auth-aside-body { position: relative; z-index: 1; margin-top: 4px; }
+.auth-aside-body h2 { font-size: 25px; letter-spacing: -.9px; line-height: 1.15; margin: 0 0 20px; }
+.auth-aside-body ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 13px; }
+.auth-aside-body li { display: flex; gap: 10px; align-items: flex-start; font-size: 12px; line-height: 1.5; color: #d7ede8; }
+.auth-aside-body li svg { flex: 0 0 auto; margin-top: 2px; color: var(--mint); }
+.auth-demo { position: relative; z-index: 1; margin-top: auto; background: rgba(255,255,255,.11); border: 1px solid rgba(255,255,255,.18); border-radius: 14px; padding: 15px 16px; }
+.auth-demo strong { font-size: 12px; }
+.auth-demo p { color: #cde8e2; font-size: 11px; line-height: 1.55; margin: 5px 0 11px; }
+.auth-demo code { background: rgba(255,255,255,.17); border-radius: 5px; padding: 1px 5px; font-size: 10.5px; }
+.auth-demo-row { display: flex; gap: 7px; }
+.auth-demo-row button { flex: 1; border: 1px solid rgba(255,255,255,.26); background: transparent; color: #fff; border-radius: 8px; height: 30px; font-size: 10.5px; font-weight: 750; text-transform: capitalize; }
+.auth-demo-row button:hover { background: rgba(255,255,255,.16); }
+
+.auth-main { display: grid; place-items: center; padding: 44px 30px; background: var(--cream); }
+.auth-card { width: min(460px, 100%); background: #fff; border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); padding: 28px 30px 26px; }
+.auth-card h1 { font-size: 22px; letter-spacing: -.7px; margin: 22px 0 8px; text-transform: none; }
+.auth-card h1::first-letter { text-transform: uppercase; }
+.auth-sub { color: var(--muted); font-size: 11.5px; line-height: 1.6; margin: 0 0 20px; }
+.auth-role-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: #f3f7f5; border-radius: 11px; padding: 4px; }
+.auth-role-tab { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; background: transparent; color: #74868a; border-radius: 8px; height: 34px; font-size: 11.5px; font-weight: 750; transition: .16s ease; }
+.auth-role-tab:hover { color: var(--teal); }
+.auth-role-tab.active { background: #fff; color: var(--teal-dark); box-shadow: 0 2px 7px rgba(39,87,84,.09); }
+.auth-error { display: flex; gap: 9px; align-items: flex-start; background: #fff1f1; color: #a94b4f; border-radius: 10px; padding: 11px 13px; font-size: 11.5px; line-height: 1.5; margin-bottom: 16px; font-weight: 600; }
+.auth-error svg { flex: 0 0 auto; margin-top: 1px; }
+.auth-password { position: relative; }
+.auth-reveal { position: absolute; right: 6px; top: 5px; height: 27px; padding: 0 9px; border: 0; border-radius: 7px; background: #f3f7f5; color: #6d8085; font-size: 10px; font-weight: 750; }
+.auth-reveal:hover { color: var(--teal); background: var(--teal-soft); }
+.auth-note { display: flex; gap: 9px; align-items: flex-start; background: var(--teal-soft); color: var(--teal-dark); border-radius: 10px; padding: 11px 13px; font-size: 10.5px; line-height: 1.55; margin: 0 0 16px; }
+.auth-note svg { flex: 0 0 auto; margin-top: 1px; }
+.auth-submit { width: 100%; height: 42px; font-size: 12.5px; margin-top: 4px; }
+.auth-swap { text-align: center; color: var(--muted); font-size: 11.5px; margin: 18px 0 0; }
+.auth-swap .text-link { font-size: 11.5px; }
+.auth-legal { text-align: center; color: var(--muted-2); font-size: 10px; line-height: 1.55; margin: 16px 0 0; }
+
+/* --- Doctor onboarding ---------------------------------------------------- */
+.onboarding-shell { min-height: 100vh; background: var(--cream); }
+.onboarding-top { display: flex; align-items: center; justify-content: space-between; padding: 16px 38px; background: #fff; border-bottom: 1px solid var(--line); }
+.onboarding-top .brand { padding: 0; }
+
+.pending-screen { min-height: 100vh; display: grid; place-items: center; padding: 44px 24px; background: var(--cream); }
+.pending-card { width: min(560px, 100%); padding: 34px 36px; text-align: left; }
+.pending-icon { width: 46px; height: 46px; display: grid; place-items: center; border-radius: 14px; background: #fff4e8; color: var(--orange); }
+.pending-card h1 { font-size: 23px; letter-spacing: -.8px; margin: 18px 0 10px; }
+.pending-card > p { color: var(--muted); font-size: 12.5px; line-height: 1.7; margin: 0 0 24px; }
+.pending-steps li.done:before { background: var(--teal); color: #fff; }
+.pending-steps li.current:before { background: #fff4e8; color: #b47c45; box-shadow: 0 0 0 3px #fdf1e3; }
+.pending-actions { display: flex; gap: 9px; margin-top: 26px; }
+
+/* --- Public-page responsiveness ------------------------------------------- */
+@media (max-width: 1080px) {
+  .landing-hero { grid-template-columns: 1fr; padding-top: 44px; }
+  .landing-hero h1 { font-size: 40px; }
+  .landing-hero-art { display: none; }
+  .landing-role-grid, .landing-feature-grid { grid-template-columns: repeat(2, 1fr); }
+  .landing-steps { grid-template-columns: repeat(2, 1fr); }
+  .auth-page { grid-template-columns: 1fr; }
+  .auth-aside { padding: 22px 28px 26px; }
+  .auth-aside-body { display: none; }
+  .auth-demo { margin-top: 18px; }
+}
+@media (max-width: 760px) {
+  .landing-nav { padding: 13px 20px; gap: 12px; }
+  .landing-links { display: none; }
+  .landing-nav-actions .button.ghost { display: none; }
+  .landing-hero, .landing-section, .landing-final, .landing-footer { padding-inline: 20px; }
+  .landing-hero h1 { font-size: 32px; letter-spacing: -1.2px; }
+  .landing-head h2 { font-size: 24px; }
+  .landing-role-grid, .landing-feature-grid, .landing-steps { grid-template-columns: 1fr; }
+  .landing-note { flex-direction: column; gap: 13px; }
+  .auth-main { padding: 26px 16px 40px; }
+  .auth-card { padding: 22px 20px 20px; }
+  .pending-card { padding: 26px 22px; }
+  .pending-actions { flex-direction: column; }
+  .pending-actions .button { width: 100%; }
+  .onboarding-top { padding: 13px 20px; }
+}

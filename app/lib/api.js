@@ -30,6 +30,13 @@ const qs = (params = {}) => {
 };
 
 export const api = {
+  // Accounts. The session lives in an HttpOnly cookie, so there is no token to
+  // pass around — the browser attaches it to every one of these calls.
+  session: () => request("/api/auth"),
+  login: (body) => request("/api/auth/login", { method: "POST", body }),
+  register: (body) => request("/api/auth/register", { method: "POST", body }),
+  logout: () => request("/api/auth", { method: "DELETE" }),
+
   reference: () => request("/api/reference"),
 
   doctors: (filters) => request(`/api/doctors${qs(filters)}`),

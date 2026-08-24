@@ -11,7 +11,8 @@ adds symptom triage, doctor recommendation, and automated visit summaries.
 - **Next.js** (React, App Router) — UI + serverless API routes
 - **Vercel Postgres (Neon)** — target datastore; double-booking prevented by a
   DB `UNIQUE (doctor_id, start_utc)` constraint + transactions
-- **NextAuth** — role-based auth (patient / doctor / admin) *(next increment)*
+- **Session auth** — email + password accounts for the three roles
+  (patient / doctor / admin), scrypt-hashed, HttpOnly session cookie
 - **Vercel Cron** — appointment reminders + no-show sweep *(next increment)*
 - **Jitsi / Daily** — embedded video consultation *(room placeholder in place)*
 - **Gemma / OpenAI** — AI triage, recommendation, visit summaries
@@ -22,6 +23,22 @@ npm install
 npm test          # scheduling engine test suite (15 tests)
 npm run dev       # http://localhost:3000
 ```
+
+Signed out you get the landing page; sign-in and sign-up cover all three roles.
+Three demo accounts are seeded so the app can be reviewed without signing up —
+password `niramoy123` for each:
+
+| Role | Email | What you land in |
+|---|---|---|
+| Patient | `nabila@example.com` | A workspace with seeded appointments, records and a prescription |
+| Doctor | `ayesha@example.com` | Schedule, availability, earnings, prescription writer |
+| Admin | `sakib@example.com` | Verification queue, directory, specialties |
+
+Signing up as a doctor is the real path: the BM&DC number is format-checked at
+sign-up, you complete the profile form, and the account stays on a "being
+verified" screen until an admin approves it — only then is a bookable profile
+published and linked to the account. Admin sign-up needs the staff invite code
+(`NIRAMOY_ADMIN_CODE`, default `NIRAMOY-ADMIN`).
 
 No environment variables are required to run the app. Everything works from the
 seeded in-memory store; `.env.local` only adds the LLM and BM&DC integrations.
@@ -98,15 +115,18 @@ Niramoy/
 │  ├─ lib/api.js                 # typed client for the API routes
 │  ├─ components/
 │  │  ├─ icons.js  ui.js  shell.js
+│  │  ├─ landing.js              # public landing page
+│  │  ├─ auth-page.js            # sign in / sign up for all three roles
 │  │  ├─ patient/                # dashboard, find-doctors, booking,
 │  │  │                          # appointments, assistant, records
 │  │  ├─ doctor-workspace.js     # overview, schedule, availability, earnings,
 │  │  │                          # prescription writer w/ AI draft
 │  │  ├─ admin-workspace.js      # overview, verification queue, directory
 │  │  └─ join-as-doctor.js       # BM&DC onboarding form
-│  └─ api/                       # 17 route handlers (see below)
+│  └─ api/                       # 20 route handlers (see below)
 ├─ lib/
 │  ├─ scheduling.js              # ★ the scheduling engine (pure, testable)
+│  ├─ auth.js                    # accounts, password hashing, sessions
 │  ├─ store.js                   # ★ the single Postgres swap point
 │  ├─ bmdc.js                    # BM&DC validation + verification adapter
 │  ├─ ai.js                      # triage, doctor matching, visit summary
@@ -120,6 +140,10 @@ Niramoy/
 
 ## API routes
 ```
+GET    /api/auth                         current session ({user: null} when signed out)
+DELETE /api/auth                         sign out
+POST   /api/auth/login                   email + password + role
+POST   /api/auth/register                sign up (doctor: BM&DC no.; admin: invite code)
 GET    /api/reference                    specialties + divisions + facilities + stats
 GET    /api/doctors                      search: text, specialty, division, district,
                                          language, maxFee, minRating, sort, paging
@@ -174,7 +198,9 @@ upgrades to an LLM when `AI_API_KEY` / `AI_BASE_URL` are set. Safety properties:
   confirms before anything reaches a patient record.
 
 ## Known gaps (next increments)
-- NextAuth is not wired up; the sidebar role switcher stands in for signing in.
+- Accounts live in memory alongside the rest of the store, so a server restart
+  clears them; passwords are hashed either way.
+- No email verification or password reset yet.
 - The video room is a styled placeholder, not an embedded Jitsi/Daily iframe.
 - Payments are mocked, as the proposal scopes.
 - Cron reminders / no-show sweep are not scheduled yet.

@@ -26,10 +26,10 @@ export const NAV = {
   ],
 };
 
-const ROLE_USER = {
-  patient: { name: "Nabila Begum", initials: "NB", avatar: "tan", label: "Patient workspace" },
-  doctor: { name: "Dr. Ayesha Khan", initials: "AK", avatar: "teal", label: "Doctor workspace" },
-  admin: { name: "Sakib Rahman", initials: "SR", avatar: "purple", label: "Admin workspace" },
+const ROLE_LABEL = {
+  patient: "Patient workspace",
+  doctor: "Doctor workspace",
+  admin: "Admin workspace",
 };
 
 const TITLES = {
@@ -54,8 +54,7 @@ const TITLES = {
   specialties: ["Specialties", "Care categories"],
 };
 
-export function Sidebar({ active, onNavigate, role, onRoleChange, counts, open, onClose }) {
-  const user = ROLE_USER[role];
+export function Sidebar({ active, onNavigate, role, user, onSignOut, counts, open, onClose }) {
 
   return (
     <>
@@ -108,27 +107,15 @@ export function Sidebar({ active, onNavigate, role, onRoleChange, counts, open, 
             </div>
           )}
 
-          <div className="role-switch">
-            <span className="role-switch-label">Demo — switch role</span>
-            <div className="role-switch-buttons">
-              {["patient", "doctor", "admin"].map((r) => (
-                <button
-                  key={r}
-                  className={`role-chip ${role === r ? "active" : ""}`}
-                  onClick={() => onRoleChange(r)}
-                >
-                  {r}
-                </button>
-              ))}
-            </div>
-          </div>
-
           <div className="user-mini">
             <Avatar person={user} />
             <div className="user-mini-text">
-              <strong>{user.name}</strong>
-              <span>{user.label}</span>
+              <strong>{user?.name ?? "Signed in"}</strong>
+              <span>{ROLE_LABEL[role]}</span>
             </div>
+            <button className="icon-button" onClick={onSignOut} aria-label="Sign out" title="Sign out">
+              <Icon name="logout" size={15} />
+            </button>
           </div>
         </div>
       </aside>

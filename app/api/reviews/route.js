@@ -1,5 +1,5 @@
-import { addReview, listReviews, CURRENT_PATIENT } from "../../../lib/store.js";
-import { boot, ok, query, explain } from "../_lib.js";
+import { addReview, listReviews } from "../../../lib/store.js";
+import { boot, ok, query, explain, patientIdFor } from "../_lib.js";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +13,7 @@ export async function GET(request) {
 export async function POST(request) {
   boot();
   const body = await request.json();
-  const result = addReview({ ...body, patientId: body.patientId ?? CURRENT_PATIENT.id });
+  const result = addReview({ ...body, patientId: body.patientId ?? patientIdFor(request) });
   if (!result.ok) {
     return Response.json(
       { ok: false, reason: result.reason, message: explain(result.reason) },

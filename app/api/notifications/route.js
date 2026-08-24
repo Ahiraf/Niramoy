@@ -1,12 +1,12 @@
-import { listNotifications, markNotificationsRead, CURRENT_PATIENT } from "../../../lib/store.js";
-import { boot, ok, query } from "../_lib.js";
+import { listNotifications, markNotificationsRead } from "../../../lib/store.js";
+import { boot, ok, query, identityIdFor } from "../_lib.js";
 
 export const dynamic = "force-dynamic";
 
 /** GET /api/notifications */
 export async function GET(request) {
   boot();
-  const userId = query(request).userId ?? CURRENT_PATIENT.id;
+  const userId = query(request).userId ?? identityIdFor(request);
   const notifications = listNotifications(userId);
   return ok({ notifications, unread: notifications.filter((n) => !n.read).length });
 }
@@ -15,5 +15,5 @@ export async function GET(request) {
 export async function POST(request) {
   boot();
   const body = await request.json().catch(() => ({}));
-  return ok(markNotificationsRead(body.userId ?? CURRENT_PATIENT.id));
+  return ok(markNotificationsRead(body.userId ?? identityIdFor(request)));
 }

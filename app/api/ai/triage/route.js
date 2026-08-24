@@ -1,7 +1,7 @@
 import { triage, matchDoctors, assistantReply } from "../../../../lib/ai.js";
 import { searchDoctors, CURRENT_PATIENT } from "../../../../lib/store.js";
 import { DISTRICTS } from "../../../../lib/data/geo.js";
-import { boot, ok } from "../../_lib.js";
+import { boot, ok, sessionUser } from "../../_lib.js";
 
 export const dynamic = "force-dynamic";
 
@@ -19,12 +19,13 @@ export async function POST(request) {
 
   // Derive the division from the district when only a district is given —
   // otherwise the patient's default division would fight their explicit choice.
-  const district = body.district ?? CURRENT_PATIENT.district;
+  const me = sessionUser(request);
+  const district = body.district || me?.district || CURRENT_PATIENT.district;
   const division =
     body.division ??
     (body.district
       ? DISTRICTS.find((d) => d.name === body.district)?.division
-      : CURRENT_PATIENT.division);
+      : (me?.division || CURRENT_PATIENT.division));
 
   const preferences = { district, division, maxFee: body.maxFee };
 

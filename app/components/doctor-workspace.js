@@ -10,15 +10,27 @@ import {
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 /** The signed-in doctor for the demo. Real build: the NextAuth session user. */
-export function useDoctorSelf(reference, api) {
+/**
+ * The signed-in doctor's own published profile.
+ *
+ * A verified account carries the id of the profile an admin published for it.
+ * The demo doctor account predates any application, so it falls back to a
+ * profile from the directory rather than showing an empty workspace.
+ */
+export function useDoctorSelf(user, api) {
   const [self, setSelf] = useState(null);
   useEffect(() => {
+    let cancelled = false;
     (async () => {
-      // Stand-in: take the first cardiologist as "Dr. Ayesha Khan"'s profile.
+      if (user?.doctorId) {
+        const data = await api.doctor(user.doctorId);
+        if (!cancelled && data.ok) { setSelf(data.doctor); return; }
+      }
       const data = await api.doctors({ specialty: "Cardiology", perPage: 1 });
-      setSelf(data.doctors?.[0] ?? null);
+      if (!cancelled) setSelf(data.doctors?.[0] ?? null);
     })();
-  }, [api]);
+    return () => { cancelled = true; };
+  }, [api, user?.doctorId]);
   return self;
 }
 

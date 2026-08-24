@@ -1,12 +1,12 @@
-import { listWaitlist, joinWaitlist, leaveWaitlist, CURRENT_PATIENT } from "../../../lib/store.js";
-import { boot, ok, query } from "../_lib.js";
+import { listWaitlist, joinWaitlist, leaveWaitlist } from "../../../lib/store.js";
+import { boot, ok, query, patientIdFor } from "../_lib.js";
 
 export const dynamic = "force-dynamic";
 
 /** GET /api/waitlist */
 export async function GET(request) {
   boot();
-  return ok({ entries: listWaitlist(query(request).patientId ?? CURRENT_PATIENT.id) });
+  return ok({ entries: listWaitlist(query(request).patientId ?? patientIdFor(request)) });
 }
 
 /**
@@ -17,7 +17,7 @@ export async function POST(request) {
   boot();
   const body = await request.json();
   return ok(
-    { entry: joinWaitlist({ ...body, patientId: body.patientId ?? CURRENT_PATIENT.id }) },
+    { entry: joinWaitlist({ ...body, patientId: body.patientId ?? patientIdFor(request) }) },
     { status: 201 }
   );
 }

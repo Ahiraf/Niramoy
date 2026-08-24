@@ -10,14 +10,23 @@ import { Booking } from "./components/patient/booking.js";
 import { Appointments, Consultation } from "./components/patient/appointments.js";
 import { Assistant } from "./components/patient/assistant.js";
 import { Records, Family, Settings } from "./components/patient/records.js";
-import { JoinAsDoctor } from "./components/join-as-doctor.js";
+import { JoinAsDoctor, DoctorPending } from "./components/join-as-doctor.js";
+import { Icon } from "./components/icons.js";
 import { DoctorWorkspace, useDoctorSelf } from "./components/doctor-workspace.js";
 import { AdminWorkspace } from "./components/admin-workspace.js";
+import { Landing } from "./components/landing.js";
+import { AuthPage } from "./components/auth-page.js";
 
 const HOME = { patient: "dashboard", doctor: "doctor-home", admin: "admin-home" };
 
 export default function Home() {
-  const [role, setRole] = useState("patient");
+  // Screens: booting → landing / auth (signed out) → app (signed in).
+  const [user, setUser] = useState(null);
+  const [screen, setScreen] = useState("booting");
+  const [auth, setAuth] = useState({ mode: "signin", role: "patient" });
+  const [doctorDraft, setDoctorDraft] = useState(null);
+
+  const role = user?.role ?? "patient";
   const [active, setActive] = useState("dashboard");
   const [menuOpen, setMenuOpen] = useState(false);
   const [toast, setToast] = useState(null);
@@ -41,7 +50,7 @@ export default function Home() {
   const [rescheduling, setRescheduling] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
 
-  const doctorSelf = useDoctorSelf(reference, api);
+  const doctorSelf = useDoctorSelf(user, api);
 
   const showToast = useCallback((message, tone = "success") => {
     setToast({ message, tone });
@@ -74,11 +83,31 @@ export default function Home() {
     setPrescriptions(data.prescriptions ?? []);
   }, []);
 
+  /**
+   * Session first: the landing page needs the reference stats either way, but
+   * nothing personal is fetched until we know who is asking.
+   */
   useEffect(() => {
     (async () => {
+      const [session] = await Promise.all([api.session(), refreshReference()]);
+      const me = session.user ?? null;
+      setUser(me);
+      setActive(me ? HOME[me.role] : "dashboard");
+      setScreen(me ? "app" : "landing");
+      if (!me) setLoading(false);
+    })();
+  }, [refreshReference]);
+
+  /** Workspace data. Re-runs on sign-in and sign-out, so no state leaks across. */
+  useEffect(() => {
+    if (!user) {
+      setAppointments([]); setRecords([]); setPrescriptions([]);
+      setNotifications([]); setUnread(0); setFamily([]); setWaitlist([]);
+      return;
+    }
+    (async () => {
       setLoading(true);
-      const [, , , , top, fam, wait] = await Promise.all([
-        refreshReference(),
+      const [, , , top, fam, wait] = await Promise.all([
         refreshAppointments(),
         refreshNotifications(),
         refreshRecords(),
@@ -91,7 +120,7 @@ export default function Home() {
       setWaitlist(wait.entries ?? []);
       setLoading(false);
     })();
-  }, [refreshReference, refreshAppointments, refreshNotifications, refreshRecords]);
+  }, [user, refreshAppointments, refreshNotifications, refreshRecords]);
 
   /* ---------------------------------------------------------------------- */
   /* Actions                                                                 */
@@ -103,12 +132,39 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
-  const changeRole = (next) => {
-    setRole(next);
-    setActive(HOME[next]);
+  /* ---------------------------------------------------------------------- */
+  /* Session                                                                 */
+  /* ---------------------------------------------------------------------- */
+
+  const openAuth = useCallback((mode, nextRole) => {
+    setAuth({ mode, role: nextRole });
+    setScreen("auth");
+    window.scrollTo({ top: 0 });
+  }, []);
+
+  const onAuthenticated = useCallback((account, draft) => {
+    setUser(account);
+    setDoctorDraft(draft);
+    setActive(HOME[account.role]);
+    setScreen("app");
+    showToast(`Welcome, ${account.name.split(" ")[0]}`);
+  }, [showToast]);
+
+  const signOut = useCallback(async () => {
+    await api.logout();
+    setUser(null);
+    setDoctorDraft(null);
     setMenuOpen(false);
-    showToast(`Switched to the ${next} workspace`);
-  };
+    setScreen("landing");
+    showToast("Signed out");
+  }, [showToast]);
+
+  /** Re-reads the session — used after a doctor submits their application. */
+  const refreshSession = useCallback(async () => {
+    const session = await api.session();
+    setUser(session.user ?? null);
+    return session.user ?? null;
+  }, []);
 
   const openDoctor = useCallback(async (doctor) => {
     setSelectedDoctor(doctor);
@@ -230,7 +286,6 @@ export default function Home() {
 
   const onSearch = useCallback((term) => {
     setSearchTerm(term);
-    setRole("patient");
     navigate("doctors");
   }, [navigate]);
 
@@ -248,6 +303,95 @@ export default function Home() {
     appointments: appointments.filter((a) => ["confirmed", "pending"].includes(a.status)).length,
     pending: reference?.stats?.pendingVerifications ?? 0,
   }), [appointments, reference]);
+
+  if (screen === "booting") {
+    return (
+      <div className="boot-screen" role="status" aria-live="polite">
+        <div className="brand-mark"><Icon name="heart" size={20} strokeWidth={2.2} /></div>
+        <span>Loading Niramoy…</span>
+      </div>
+    );
+  }
+
+  if (screen === "landing") {
+    return (
+      <Landing
+        stats={reference?.stats}
+        onSignIn={(r) => openAuth("signin", r)}
+        onSignUp={(r) => openAuth("signup", r)}
+      />
+    );
+  }
+
+  if (screen === "auth") {
+    return (
+      <AuthPage
+        mode={auth.mode}
+        role={auth.role}
+        reference={reference}
+        api={api}
+        onBack={() => setScreen("landing")}
+        onAuthenticated={onAuthenticated}
+      />
+    );
+  }
+
+  /**
+   * A doctor account is not a doctor profile. Until an admin has confirmed the
+   * BM&DC number there is nothing to schedule, so the workspace is replaced by
+   * the application form, then by a "waiting on verification" screen.
+   */
+  const doctorPending =
+    role === "doctor" && user?.verificationStatus && user.verificationStatus !== "verified";
+
+  if (doctorPending && user.verificationStatus === "pending") {
+    return (
+      <DoctorPending
+        user={user}
+        onSignOut={signOut}
+        onRefresh={async () => {
+          const me = await refreshSession();
+          if (me?.verificationStatus === "verified") showToast("You're verified — welcome aboard");
+          else showToast("Still with an admin. We'll email you as soon as it's decided.");
+        }}
+      />
+    );
+  }
+
+  if (doctorPending) {
+    return (
+      <div className="onboarding-shell">
+        <div className="onboarding-top">
+          <div className="brand">
+            <div className="brand-mark"><Icon name="heart" size={20} strokeWidth={2.2} /></div>
+            <div className="brand-name">nira<span>moy</span></div>
+          </div>
+          <button className="button ghost" onClick={signOut}>
+            <Icon name="logout" size={13} /> Sign out
+          </button>
+        </div>
+        <div className="content">
+          <JoinAsDoctor
+            reference={reference}
+            api={api}
+            onNavigate={navigate}
+            notify={showToast}
+            showBack={false}
+            defaults={{
+              name: user.name,
+              email: user.email,
+              phone: user.phone,
+              bmdcNumber: doctorDraft?.bmdcNumber ?? "",
+              registrationType: doctorDraft?.registrationType ?? "mbbs",
+              specialty: doctorDraft?.specialty ?? "",
+            }}
+            onSubmitted={refreshSession}
+          />
+        </div>
+        <Toast toast={toast} />
+      </div>
+    );
+  }
 
   let view;
   if (role === "doctor") {
@@ -387,7 +531,8 @@ export default function Home() {
         active={active}
         onNavigate={navigate}
         role={role}
-        onRoleChange={changeRole}
+        user={user}
+        onSignOut={signOut}
         counts={counts}
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
