@@ -207,9 +207,42 @@ export interface InsertAppointment {
   currency?: string;
 }
 
+/**
+ * Book an appointment, serialised per doctor.
+ *
+ * The exclusion constraint alone is CORRECT but not LIVE under contention.
+ * Several transactions inserting overlapping ranges each take a speculative
+ * lock and then wait on one another, and PostgreSQL breaks the resulting cycle
+ * by aborting one with 40P01. Under a real burst — a popular doctor's slots
+ * opening at once — that deadlock is persistent rather than transient, and no
+ * amount of retrying clears it: the concurrency suite reproduces it with twelve
+ * simultaneous overlapping inserts, which still fail after four retries.
+ *
+ * A transaction-scoped advisory lock keyed on the doctor turns the many-way
+ * lock cycle into a queue. Contenders for one doctor's calendar serialise;
+ * different doctors never interact. The lock is released automatically on
+ * commit or rollback, so a crashed request cannot wedge a calendar.
+ *
+ * The constraint is still what GUARANTEES correctness — the lock only removes
+ * the deadlock. If this lock were ever dropped, bookings would still be correct,
+ * just failure-prone under load. That ordering matters: liveness is layered on
+ * top of safety, never in place of it.
+ */
 export async function insert(
   input: InsertAppointment,
   db: Database = getDb(),
+): Promise<AppointmentRow> {
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext(${`niramoy:doctor:${input.doctorId}`}))`,
+    );
+    return insertRow(input, tx as unknown as Database);
+  });
+}
+
+async function insertRow(
+  input: InsertAppointment,
+  db: Database,
 ): Promise<AppointmentRow> {
   const rows = await db
     .insert(t.appointments)
@@ -287,21 +320,30 @@ export async function cancel(
  */
 export async function move(
   id: string,
-  input: { startUtc: Date; endUtc: Date; durationMinutes: number },
+  input: { doctorId: string; startUtc: Date; endUtc: Date; durationMinutes: number },
   db: Database = getDb(),
 ): Promise<AppointmentRow | null> {
-  const rows = await db
-    .update(t.appointments)
-    .set({
-      startUtc: input.startUtc,
-      endUtc: input.endUtc,
-      durationMinutes: input.durationMinutes,
-      rescheduledFromUtc: sql`${t.appointments.startUtc}`,
-      rescheduleCount: sql`${t.appointments.rescheduleCount} + 1`,
-    })
-    .where(and(eq(t.appointments.id, id), inArray(t.appointments.status, ["pending", "confirmed"])))
-    .returning(columns);
-  return (rows[0] as AppointmentRow | undefined) ?? null;
+  return db.transaction(async (tx) => {
+    // Same per-doctor serialisation as insert(): a reschedule competes for the
+    // target interval exactly as a new booking does.
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(hashtext(${`niramoy:doctor:${input.doctorId}`}))`,
+    );
+    const rows = await (tx as unknown as Database)
+      .update(t.appointments)
+      .set({
+        startUtc: input.startUtc,
+        endUtc: input.endUtc,
+        durationMinutes: input.durationMinutes,
+        rescheduledFromUtc: sql`${t.appointments.startUtc}`,
+        rescheduleCount: sql`${t.appointments.rescheduleCount} + 1`,
+      })
+      .where(
+        and(eq(t.appointments.id, id), inArray(t.appointments.status, ["pending", "confirmed"])),
+      )
+      .returning(columns);
+    return (rows[0] as AppointmentRow | undefined) ?? null;
+  });
 }
 
 export async function complete(

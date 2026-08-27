@@ -18,7 +18,8 @@
 
 import { audit } from "../audit";
 
-import { isAppointmentConflict, isPatientDoubleBooking, isRetryable } from "../db/errors";
+import { isAppointmentConflict, isPatientDoubleBooking } from "../db/errors";
+import { withRetry } from "../db/retry";
 import { AppError } from "../errors";
 import { logger } from "../observability/logger";
 import * as appointments from "../repositories/appointments";
@@ -28,34 +29,6 @@ import { canBook, canCancel, generateSlots, type Slot } from "../scheduling/engi
 import type { Principal } from "../security/authz";
 
 const SLOT_HORIZON_DAYS = 60;
-const MAX_ATTEMPTS = 3;
-
-/**
- * Run an operation, retrying transient serialization and deadlock failures.
- *
- * A conflict is NOT retried: if the slot is taken, trying again finds it taken.
- * Retrying only helps when the failure was the database declining to serialise
- * two transactions it could have.
- */
-async function withRetry<T>(operation: () => Promise<T>, label: string): Promise<T> {
-  let lastError: unknown;
-
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-    try {
-      return await operation();
-    } catch (err) {
-      lastError = err;
-      if (!isRetryable(err) || attempt === MAX_ATTEMPTS) throw err;
-
-      // Exponential backoff with jitter, so two colliding requests do not
-      // retry in lockstep and collide again.
-      const backoff = 2 ** attempt * 10 + Math.random() * 20;
-      logger.warn("retrying after a transient database failure", { label, attempt, backoff });
-      await new Promise((resolve) => setTimeout(resolve, backoff));
-    }
-  }
-  throw lastError;
-}
 
 export interface DoctorSchedulingConfig {
   id: string;
@@ -259,7 +232,7 @@ export async function book(
       }
       throw err;
     }
-  }, "book");
+  }, { label: "book" });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -366,6 +339,7 @@ export async function reschedule(
   const moved = await withRetry(async () => {
     try {
       return await appointments.move(appointmentId, {
+        doctorId: appointment.doctorId,
         startUtc: slot.start,
         endUtc: slot.end,
         durationMinutes: slot.durationMinutes,
@@ -376,7 +350,7 @@ export async function reschedule(
       }
       throw err;
     }
-  }, "reschedule");
+  }, { label: "reschedule" });
 
   if (!moved) {
     throw new AppError("NOT_ELIGIBLE", {
