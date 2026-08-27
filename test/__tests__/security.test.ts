@@ -18,6 +18,7 @@ import { GET as familyGet, DELETE as familyDelete } from "../../app/api/family/r
 import { GET as notifGet } from "../../app/api/notifications/route";
 import { POST as reviewPost } from "../../app/api/reviews/route";
 import { GET as verificationGet } from "../../app/api/verification/route";
+import { POST as videoPost } from "../../app/api/appointments/[id]/video/route";
 
 import { requestAs, requestWithBadCsrf, seedAppointment, type World } from "../fixtures";
 import { call, params, setupWorld, teardownWorld } from "../harness";
@@ -643,5 +644,150 @@ describe("signed-out callers get nothing", () => {
       }),
     );
     expect(res.status).toBe(401);
+  });
+});
+
+/* ========================================================================== */
+/* Video access — brief §14                                                    */
+/* ========================================================================== */
+
+describe("consultation rooms admit only the two participants", () => {
+  /** Now-ish, so the join window is open. */
+  const soon = () => new Date(Date.now() + 5 * 60_000).toISOString();
+
+  it("issues a token to the patient on the appointment", async () => {
+    const id = await seedAppointment(world, {
+      doctor: world.doctor,
+      patient: world.patientA,
+      startUtc: soon(),
+      status: "confirmed",
+    });
+
+    const res = await call<{ call: { token: string; role: string } }>(
+      videoPost,
+      requestAs(world.patientA, `${BASE}/api/appointments/${id}/video`, { method: "POST" }),
+      params({ id }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.call.role).toBe("patient");
+    expect(res.body.call.token).toBeTruthy();
+  });
+
+  it("issues a token to the doctor on the appointment", async () => {
+    const id = await seedAppointment(world, {
+      doctor: world.doctor,
+      patient: world.patientA,
+      startUtc: soon(),
+      status: "confirmed",
+    });
+
+    const res = await call<{ call: { role: string } }>(
+      videoPost,
+      requestAs(world.doctor, `${BASE}/api/appointments/${id}/video`, { method: "POST" }),
+      params({ id }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.call.role).toBe("doctor");
+  });
+
+  it("refuses a token to an unrelated patient", async () => {
+    const id = await seedAppointment(world, {
+      doctor: world.doctor,
+      patient: world.patientA,
+      startUtc: soon(),
+      status: "confirmed",
+    });
+
+    const res = await call(
+      videoPost,
+      requestAs(world.patientB, `${BASE}/api/appointments/${id}/video`, { method: "POST" }),
+      params({ id }),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("refuses a token to an unrelated doctor", async () => {
+    const id = await seedAppointment(world, {
+      doctor: world.doctor,
+      patient: world.patientA,
+      startUtc: soon(),
+      status: "confirmed",
+    });
+
+    const res = await call(
+      videoPost,
+      requestAs(world.otherDoctor, `${BASE}/api/appointments/${id}/video`, { method: "POST" }),
+      params({ id }),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("refuses a token to an admin", async () => {
+    // An admin has no clinical role in a consultation, so administrative
+    // authority does not extend to sitting in on one.
+    const id = await seedAppointment(world, {
+      doctor: world.doctor,
+      patient: world.patientA,
+      startUtc: soon(),
+      status: "confirmed",
+    });
+
+    const res = await call(
+      videoPost,
+      requestAs(world.admin, `${BASE}/api/appointments/${id}/video`, { method: "POST" }),
+      params({ id }),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("refuses a token well before the appointment", async () => {
+    const id = await seedAppointment(world, {
+      doctor: world.doctor,
+      patient: world.patientA,
+      startUtc: new Date(Date.now() + 6 * 3_600_000).toISOString(),
+      status: "confirmed",
+    });
+
+    const res = await call(
+      videoPost,
+      requestAs(world.patientA, `${BASE}/api/appointments/${id}/video`, { method: "POST" }),
+      params({ id }),
+    );
+    expect(res.status).toBe(422);
+  });
+
+  it("refuses a token for a cancelled consultation", async () => {
+    const id = await seedAppointment(world, {
+      doctor: world.doctor,
+      patient: world.patientA,
+      startUtc: soon(),
+      status: "cancelled",
+    });
+
+    const res = await call(
+      videoPost,
+      requestAs(world.patientA, `${BASE}/api/appointments/${id}/video`, { method: "POST" }),
+      params({ id }),
+    );
+    expect(res.status).toBe(422);
+  });
+
+  it("never enables recording on the room it creates", async () => {
+    const id = await seedAppointment(world, {
+      doctor: world.doctor,
+      patient: world.patientA,
+      startUtc: soon(),
+      status: "confirmed",
+    });
+    await call(
+      videoPost,
+      requestAs(world.patientA, `${BASE}/api/appointments/${id}/video`, { method: "POST" }),
+      params({ id }),
+    );
+
+    const { rows } = await world.h.client.query<{ recording_enabled: boolean }>(
+      `SELECT recording_enabled FROM video_sessions WHERE appointment_id = '${id}'`,
+    );
+    expect(rows[0]!.recording_enabled).toBe(false);
   });
 });
