@@ -1,0 +1,28 @@
+# Postgres for local development and, in particular, for the concurrency test
+# suite. PGlite (the zero-setup default) is single-connection and cannot
+# exercise genuine parallel booking, so `npm run test:concurrency` needs this.
+#
+#   docker compose up -d
+#   export DATABASE_URL_TEST=postgresql://niramoy:niramoy@localhost:5433/niramoy_test
+#   npm run test:concurrency
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: niramoy-postgres
+    environment:
+      POSTGRES_USER: niramoy
+      POSTGRES_PASSWORD: niramoy
+      POSTGRES_DB: niramoy
+    ports:
+      - "5433:5432"
+    volumes:
+      - niramoy-pgdata:/var/lib/postgresql/data
+      - ./db/docker-init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U niramoy -d niramoy"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  niramoy-pgdata:
