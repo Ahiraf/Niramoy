@@ -1,0 +1,219 @@
+/**
+ * Payment tests.
+ *
+ * The property that matters: a payment cannot reach `succeeded` because a client
+ * said so. Only a signature-verified webhook, or the clearly-labelled mock, can
+ * move it there.
+ */
+import { createHmac } from "node:crypto";
+
+import { POST as paymentsPost } from "../../app/api/payments/route";
+import { POST as webhookPost } from "../../app/api/payments/webhook/route";
+import { resetPaymentProvider, signatureMatches } from "../../lib/payments/provider";
+import { requestAs, seedAppointment, type World } from "../fixtures";
+import { call, setupWorld, teardownWorld } from "../harness";
+
+const BASE = "http://localhost:3000";
+
+let world: World;
+
+beforeEach(async () => {
+  world = await setupWorld();
+  resetPaymentProvider();
+});
+
+afterEach(async () => {
+  await teardownWorld(world);
+  resetPaymentProvider();
+});
+
+describe("starting a payment", () => {
+  async function upcoming(): Promise<string> {
+    return seedAppointment(world, {
+      doctor: world.doctor,
+      patient: world.patientA,
+      startUtc: "2027-06-01T10:00:00Z",
+      status: "confirmed",
+    });
+  }
+
+  it("labels the mock provider as a mock", async () => {
+    const res = await call<{ payment: { isMock: boolean; provider: string } }>(
+      paymentsPost,
+      requestAs(world.patientA, `${BASE}/api/payments`, {
+        method: "POST",
+        body: JSON.stringify({ appointmentId: await upcoming() }),
+      }),
+    );
+    expect(res.status).toBe(201);
+    expect(res.body.payment.isMock).toBe(true);
+    expect(res.body.payment.provider).toBe("mock");
+  });
+
+  it("takes the amount from the appointment, not the request", async () => {
+    const appointmentId = await upcoming();
+    const res = await call<{ payment: { amount: number } }>(
+      paymentsPost,
+      requestAs(world.patientA, `${BASE}/api/payments`, {
+        method: "POST",
+        // A client trying to pay one taka for an 800-taka consultation.
+        body: JSON.stringify({ appointmentId, amount: 1 }),
+      }),
+    );
+    expect(res.body.payment.amount).toBe(800);
+  });
+
+  it("refuses to start a payment for someone else's appointment", async () => {
+    const res = await call(
+      paymentsPost,
+      requestAs(world.patientB, `${BASE}/api/payments`, {
+        method: "POST",
+        body: JSON.stringify({ appointmentId: await upcoming() }),
+      }),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("is idempotent — a retry does not create a second payment", async () => {
+    const appointmentId = await upcoming();
+    const body = JSON.stringify({ appointmentId, idempotencyKey: "retry-me" });
+
+    const first = await call<{ payment: { id: string } }>(
+      paymentsPost,
+      requestAs(world.patientA, `${BASE}/api/payments`, { method: "POST", body }),
+    );
+    const second = await call<{ payment: { id: string } }>(
+      paymentsPost,
+      requestAs(world.patientA, `${BASE}/api/payments`, { method: "POST", body }),
+    );
+
+    expect(second.body.payment.id).toBe(first.body.payment.id);
+
+    const { rows } = await world.h.client.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM payments`,
+    );
+    expect(rows[0]!.n).toBe(1);
+  });
+
+  it("refuses payment for a cancelled consultation", async () => {
+    const appointmentId = await seedAppointment(world, {
+      doctor: world.doctor,
+      patient: world.patientA,
+      startUtc: "2027-06-01T10:00:00Z",
+      status: "cancelled",
+    });
+    const res = await call(
+      paymentsPost,
+      requestAs(world.patientA, `${BASE}/api/payments`, {
+        method: "POST",
+        body: JSON.stringify({ appointmentId }),
+      }),
+    );
+    expect(res.status).toBe(422);
+  });
+});
+
+describe("webhook signature verification", () => {
+  const secret = "webhook-secret-value";
+  const sign = (body: string) => createHmac("sha256", secret).update(body).digest("hex");
+
+  it("accepts a correct signature and rejects a tampered body", () => {
+    const body = JSON.stringify({ eventId: "e1", paymentID: "p1", transactionStatus: "Completed" });
+    expect(signatureMatches(body, sign(body), secret)).toBe(true);
+    expect(signatureMatches(`${body} `, sign(body), secret)).toBe(false);
+  });
+
+  it("rejects a signature made with the wrong secret", () => {
+    const body = JSON.stringify({ eventId: "e1" });
+    const wrong = createHmac("sha256", "not-the-secret").update(body).digest("hex");
+    expect(signatureMatches(body, wrong, secret)).toBe(false);
+  });
+
+  it("accepts the sha256= prefix form", () => {
+    const body = JSON.stringify({ eventId: "e1" });
+    expect(signatureMatches(body, `sha256=${sign(body)}`, secret)).toBe(true);
+  });
+
+  /**
+   * With the mock provider configured there are no genuine webhooks, so
+   * anything claiming to be one is rejected. That is the correct default: an
+   * endpoint that accepted unsigned callbacks would let anyone mark any
+   * consultation paid.
+   */
+  it("refuses an unsigned webhook outright", async () => {
+    const res = await call(
+      webhookPost,
+      new Request(`${BASE}/api/payments/webhook`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ eventId: "forged", paymentID: "x", transactionStatus: "Completed" }),
+      }),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("does not let a forged webhook mark a payment succeeded", async () => {
+    const appointmentId = await seedAppointment(world, {
+      doctor: world.doctor,
+      patient: world.patientA,
+      startUtc: "2027-06-01T10:00:00Z",
+      status: "confirmed",
+    });
+    await call(
+      paymentsPost,
+      requestAs(world.patientA, `${BASE}/api/payments`, {
+        method: "POST",
+        body: JSON.stringify({ appointmentId }),
+      }),
+    );
+    await world.h.client.exec(`UPDATE payments SET status = 'pending', is_mock = 'false';`);
+
+    await call(
+      webhookPost,
+      new Request(`${BASE}/api/payments/webhook`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-signature": "deadbeef" },
+        body: JSON.stringify({ eventId: "forged", paymentID: "x", transactionStatus: "Completed" }),
+      }),
+    );
+
+    const { rows } = await world.h.client.query<{ status: string }>(
+      `SELECT status FROM payments`,
+    );
+    expect(rows[0]!.status).toBe("pending");
+  });
+});
+
+describe("schema-level payment guarantees", () => {
+  it("refuses a non-mock payment marked succeeded without a verified webhook", async () => {
+    await expect(
+      world.h.client.exec(`
+        INSERT INTO payments (provider, is_mock, amount, currency, status, idempotency_key)
+        VALUES ('bkash', 'false', '800', 'BDT', 'succeeded', 'forged-key');
+      `),
+    ).rejects.toThrow(/ck_payments_succeeded_verified/);
+  });
+
+  it("allows it once a webhook has been verified", async () => {
+    await expect(
+      world.h.client.exec(`
+        INSERT INTO payments (provider, is_mock, amount, currency, status, idempotency_key,
+                              webhook_verified_at)
+        VALUES ('bkash', 'false', '800', 'BDT', 'succeeded', 'verified-key', now());
+      `),
+    ).resolves.toBeDefined();
+  });
+
+  it("refuses a duplicate idempotency key", async () => {
+    await world.h.client.exec(`
+      INSERT INTO payments (provider, is_mock, amount, currency, status, idempotency_key)
+      VALUES ('mock', 'true', '800', 'BDT', 'pending', 'dupe');
+    `);
+    await expect(
+      world.h.client.exec(`
+        INSERT INTO payments (provider, is_mock, amount, currency, status, idempotency_key)
+        VALUES ('mock', 'true', '800', 'BDT', 'pending', 'dupe');
+      `),
+    ).rejects.toThrow(/uq_payments_idempotency/);
+  });
+});
