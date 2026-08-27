@@ -256,6 +256,8 @@ function ReviewModal({ appointment, onClose, onSubmit }) {
 }
 
 export function Consultation({ appointment, onNavigate, onComplete }) {
+  /** The server-issued join grant. Present once the room has been opened. */
+  const call = appointment?.call;
   const [elapsed, setElapsed] = useState(0);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
@@ -292,10 +294,18 @@ export function Consultation({ appointment, onNavigate, onComplete }) {
             </div>
             <strong>{doctor?.name || "Your doctor"}</strong>
             <span>{doctor?.specialty}</span>
-            <p className="consult-hint">
-              This is a placeholder for the embedded Jitsi/Daily room
-              {appointment?.videoRoomId ? ` (${appointment.videoRoomId})` : ""}.
-            </p>
+            {call?.isDemo ? (
+              <p className="consult-hint">
+                No video provider is configured, so this is a demo room — the
+                access token is real and scoped to you, but no media is carried.
+                Set VIDEO_PROVIDER to connect Daily or Jitsi.
+              </p>
+            ) : (
+              <p className="consult-hint">
+                Connected via {call?.provider}. This room is private to you and
+                your doctor, and is not recorded.
+              </p>
+            )}
           </div>
 
           <div className="consult-self">You</div>

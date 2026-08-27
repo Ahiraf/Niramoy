@@ -228,10 +228,18 @@ export default function Home() {
     navigate("booking");
   }, [navigate]);
 
-  const joinCall = useCallback((appointment) => {
-    setActiveCall(appointment);
+  const joinCall = useCallback(async (appointment) => {
+    // The room and the token are minted server-side, scoped to this
+    // appointment and this participant, and expire. Nothing joinable is held
+    // in the client until the server says who you are.
+    const result = await api.joinCall(appointment.id);
+    if (!result.ok) {
+      showToast(result.message ?? "This consultation room isn't open yet.", "error");
+      return;
+    }
+    setActiveCall({ ...appointment, call: result.call });
     navigate("consultation");
-  }, [navigate]);
+  }, [navigate, showToast]);
 
   const completeCall = useCallback(async (id) => {
     await api.updateAppointment(id, { action: "complete" });
@@ -252,9 +260,28 @@ export default function Home() {
   }, [refreshRecords, showToast]);
 
   const issuePrescription = useCallback(async (payload) => {
-    await api.addPrescription(payload);
+    const { summaryId, aiSummary, ...prescription } = payload;
+    const result = await api.addPrescription(prescription);
+    if (!result.ok) {
+      showToast(result.message ?? "Could not issue the prescription", "error");
+      return;
+    }
+
+    /**
+     * Publishing the prescription is the doctor's explicit confirmation of the
+     * AI draft they reviewed and edited. Only now does the summary become part
+     * of the patient's record, authored by the doctor.
+     */
+    if (summaryId) {
+      const approved = await api.reviewSummary(summaryId, {
+        action: "approve",
+        edited: { summary: aiSummary, diagnosis: prescription.diagnosis, advice: prescription.notes },
+      });
+      if (!approved.ok) showToast("Prescription saved, but the summary wasn't published", "error");
+    }
+
     await Promise.all([refreshRecords(), refreshNotifications()]);
-  }, [refreshRecords, refreshNotifications]);
+  }, [refreshRecords, refreshNotifications, showToast]);
 
   const joinWaitlist = useCallback(async (doctor) => {
     const dateKey = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
