@@ -6,3 +6,13 @@ out/
 .DS_Store
 coverage/
 *.log
+
+# TypeScript / tooling
+*.tsbuildinfo
+next-env.d.ts
+.env.test
+test-results/
+playwright-report/
+
+# Local PGlite development database
+.pglite/
