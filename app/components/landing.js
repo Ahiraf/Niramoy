@@ -69,7 +69,7 @@ export function Landing({ stats, onSignIn, onSignUp }) {
 
         <nav className="landing-links">
           <a href="#how">How it works</a>
-          <a href="#roles">Who it's for</a>
+          <a href="#roles">Who it&rsquo;s for</a>
           <a href="#features">Features</a>
           <a href="#data">Our data</a>
         </nav>
@@ -147,7 +147,7 @@ export function Landing({ stats, onSignIn, onSignUp }) {
       <section className="landing-section" id="roles">
         <div className="landing-head">
           <span className="landing-eyebrow plain">Three workspaces</span>
-          <h2>One platform, whichever side of care you're on</h2>
+          <h2>One platform, whichever side of care you&rsquo;re on</h2>
           <p>Pick the role that fits you — each sign-in opens a workspace built for that job.</p>
         </div>
 
@@ -222,7 +222,7 @@ export function Landing({ stats, onSignIn, onSignUp }) {
             <p>
               The directory ships with synthetic sample profiles so there is something to explore
               before real doctors sign up. Every one of them carries a <strong>Demo profile</strong>
-              {" "}badge, everywhere it appears. No real physician's name or phone number is used.
+              {" "}badge, everywhere it appears. No real physician&rsquo;s name or phone number is used.
             </p>
           </div>
         </div>

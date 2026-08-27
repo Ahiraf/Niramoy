@@ -154,7 +154,7 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
     onAuthenticated(result.user, result.draft ?? null);
   };
 
-  const useDemo = (account) => {
+  const applyDemoAccount = (account) => {
     setRole(account.role);
     setMode("signin");
     setForm({ ...EMPTY, email: account.email, password: DEMO_PASSWORD });
@@ -188,7 +188,7 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
           <p>Use a ready-made account — password <code>{DEMO_PASSWORD}</code>.</p>
           <div className="auth-demo-row">
             {DEMO.map((account) => (
-              <button key={account.role} onClick={() => useDemo(account)}>
+              <button key={account.role} onClick={() => applyDemoAccount(account)}>
                 {account.role}
               </button>
             ))}
@@ -352,7 +352,7 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
             {signUp && role === "doctor" && (
               <p className="auth-note">
                 <Icon name="shield" size={13} />
-                After sign-up you'll complete a short profile — hours, fee, chamber — and an admin
+                After sign-up you&rsquo;ll complete a short profile — hours, fee, chamber — and an admin
                 verifies your registration at verify.bmdc.org.bd. Your profile becomes bookable only
                 once that check passes.
               </p>

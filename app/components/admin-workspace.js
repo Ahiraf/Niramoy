@@ -120,7 +120,10 @@ function Verification({ api, notify, onRefresh }) {
     setLoading(false);
   };
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+  // Loads once on mount. `load` is redefined every render, so listing it would
+  // re-fetch the queue on every keystroke.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, []);
 
   const decide = async (approve) => {
     await api.decideApplication({ id: reviewing.id, approve, adminNote: approve ? "BM&DC register checked" : "Could not confirm registration" });
