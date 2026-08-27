@@ -10,6 +10,8 @@ import { createTestDatabase, type TestDatabase } from "../db";
 import { hashPassword } from "../../lib/auth/password";
 import { generateToken, hashToken } from "../../lib/auth/tokens";
 import * as t from "../../lib/db/schema";
+// The real reference taxonomy, so fixtures match production shape.
+import { SPECIALTIES } from "../../lib/data/specialties.js";
 
 export interface Actor {
   userId: string;
@@ -84,8 +86,21 @@ export async function buildWorld(): Promise<World> {
   await h.client.exec(`
     INSERT INTO divisions (id, name) VALUES ('dhaka', 'Dhaka');
     INSERT INTO districts (id, division_id, name) VALUES ('dhaka', 'dhaka', 'Dhaka');
-    INSERT INTO specialties (id, name) VALUES ('cardiology', 'Cardiology'), ('general', 'General Physician');
   `);
+
+  // The full specialty taxonomy, not a two-row stub. Triage routes to any of
+  // these and writes the suggestion as a foreign key, so a partial fixture
+  // silently loses provenance rows rather than failing loudly.
+  await db
+    .insert(t.specialties)
+    .values(
+      (SPECIALTIES as Array<{ id: string; name: string }>).map((specialty, index) => ({
+        id: specialty.id,
+        name: specialty.name,
+        sortOrder: index,
+      })),
+    )
+    .onConflictDoNothing();
 
   async function makeUser(
     role: "patient" | "doctor" | "admin",
