@@ -127,6 +127,26 @@ export function getDriver(): string {
   return holder.driver ?? "unknown";
 }
 
+/**
+ * Point the application at a specific database handle.
+ *
+ * Integration tests use this to run the real route handlers, services and
+ * repositories against a per-suite PGlite instance. It is the only way to test
+ * that a query is actually scoped — a test that mocked the repository would be
+ * asserting about the mock, not about the SQL that protects patient data.
+ *
+ * Refuses to run in production, where nothing should ever be swapping the
+ * database out from under a live request.
+ */
+export function __setTestDatabase(db: Database | undefined): void {
+  if (getEnv().isProd) {
+    throw new Error("__setTestDatabase must never be called in production");
+  }
+  holder.db = db;
+  holder.close = async () => {};
+  holder.driver = db ? "pglite-test" : undefined;
+}
+
 /** Close and forget the handle. For scripts and test teardown only. */
 export async function closeDb(): Promise<void> {
   await holder.close?.();

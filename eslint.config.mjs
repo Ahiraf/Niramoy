@@ -29,7 +29,9 @@ const config = [
   },
   {
     // Repositories are the exception to the rule above — that is their job.
-    files: ["lib/repositories/**", "lib/db/**", "scripts/**"],
+    // Services may open a transaction; the test harness must inject a database.
+    files: ["lib/repositories/**", "lib/db/**", "lib/services/**", "lib/security/**",
+            "lib/audit/**", "scripts/**", "test/**", "**/__tests__/**"],
     rules: { "no-restricted-imports": "off", "no-console": "off" },
   },
 ]
