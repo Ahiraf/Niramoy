@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    { "path": "/api/cron/appointment-reminders", "schedule": "0 * * * *" },
+    { "path": "/api/cron/no-show-sweep", "schedule": "*/15 * * * *" },
+    { "path": "/api/cron/waitlist-offers", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/expiry-sweep", "schedule": "30 3 * * *" },
+    { "path": "/api/cron/notification-retry", "schedule": "*/15 * * * *" }
+  ]
+}
