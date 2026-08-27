@@ -281,3 +281,102 @@ export async function getAvailability(doctorId: string): Promise<AvailabilityRul
     )
     .orderBy(t.doctorAvailability.weekday, t.doctorAvailability.startMinute);
 }
+
+/* -------------------------------------------------------------------------- */
+/* Scheduling configuration                                                    */
+/* -------------------------------------------------------------------------- */
+
+export interface SchedulingConfig {
+  consultationMinutes: number;
+  leadMinutes: number;
+  cancelWindowMinutes: number;
+  bufferMinutes: number;
+}
+
+/** The doctor's own booking rules. Read separately from the public profile. */
+export async function getSchedulingConfig(doctorId: string): Promise<SchedulingConfig | null> {
+  const rows = await getDb()
+    .select({
+      consultationMinutes: t.doctors.consultationMinutes,
+      leadMinutes: t.doctors.leadMinutes,
+      cancelWindowMinutes: t.doctors.cancelWindowMinutes,
+      bufferMinutes: t.doctors.bufferMinutes,
+    })
+    .from(t.doctors)
+    .where(eq(t.doctors.id, doctorId))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** Date-specific exceptions in a range, shaped for the scheduling engine. */
+export async function getAvailabilityExceptions(
+  doctorId: string,
+  from: Date,
+  to: Date,
+): Promise<
+  Array<{
+    date: string;
+    type: "block" | "extra";
+    startMinute: number | null;
+    endMinute: number | null;
+    slotMinutes: number | null;
+    bufferMinutes: number | null;
+    timezone: string;
+  }>
+> {
+  const rows = await getDb()
+    .select({
+      date: t.availabilityExceptions.date,
+      type: t.availabilityExceptions.type,
+      startMinute: t.availabilityExceptions.startMinute,
+      endMinute: t.availabilityExceptions.endMinute,
+      slotMinutes: t.availabilityExceptions.slotMinutes,
+      bufferMinutes: t.availabilityExceptions.bufferMinutes,
+      timezone: t.availabilityExceptions.timezone,
+    })
+    .from(t.availabilityExceptions)
+    .where(
+      and(
+        eq(t.availabilityExceptions.doctorId, doctorId),
+        gte(t.availabilityExceptions.date, new Date(from.getTime() - 86_400_000)),
+        lte(t.availabilityExceptions.date, new Date(to.getTime() + 86_400_000)),
+      ),
+    );
+
+  return rows.map((r) => ({
+    // Stored as a date; the engine works in "YYYY-MM-DD" local keys.
+    date: r.date.toISOString().slice(0, 10),
+    type: r.type as "block" | "extra",
+    startMinute: r.startMinute,
+    endMinute: r.endMinute,
+    slotMinutes: r.slotMinutes,
+    bufferMinutes: r.bufferMinutes,
+    timezone: r.timezone,
+  }));
+}
+
+/**
+ * The doctor profile belonging to an account, at any verification status.
+ *
+ * Distinct from getDoctor(), which only ever returns bookable profiles: a
+ * doctor whose application is still pending must be able to see their own
+ * workspace, they just must not appear in the directory.
+ */
+export async function getProfileForUser(userId: string): Promise<{
+  id: string;
+  displayName: string;
+  verificationStatus: string;
+  isDemoProfile: boolean;
+} | null> {
+  const rows = await getDb()
+    .select({
+      id: t.doctors.id,
+      displayName: t.doctors.displayName,
+      verificationStatus: t.doctors.verificationStatus,
+      isDemoProfile: t.doctors.isDemoProfile,
+    })
+    .from(t.doctors)
+    .where(eq(t.doctors.userId, userId))
+    .limit(1);
+  return rows[0] ?? null;
+}
