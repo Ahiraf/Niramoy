@@ -157,15 +157,24 @@ append-only audit log carrying no PHI.
 | Schema constraints | 21 |
 | Scheduling engine | 33 |
 | AI triage vignettes | 55 |
-| Security (§61) | 44 |
+| Security (§61, CSRF, video) | 46 |
 | Cron idempotency | 11 |
 | AI workflow | 14 |
-| Payments | 13 |
+| Payments | 21 |
+| **`npm test` total** | **201** |
 | **Concurrency (real PostgreSQL)** | 6 |
 
 Four real defects were found by writing tests: the deadlock, two red-flag
 coverage gaps, Drizzle's error wrapping turning 409s into 500s, and a partial
 fixture silently losing provenance rows.
+
+A fifth reached a human tester instead — the CSRF origin check rejecting every
+write when the app was served anywhere but `localhost:3000` — because every test
+built requests with no `Host` header and so never varied the one dimension the
+bug lived in. See [TESTING.md](TESTING.md), *What testing missed, and why*.
+
+Requirement-by-requirement coverage, including the nine requirements nothing
+proves, is in [TRACEABILITY.md](TRACEABILITY.md).
 
 ---
 
