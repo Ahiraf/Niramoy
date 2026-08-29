@@ -144,6 +144,14 @@ export const notificationStatus = pgEnum("notification_status", [
 
 export const auditOutcome = pgEnum("audit_outcome", ["success", "denied", "failure"]);
 
+/**
+ * How the patient chose to pay. `bkash` is the mobile wallet nearly every
+ * patient in Bangladesh already has; `cash` means they settle at the chamber,
+ * which is still how most consultations are actually paid for and must remain
+ * a first-class option rather than a fallback.
+ */
+export const paymentMethod = pgEnum("payment_method", ["bkash", "cash"]);
+
 export const paymentStatus = pgEnum("payment_status", [
   "pending",
   "authorized",

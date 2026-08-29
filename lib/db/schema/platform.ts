@@ -10,7 +10,7 @@ import {
 import { appointments } from "./scheduling";
 import { patients, users } from "./identity";
 import {
-  auditOutcome, notificationChannel, notificationStatus, paymentStatus, userRole,
+  auditOutcome, notificationChannel, notificationStatus, paymentMethod, paymentStatus, userRole,
 } from "./enums";
 
 /**
@@ -66,6 +66,8 @@ export const payments = pgTable(
     payerUserId: uuid("payer_user_id").references(() => users.id, { onDelete: "set null" }),
 
     provider: text("provider").notNull(),
+    /** The instrument the patient picked, independent of which gateway ran it. */
+    method: paymentMethod("method").notNull().default("bkash"),
     /** True for the MockPaymentProvider. Surfaced in the UI; nothing is charged. */
     isMock: text("is_mock").notNull().default("true"),
     providerPaymentId: text("provider_payment_id"),
