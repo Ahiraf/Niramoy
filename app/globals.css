@@ -858,3 +858,174 @@ textarea.field, .textarea { height: auto; padding: 10px 12px; line-height: 1.55;
 .pay-note.paid { color: var(--teal-dark); }
 .pay-note.due { color: #b47c45; }
 .pay-note.failed { color: var(--red); }
+
+/* ==========================================================================
+   Mobile
+   --------------------------------------------------------------------------
+   Most patients reach Niramoy on a phone, often a small and cheap one, so the
+   phone is the case to get right rather than the case to degrade to.
+
+   The rules below are about touch and about viewport quirks, not about making
+   things smaller. Four recurring problems they fix:
+
+     - iOS zooms the page when a focused input's text is under 16px. Every
+       field here was 12px, so tapping any of them yanked the layout sideways.
+     - 100vh on mobile Safari counts the area *behind* the browser chrome, so a
+       full-height shell always overflowed by the height of the toolbar. dvh is
+       the measurement that matches what you can see.
+     - Controls sized for a mouse (31–38px) are below the ~44px that a finger
+       can hit reliably, and a mis-tap in a booking flow costs a slot.
+     - Anything painted at the very bottom lands under the home indicator
+       unless it is offset by the safe-area inset.
+   ========================================================================== */
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  /* One stray wide child should scroll its own container, never the page. */
+  overflow-x: hidden;
+  /* No grey flash on tap; the :active styles already give feedback. */
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app-shell { min-height: 100dvh; }
+
+/* Long-form containers that can outgrow the viewport scroll themselves. */
+.date-row, .directory-table, .appointment-tabs { -webkit-overflow-scrolling: touch; }
+
+@media (max-width: 760px) {
+  /* --- Typing ------------------------------------------------------------ */
+  /* 16px is not a style choice: below it, iOS zooms on focus. */
+  .field, input, select, textarea { font-size: 16px; }
+  .field { height: 46px; }
+  textarea.field { height: auto; }
+
+  /* --- Touch targets ----------------------------------------------------- */
+  .button { height: 46px; font-size: 13.5px; padding: 0 17px; }
+  .button.small { height: 38px; font-size: 12px; padding: 0 13px; }
+  .icon-button { width: 42px; height: 42px; }
+  .nav-item { padding: 13px; font-size: 14px; }
+  .slot { height: 46px; font-size: 12.5px; }
+  .date-option { min-width: 68px; height: 82px; }
+
+  /* Hover styles are meaningless on touch and stick after a tap. */
+  .button:hover { transform: none; }
+
+  /* --- Topbar ------------------------------------------------------------ */
+  /* Search was hidden on phones, which is backwards: finding a doctor is the
+     main thing someone opens this app to do, and the page title is the least
+     useful thing on a screen this narrow. Trade the heading for the search. */
+  .topbar { padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); }
+  .topbar-heading { display: none; }
+  .topbar-search { display: block; flex: 1; width: auto; min-width: 0; }
+  .topbar-search input { height: 42px; font-size: 16px; }
+
+  /* --- Content ----------------------------------------------------------- */
+  .content {
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+    padding-bottom: calc(40px + env(safe-area-inset-bottom));
+  }
+
+  .sidebar {
+    padding-top: max(26px, env(safe-area-inset-top));
+    padding-bottom: calc(18px + env(safe-area-inset-bottom));
+  }
+
+  /* --- Date picker ------------------------------------------------------- */
+  /* Bleed to the screen edges so it reads as scrollable, and snap so a swipe
+     never leaves a half-clipped date under the thumb. */
+  .date-row {
+    scroll-snap-type: x mandatory;
+    margin-inline: -16px;
+    padding-inline: 16px;
+    scrollbar-width: none;
+  }
+  .date-row::-webkit-scrollbar { display: none; }
+  .date-option { scroll-snap-align: start; }
+
+  /* --- Booking ----------------------------------------------------------- */
+  /* The summary was pinned above the picker, so confirming meant scrolling
+     back up past everything you had just filled in. Let it follow the form:
+     pick a time, fill in the details, then see the total and confirm. */
+  .booking-side { order: 0; }
+  .booking-side .button.primary { height: 50px; font-size: 14.5px; }
+
+  /* --- Modals become sheets ---------------------------------------------- */
+  /* A centred dialog on a phone is a small box floating in a dimmed screen
+     with its actions near the top. A sheet puts them under the thumb. */
+  .modal-backdrop { place-items: end center; padding: 0; }
+  .modal {
+    width: 100%;
+    max-height: 92dvh;
+    border-radius: 18px 18px 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    animation: sheet-up .22s ease-out;
+  }
+  .modal-actions, .bkash-actions { flex-direction: column-reverse; }
+  .modal-actions .button, .bkash-actions .button { width: 100%; }
+
+  /* --- Toast ------------------------------------------------------------- */
+  .toast {
+    left: 12px;
+    right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    font-size: 12.5px;
+    padding: 14px 16px;
+  }
+
+  /* --- Cards ------------------------------------------------------------- */
+  .appointment-card .appt-actions { flex-wrap: wrap; padding-left: 0; }
+  .appointment-card .appt-actions .button { flex: 1 1 44%; }
+  .appt-time { text-align: left; }
+
+  /* Tabs overflow on narrow screens rather than squashing. */
+  .appointment-tabs, .auth-role-tabs { overflow-x: auto; scrollbar-width: none; }
+  .appointment-tabs::-webkit-scrollbar, .auth-role-tabs::-webkit-scrollbar { display: none; }
+  .appointment-tabs button, .auth-role-tabs button { white-space: nowrap; }
+
+  .notification-popover { position: fixed; left: 12px; right: 12px; top: 68px; width: auto; }
+}
+
+@keyframes sheet-up { from { transform: translateY(14px); opacity: .6; } to { transform: none; opacity: 1; } }
+
+/* --- Small phones (~360px and under) --------------------------------------- */
+@media (max-width: 420px) {
+  .content { padding-top: 20px; }
+  .page-heading h1 { font-size: 21px; }
+  .slot-grid { grid-template-columns: repeat(2, 1fr); }
+  .appointment-card { gap: 12px; padding: 14px; }
+  .appt-date { min-width: 46px; }
+  .stat-grid { gap: 8px; }
+  .bkash-amount strong { font-size: 19px; }
+  .brand-name { font-size: 18px; }
+}
+
+/* --- Touch devices of any width -------------------------------------------- */
+/* A tablet is wide enough for the desktop layout but is still driven by a
+   finger, so the target sizes have to follow the input device, not the width. */
+@media (pointer: coarse) {
+  .date-option, .slot, .pay-option { min-height: 44px; }
+  .nav-item { min-height: 44px; }
+  .button:hover, .date-option:hover, .slot:hover { transform: none; }
+}
+
+/* --- Landscape phones ------------------------------------------------------ */
+/* A sheet that is 92dvh tall in landscape is the whole screen with no context
+   left around it, and the keyboard takes most of what remains. */
+@media (max-height: 500px) and (orientation: landscape) {
+  .modal { max-height: 96dvh; border-radius: 14px; }
+  .modal-backdrop { place-items: center; padding: 8px; }
+  .modal-actions, .bkash-actions { flex-direction: row; }
+  .modal-actions .button, .bkash-actions .button { width: auto; }
+}
+
+/* --- Users who prefer less motion ------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
