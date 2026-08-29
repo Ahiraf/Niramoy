@@ -122,6 +122,8 @@ export interface HydratedAppointment extends Omit<AppointmentRow, "startUtc" | "
     isDemoProfile: boolean;
   } | null;
   patientName: string | null;
+  /** The consultation's payment, if one has been started. */
+  payment: { id: string; status: string; method: string; isMock: boolean } | null;
 }
 
 /**
@@ -151,12 +153,19 @@ export async function list(
       specialty: t.specialties.name,
       facility: t.facilities.name,
       patientName: t.patients.displayName,
+      paymentId: t.payments.id,
+      paymentStatus: t.payments.status,
+      paymentMethod: t.payments.method,
+      paymentIsMock: t.payments.isMock,
     })
     .from(t.appointments)
     .leftJoin(t.doctors, eq(t.appointments.doctorId, t.doctors.id))
     .leftJoin(t.specialties, eq(t.doctors.primarySpecialtyId, t.specialties.id))
     .leftJoin(t.facilities, eq(t.doctors.facilityId, t.facilities.id))
     .leftJoin(t.patients, eq(t.appointments.patientId, t.patients.id))
+    // At most one payment per consultation: startPayment keys idempotency on
+    // the appointment, so this join cannot fan the result out.
+    .leftJoin(t.payments, eq(t.payments.appointmentId, t.appointments.id))
     .where(and(...conditions))
     .orderBy(asc(t.appointments.startUtc));
 
@@ -190,6 +199,14 @@ export async function list(
         }
       : null,
     patientName: r.patientName,
+    payment: r.paymentId
+      ? {
+          id: r.paymentId,
+          status: r.paymentStatus ?? "pending",
+          method: r.paymentMethod ?? "bkash",
+          isMock: r.paymentIsMock === "true",
+        }
+      : null,
   }));
 }
 

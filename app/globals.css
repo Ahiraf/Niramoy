@@ -829,3 +829,32 @@ textarea.field, .textarea { height: auto; padding: 10px 12px; line-height: 1.55;
 .settings-reg-row span:first-child { color: var(--muted); font-size: 11px; }
 .settings-reg-row strong { font-size: 11.5px; }
 .settings-registration .muted-note { margin-top: 12px; }
+
+/* --- Payment: method choice and the bKash sheet ---------------------------- */
+/* The bKash mark is drawn in the wallet's own pink so it is recognisable at a
+   glance — patients look for the colour, not the word. It is deliberately NOT
+   the bKash logotype: this is a sandbox and must not pass for the real thing. */
+.bkash-mark { display: inline-grid; place-items: center; padding: 5px 10px; border-radius: 8px; background: #e2136e; color: #fff; font-size: 12px; font-weight: 800; letter-spacing: -.3px; }
+.bkash-mark.small { padding: 3px 7px; font-size: 10px; border-radius: 6px; }
+
+.pay-method { margin-top: 18px; }
+.pay-method h4 { margin: 0 0 9px; font-size: 12px; font-weight: 750; }
+.pay-option { display: flex; align-items: center; gap: 10px; padding: 11px 12px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 11px; background: #fff; cursor: pointer; transition: .16s ease; }
+.pay-option:hover { border-color: var(--mint); }
+.pay-option.selected { border-color: var(--teal); background: var(--teal-soft); }
+.pay-option input { accent-color: var(--teal); width: 16px; height: 16px; flex: 0 0 auto; margin: 0; }
+.pay-option-body { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.pay-option-body strong { font-size: 12.5px; }
+.pay-option-body em { font-style: normal; color: var(--muted); font-size: 11px; line-height: 1.4; }
+
+.bkash-sheet { display: grid; gap: 14px; }
+.bkash-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.bkash-amount { text-align: right; display: grid; gap: 2px; }
+.bkash-amount span { color: var(--muted); font-size: 11px; }
+.bkash-amount strong { font-size: 21px; letter-spacing: -.6px; }
+.bkash-for { margin: 0; color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+.bkash-actions { display: flex; gap: 9px; justify-content: flex-end; margin-top: 4px; }
+.pay-note { display: inline-block; margin-left: 8px; font-size: 10.5px; font-weight: 700; color: var(--muted); }
+.pay-note.paid { color: var(--teal-dark); }
+.pay-note.due { color: #b47c45; }
+.pay-note.failed { color: var(--red); }

@@ -7,6 +7,7 @@ import { Toast } from "./components/ui.js";
 import { Dashboard } from "./components/patient/dashboard.js";
 import { FindDoctors, DoctorProfile } from "./components/patient/find-doctors.js";
 import { Booking } from "./components/patient/booking.js";
+import { BkashCheckout } from "./components/patient/bkash-checkout.js";
 import { Appointments, Consultation } from "./components/patient/appointments.js";
 import { Assistant } from "./components/patient/assistant.js";
 import { Records, Family } from "./components/patient/records.js";
@@ -49,6 +50,8 @@ export default function Home() {
   const [doctorReviews, setDoctorReviews] = useState([]);
   const [activeCall, setActiveCall] = useState(null);
   const [rescheduling, setRescheduling] = useState(null);
+  /** A started bKash payment awaiting the payer's confirmation. */
+  const [pendingPayment, setPendingPayment] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
 
   const doctorSelf = useDoctorSelf(user, api);
@@ -202,15 +205,49 @@ export default function Home() {
     }
 
     const result = await api.book(payload);
-    if (result.ok) {
-      await Promise.all([refreshAppointments(), refreshNotifications()]);
-      showToast("Appointment confirmed. You're all set!");
-      navigate("appointments");
-    } else {
+    if (!result.ok) {
       showToast(result.message ?? "Could not book that slot", "error");
+      return result;
+    }
+
+    await Promise.all([refreshAppointments(), refreshNotifications()]);
+
+    // The slot is held either way. Payment is a separate step on purpose: if
+    // starting it fails, the patient still has their appointment and can pay
+    // from the appointments list, rather than losing the slot to a wallet
+    // problem.
+    const method = payload.paymentMethod ?? "bkash";
+    const payment = await api.pay({
+      appointmentId: result.appointment.id,
+      method,
+      idempotencyKey: `appt:${result.appointment.id}`,
+    });
+
+    navigate("appointments");
+
+    if (method === "bkash" && payment.ok && payment.payment.status === "pending") {
+      setPendingPayment({ payment: payment.payment, appointment: result.appointment });
+    } else if (method === "cash") {
+      showToast("Appointment confirmed. Pay at the chamber on the day.");
+    } else {
+      showToast("Appointment confirmed. You're all set!");
     }
     return result;
   }, [rescheduling, refreshAppointments, refreshNotifications, showToast, navigate]);
+
+  /** Resume a bKash payment that was started but never confirmed. */
+  const payForAppointment = useCallback(async (appointment) => {
+    const payment = await api.pay({
+      appointmentId: appointment.id,
+      method: "bkash",
+      idempotencyKey: `appt:${appointment.id}`,
+    });
+    if (!payment.ok) {
+      showToast(payment.message ?? "Could not start that payment", "error");
+      return;
+    }
+    setPendingPayment({ payment: payment.payment, appointment });
+  }, [showToast]);
 
   const cancelAppointment = useCallback(async (id) => {
     const result = await api.updateAppointment(id, { action: "cancel" });
@@ -428,7 +465,22 @@ export default function Home() {
             onSubmitted={refreshSession}
           />
         </div>
-        <Toast toast={toast} />
+        <BkashCheckout
+        open={Boolean(pendingPayment)}
+        payment={pendingPayment?.payment}
+        appointment={pendingPayment?.appointment}
+        onClose={() => {
+          setPendingPayment(null);
+          showToast("Appointment held. You can pay from your appointments.");
+        }}
+        onPaid={() => {
+          setPendingPayment(null);
+          refreshAppointments();
+        }}
+        api={api}
+        notify={showToast}
+      />
+      <Toast toast={toast} />
       </div>
     );
   }
@@ -512,6 +564,7 @@ export default function Home() {
             onJoinCall={joinCall}
             onReview={submitReview}
             onLeaveWaitlist={leaveWaitlist}
+            onPay={payForAppointment}
           />
         );
         break;

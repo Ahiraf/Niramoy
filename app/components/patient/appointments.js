@@ -12,9 +12,30 @@ const TABS = [
   { id: "cancelled", label: "Cancelled", match: (a) => a.status === "cancelled" },
 ];
 
+/**
+ * What has happened to the money, in the patient's terms. Says "sandbox" when
+ * it is one — a payment badge that reads as real when nothing was charged is
+ * worse than no badge.
+ */
+function PaymentNote({ payment }) {
+  if (!payment) return null;
+  if (payment.method === "cash") {
+    return <span className="pay-note">Paying at the chamber</span>;
+  }
+  if (payment.status === "succeeded") {
+    return (
+      <span className="pay-note paid">
+        Paid with bKash{payment.isMock ? " · sandbox" : ""}
+      </span>
+    );
+  }
+  if (payment.status === "pending") return <span className="pay-note due">bKash payment due</span>;
+  return <span className="pay-note failed">bKash payment {payment.status}</span>;
+}
+
 export function Appointments({
   loading, appointments, waitlist, onNavigate, onCancel, onReschedule,
-  onJoinCall, onReview, onLeaveWaitlist,
+  onJoinCall, onReview, onLeaveWaitlist, onPay,
 }) {
   const [tab, setTab] = useState("upcoming");
   const [reviewing, setReviewing] = useState(null);
@@ -90,7 +111,10 @@ export function Appointments({
                 <strong>{a.doctor?.name}</strong>
                 <span>{a.doctor?.specialty} · {a.type}</span>
                 {a.reason && <span className="appt-reason">“{a.reason}”</span>}
-                <div style={{ marginTop: 8 }}><StatusPill status={a.status} /></div>
+                <div style={{ marginTop: 8 }}>
+                  <StatusPill status={a.status} />
+                  <PaymentNote payment={a.payment} />
+                </div>
               </div>
 
               <div className="appt-time">
@@ -100,6 +124,12 @@ export function Appointments({
               </div>
 
               <div className="appt-actions">
+                {a.status === "confirmed" && a.payment?.method === "bkash"
+                  && a.payment.status === "pending" && (
+                  <button className="button primary small" onClick={() => onPay?.(a)}>
+                    Pay with bKash
+                  </button>
+                )}
                 {a.status === "confirmed" && (
                   <>
                     <button className="button secondary small" onClick={() => onJoinCall(a)}>

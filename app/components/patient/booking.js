@@ -8,6 +8,11 @@ import {
 
 const PERIODS = ["Morning", "Afternoon", "Evening"];
 
+const PAYMENT_METHODS = [
+  { value: "bkash", label: "bKash", hint: "Confirm in the wallet you already use." },
+  { value: "cash", label: "Pay at the chamber", hint: "Settle in person on the day." },
+];
+
 export function Booking({ doctor, family, onConfirm, onBack, onJoinWaitlist, api, notify }) {
   const [days, setDays] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -15,6 +20,7 @@ export function Booking({ doctor, family, onConfirm, onBack, onJoinWaitlist, api
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [forMember, setForMember] = useState("");
   const [reason, setReason] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("bkash");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -50,6 +56,7 @@ export function Booking({ doctor, family, onConfirm, onBack, onJoinWaitlist, api
       startUtc: selectedSlot.startUtc,
       forMember: forMember || null,
       reason,
+      paymentMethod,
     });
     setSubmitting(false);
 
@@ -212,8 +219,32 @@ export function Booking({ doctor, family, onConfirm, onBack, onJoinWaitlist, api
             </p>
           )}
 
+          <div className="pay-method">
+            <h4>How would you like to pay?</h4>
+            {PAYMENT_METHODS.map((option) => (
+              <label
+                key={option.value}
+                className={`pay-option ${paymentMethod === option.value ? "selected" : ""}`}
+              >
+                <input
+                  type="radio"
+                  name="payment-method"
+                  value={option.value}
+                  checked={paymentMethod === option.value}
+                  onChange={() => setPaymentMethod(option.value)}
+                />
+                <span className="pay-option-body">
+                  <strong>{option.label}</strong>
+                  <em>{option.hint}</em>
+                </span>
+                {option.value === "bkash" && <span className="bkash-mark small">bKash</span>}
+              </label>
+            ))}
+          </div>
+
           <Banner tone="info" icon="info">
-            Payment is mocked for this MVP — no card details are collected and nothing is charged.
+            Payments run against a sandbox for this MVP — nothing is charged, and
+            Niramoy never asks for your bKash PIN.
           </Banner>
 
           <div className="secure-note">

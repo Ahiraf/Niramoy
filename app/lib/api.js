@@ -134,7 +134,11 @@ export const api = {
   summary: (body) => request("/api/ai/summary", { method: "POST", body }),
   reviewSummary: (id, body) => request(`/api/ai/summary/${id}`, { method: "PATCH", body }),
 
+  /** Starts a payment. `method` is "bkash" or "cash". */
   pay: (body) => request("/api/payments", { method: "POST", body }),
+  /** Confirms a bKash payment the payer authorised. Never sends a PIN. */
+  executePayment: (id, body) =>
+    request(`/api/payments/${id}/execute`, { method: "POST", body }),
 
   verificationQueue: () => request("/api/verification"),
   applyAsDoctor: (body) => request("/api/verification", { method: "POST", body }),
