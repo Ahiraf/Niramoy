@@ -202,25 +202,42 @@ PATCH  /api/verification                 admin approve / reject
 ```
 
 ## The scheduling engine
-`lib/scheduling.js` is the algorithmic heart and the module the Testing
-deliverable is built around. It is **pure** (no DB, no network):
+`lib/scheduling/engine.ts` is the algorithmic heart and the module the Testing
+deliverable is built around. It is **pure** (no DB, no network), which is why it
+can be tested exhaustively:
 
 - `generateSlots(...)` — availability **rules − exceptions − booked − past/too-soon** → concrete slot times (UTC).
 - `canBook(...)` — validates a booking request.
 - `canCancel(...)` — enforces the cancellation window.
+- `describeSlot(...)` — renders a UTC instant in Bangladesh Standard Time.
 
-All times are stored in UTC and rendered in Bangladesh Standard Time by
-`describeSlot()` in `lib/store.js`. The 15 tests in
-`lib/__tests__/scheduling.test.js` cover double-booking, past/too-soon slots,
-boundary slots, buffer time, exceptions overriding recurring rules, and the
-cancellation window.
+The 33 tests in `lib/scheduling/__tests__/engine.test.ts` cover slot generation,
+buffers, exceptions overriding recurring rules, both sides of the cancellation
+boundary, and a DST transition. Purity is what makes that affordable: none of
+them needs a database.
 
-Two limitations are being addressed in Phase 4. The engine matches a booking
-request by **exact start-time equality**, and an appointment carries no end time,
-so a partial overlap between two different durations cannot be represented at
-all. And the UTC+6 offset is arithmetic rather than a timezone: the schema now
-stores availability as a local window plus its IANA zone (`Asia/Dhaka`) and lets
-the engine convert.
+Correctness under contention is a separate question and is tested separately,
+against a real PostgreSQL server — see [Testing](#testing) below.
+
+Both limitations noted during Phase 3 are now fixed. Appointments carry an
+`end_utc` and overlap is enforced by a PostgreSQL exclusion constraint, so a
+partial overlap between two different durations is representable and rejected.
+And time conversion uses the IANA zone (`Asia/Dhaka`) rather than a hardcoded
+UTC+6 offset, so a DST-style discontinuity cannot land an appointment an hour
+out.
+
+## Testing
+
+```bash
+npm test                  # 201 tests — unit + integration, in-process PostgreSQL
+npm run test:concurrency  # 6 tests — needs a real server: docker compose up -d
+npm run verify            # lint + typecheck + test + build
+```
+
+- [`docs/TESTING.md`](docs/TESTING.md) — how the suites are built, what testing
+  found, and one defect it missed and why.
+- [`docs/TRACEABILITY.md`](docs/TRACEABILITY.md) — every requirement mapped to
+  the test that proves it, including the ones nothing proves.
 
 ## The data layer
 `lib/repositories/*` is the only code permitted to touch the database — ESLint
