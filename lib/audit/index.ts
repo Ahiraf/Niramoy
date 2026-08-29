@@ -57,6 +57,7 @@ export type AuditAction =
   | "ai.summary_approve"
   | "ai.summary_reject"
   | "payment.create"
+  | "payment.execute"
   | "payment.webhook"
   | "admin.action"
   | "cron.run";

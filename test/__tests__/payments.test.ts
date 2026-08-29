@@ -9,9 +9,10 @@ import { createHmac } from "node:crypto";
 
 import { POST as paymentsPost } from "../../app/api/payments/route";
 import { POST as webhookPost } from "../../app/api/payments/webhook/route";
+import { POST as executePost } from "../../app/api/payments/[id]/execute/route";
 import { resetPaymentProvider, signatureMatches } from "../../lib/payments/provider";
 import { requestAs, seedAppointment, type World } from "../fixtures";
-import { call, setupWorld, teardownWorld } from "../harness";
+import { call, params, setupWorld, teardownWorld } from "../harness";
 
 const BASE = "http://localhost:3000";
 
@@ -48,6 +49,46 @@ describe("starting a payment", () => {
     expect(res.status).toBe(201);
     expect(res.body.payment.isMock).toBe(true);
     expect(res.body.payment.provider).toBe("mock");
+  });
+
+  it("starts a bKash payment pending, not succeeded", async () => {
+    const res = await call<{ payment: { status: string; method: string } }>(
+      paymentsPost,
+      requestAs(world.patientA, `${BASE}/api/payments`, {
+        method: "POST",
+        body: JSON.stringify({ appointmentId: await upcoming(), method: "bkash" }),
+      }),
+    );
+    expect(res.status).toBe(201);
+    expect(res.body.payment.method).toBe("bkash");
+    // The payer has not authorised anything yet. Jumping straight to succeeded
+    // would be a code path the live tokenized-checkout flow does not have.
+    expect(res.body.payment.status).toBe("pending");
+  });
+
+  it("records a cash consultation without involving a gateway", async () => {
+    const res = await call<{ payment: { method: string; provider: string; status: string } }>(
+      paymentsPost,
+      requestAs(world.patientA, `${BASE}/api/payments`, {
+        method: "POST",
+        body: JSON.stringify({ appointmentId: await upcoming(), method: "cash" }),
+      }),
+    );
+    expect(res.status).toBe(201);
+    expect(res.body.payment.method).toBe("cash");
+    expect(res.body.payment.provider).toBe("cash");
+    expect(res.body.payment.status).toBe("pending");
+  });
+
+  it("rejects a payment method it does not offer", async () => {
+    const res = await call(
+      paymentsPost,
+      requestAs(world.patientA, `${BASE}/api/payments`, {
+        method: "POST",
+        body: JSON.stringify({ appointmentId: await upcoming(), method: "card" }),
+      }),
+    );
+    expect(res.status).toBe(400);
   });
 
   it("takes the amount from the appointment, not the request", async () => {
@@ -109,6 +150,84 @@ describe("starting a payment", () => {
         body: JSON.stringify({ appointmentId }),
       }),
     );
+    expect(res.status).toBe(422);
+  });
+});
+
+describe("confirming a bKash payment", () => {
+  async function startBkash(): Promise<string> {
+    const appointmentId = await seedAppointment(world, {
+      doctor: world.doctor,
+      patient: world.patientA,
+      startUtc: "2027-06-01T10:00:00Z",
+      status: "confirmed",
+    });
+    const res = await call<{ payment: { id: string } }>(
+      paymentsPost,
+      requestAs(world.patientA, `${BASE}/api/payments`, {
+        method: "POST",
+        body: JSON.stringify({ appointmentId, method: "bkash" }),
+      }),
+    );
+    return res.body.payment.id;
+  }
+
+  const execute = (patient: World["patientA"], id: string, body: unknown) =>
+    call<{ payment: { status: string } }>(
+      executePost,
+      requestAs(patient, `${BASE}/api/payments/${id}/execute`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+      params({ id }),
+    );
+
+  it("settles once the payer authorises with their wallet number", async () => {
+    const id = await startBkash();
+    const res = await execute(world.patientA, id, { walletNumber: "01712345678" });
+    expect(res.status).toBe(200);
+    expect(res.body.payment.status).toBe("succeeded");
+  });
+
+  it("refuses a wallet number no bKash account could have", async () => {
+    const id = await startBkash();
+    const res = await execute(world.patientA, id, { walletNumber: "12345" });
+    expect(res.status).toBe(400);
+  });
+
+  it("refuses to confirm someone else's payment", async () => {
+    const id = await startBkash();
+    const res = await execute(world.patientB, id, { walletNumber: "01712345678" });
+    expect(res.status).toBe(404);
+  });
+
+  // A double tap on Confirm must not become a second execute call against the
+  // wallet — on a live gateway that is a second charge.
+  it("is idempotent once settled", async () => {
+    const id = await startBkash();
+    await execute(world.patientA, id, { walletNumber: "01712345678" });
+    const again = await execute(world.patientA, id, { walletNumber: "01712345678" });
+    expect(again.status).toBe(200);
+    expect(again.body.payment.status).toBe("succeeded");
+  });
+
+  it("will not run the wallet flow for a cash consultation", async () => {
+    const appointmentId = await seedAppointment(world, {
+      doctor: world.doctor,
+      patient: world.patientA,
+      startUtc: "2027-07-01T10:00:00Z",
+      status: "confirmed",
+    });
+    const created = await call<{ payment: { id: string } }>(
+      paymentsPost,
+      requestAs(world.patientA, `${BASE}/api/payments`, {
+        method: "POST",
+        body: JSON.stringify({ appointmentId, method: "cash" }),
+      }),
+    );
+    const res = await execute(world.patientA, created.body.payment.id, {
+      walletNumber: "01712345678",
+    });
     expect(res.status).toBe(422);
   });
 });

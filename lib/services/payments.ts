@@ -15,17 +15,34 @@ import * as t from "../db/schema";
 import { isUniqueViolation } from "../db/errors";
 import { AppError } from "../errors";
 import { logger } from "../observability/logger";
-import { getPaymentProvider, type PaymentStatus } from "../payments/provider";
+import {
+  getPaymentProvider,
+  isWalletNumber,
+  type PaymentMethod,
+  type PaymentStatus,
+} from "../payments/provider";
 import type { Principal } from "../security/authz";
 
 export interface PaymentView {
   id: string;
   status: PaymentStatus;
+  method: PaymentMethod;
   amount: number;
   currency: string;
   provider: string;
   isMock: boolean;
   redirectUrl: string | null;
+}
+
+/** Reject anything that is not one of the two instruments we actually offer. */
+function readMethod(value: unknown): PaymentMethod {
+  const method = String(value ?? "bkash");
+  if (method !== "bkash" && method !== "cash") {
+    throw new AppError("VALIDATION_FAILED", {
+      details: { method: ["Choose bKash or paying at the chamber."] },
+    });
+  }
+  return method;
 }
 
 /**
@@ -36,11 +53,12 @@ export interface PaymentView {
  */
 export async function startPayment(
   principal: Principal & { patientId: string },
-  input: { appointmentId?: unknown; idempotencyKey?: unknown },
+  input: { appointmentId?: unknown; idempotencyKey?: unknown; method?: unknown },
   context: { requestId?: string; appUrl: string },
 ): Promise<PaymentView> {
   const db = getDb();
   const provider = getPaymentProvider();
+  const method = readMethod(input.method);
 
   const appointmentId = String(input.appointmentId ?? "");
   const rows = await db
@@ -76,6 +94,7 @@ export async function startPayment(
     return {
       id: existing[0].id,
       status: existing[0].status as PaymentStatus,
+      method: existing[0].method as PaymentMethod,
       amount: Number(existing[0].amount),
       currency: existing[0].currency,
       provider: existing[0].provider,
@@ -86,14 +105,21 @@ export async function startPayment(
 
   const amount = Number(appointment.feeAmount);
 
-  const intent = await provider.createPayment({
-    amount,
-    currency: appointment.currency,
-    reference: appointment.reference,
-    description: `Niramoy consultation ${appointment.reference}`,
-    returnUrl: `${context.appUrl}/appointments`,
-    idempotencyKey,
-  });
+  // Cash is settled in person, so no gateway is involved and there is nothing
+  // to charge. The row exists to record the patient's choice and to keep the
+  // consultation's payment state answerable in one place; it stays `pending`
+  // until whoever takes the money says otherwise.
+  const intent = method === "cash"
+    ? { providerPaymentId: null, status: "pending" as PaymentStatus, redirectUrl: null }
+    : await provider.createPayment({
+        amount,
+        currency: appointment.currency,
+        reference: appointment.reference,
+        description: `Niramoy consultation ${appointment.reference}`,
+        method,
+        returnUrl: `${context.appUrl}/appointments`,
+        idempotencyKey,
+      });
 
   let paymentId: string;
   try {
@@ -103,7 +129,8 @@ export async function startPayment(
         appointmentId: appointment.id,
         patientId: principal.patientId,
         payerUserId: principal.userId,
-        provider: provider.name,
+        provider: method === "cash" ? "cash" : provider.name,
+        method,
         isMock: provider.isMock ? "true" : "false",
         providerPaymentId: intent.providerPaymentId,
         amount: String(amount),
@@ -137,17 +164,108 @@ export async function startPayment(
     requestId: context.requestId,
     resourceType: "payment",
     resourceId: paymentId,
-    metadata: { provider: provider.name, isMock: provider.isMock, amount },
+    metadata: { provider: provider.name, method, isMock: provider.isMock, amount },
   });
 
   return {
     id: paymentId,
     status: provider.isMock ? intent.status : "pending",
+    method,
     amount,
     currency: appointment.currency,
-    provider: provider.name,
+    provider: method === "cash" ? "cash" : provider.name,
     isMock: provider.isMock,
     redirectUrl: intent.redirectUrl,
+  };
+}
+
+/**
+ * Confirm a wallet payment the payer has authorised.
+ *
+ * The status still comes from the PROVIDER, never from the request: the client
+ * says "I authorised this", and the provider says whether that is true. A
+ * caller cannot name the status it wants, which is what keeps the invariant at
+ * the top of this file intact through the second step of the flow.
+ */
+export async function executePayment(
+  principal: Principal & { patientId: string },
+  paymentId: string,
+  input: { walletNumber?: unknown },
+  context: { requestId?: string },
+): Promise<PaymentView> {
+  const db = getDb();
+  const provider = getPaymentProvider();
+
+  const rows = await db
+    .select()
+    .from(t.payments)
+    .where(and(eq(t.payments.id, paymentId), eq(t.payments.patientId, principal.patientId)))
+    .limit(1);
+
+  const payment = rows[0];
+  if (!payment) throw new AppError("NOT_FOUND");
+
+  if (payment.method !== "bkash") {
+    throw new AppError("NOT_ELIGIBLE", {
+      message: "That consultation isn't being paid by wallet.",
+    });
+  }
+  // Already settled. Return it rather than running the flow twice — a double
+  // tap on "Confirm" must not become a second execute call to the wallet.
+  if (payment.status === "succeeded") return toView(payment);
+  if (payment.status !== "pending") {
+    throw new AppError("NOT_ELIGIBLE", { message: "That payment can no longer be confirmed." });
+  }
+
+  const walletNumber = String(input.walletNumber ?? "").replace(/[\s-]/g, "");
+  if (!isWalletNumber(walletNumber)) {
+    throw new AppError("VALIDATION_FAILED", {
+      details: { walletNumber: ["Enter the 11-digit bKash number, e.g. 01712345678."] },
+    });
+  }
+
+  const result = await provider.executePayment({
+    providerPaymentId: payment.providerPaymentId ?? "",
+    walletNumber,
+  });
+
+  const updated = await db
+    .update(t.payments)
+    .set({
+      status: result.status,
+      providerStatusRaw: result.status,
+      failureReason: result.reason ?? null,
+      updatedAt: new Date(),
+    })
+    .where(eq(t.payments.id, payment.id))
+    .returning();
+
+  await audit({
+    action: "payment.execute",
+    actorUserId: principal.userId,
+    actorRole: principal.role,
+    requestId: context.requestId,
+    resourceType: "payment",
+    resourceId: payment.id,
+    outcome: result.status === "succeeded" ? "success" : "failure",
+    metadata: { provider: provider.name, status: result.status, reason: result.reason },
+  });
+
+  return toView(updated[0]!);
+}
+
+type PaymentRow = typeof t.payments.$inferSelect;
+
+function toView(payment: PaymentRow): PaymentView {
+  return {
+    id: payment.id,
+    status: payment.status as PaymentStatus,
+    method: payment.method as PaymentMethod,
+    amount: Number(payment.amount),
+    currency: payment.currency,
+    provider: payment.provider,
+    isMock: payment.isMock === "true",
+    redirectUrl: null,
   };
 }
 
@@ -253,13 +371,5 @@ export async function getPayment(
   const payment = rows[0];
   if (!payment) throw new AppError("NOT_FOUND");
 
-  return {
-    id: payment.id,
-    status: payment.status as PaymentStatus,
-    amount: Number(payment.amount),
-    currency: payment.currency,
-    provider: payment.provider,
-    isMock: payment.isMock === "true",
-    redirectUrl: null,
-  };
+  return toView(payment);
 }

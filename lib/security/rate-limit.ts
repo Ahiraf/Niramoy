@@ -41,6 +41,9 @@ export const RATE_LIMITS = {
   "password-reset:email": { limit: 3, windowSeconds: 3600 },
   "doctor-search": { limit: 120, windowSeconds: 60 },
   "appointment-book": { limit: 20, windowSeconds: 300 },
+  // Confirming a wallet payment reaches out to the gateway, so a retry loop
+  // here is chargeable traffic against the merchant account, not just ours.
+  "payment-execute": { limit: 10, windowSeconds: 300 },
   // The AI buckets are tighter: each request costs inference money, and an
   // unbounded triage endpoint is a billing denial-of-service.
   "ai-triage": { limit: 15, windowSeconds: 300 },
