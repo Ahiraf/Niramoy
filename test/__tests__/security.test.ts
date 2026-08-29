@@ -569,6 +569,48 @@ describe("CSRF protection", () => {
     expect(res.status).toBe(403);
   });
 
+  // The origin check used to compare against APP_URL alone, so every write
+  // failed whenever the app was served anywhere but http://localhost:3000 —
+  // a second dev server, a phone on the LAN, a preview deployment.
+  it("accepts a request served on a different host than APP_URL", async () => {
+    const headers = new Headers({
+      "content-type": "application/json",
+      host: "192.168.0.203:3001",
+      origin: "http://192.168.0.203:3001",
+      cookie: `niramoy_session=${world.patientA.sessionToken}; niramoy_csrf=${world.patientA.csrfToken}`,
+      "x-niramoy-csrf": world.patientA.csrfToken,
+    });
+    const res = await call(
+      recordsPost,
+      new Request("http://192.168.0.203:3001/api/records", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ title: "From a phone on the LAN" }),
+      }),
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it("still rejects a foreign origin even when the host matches", async () => {
+    const headers = new Headers({
+      "content-type": "application/json",
+      host: "192.168.0.203:3001",
+      origin: "https://evil.example",
+      cookie: `niramoy_session=${world.patientA.sessionToken}; niramoy_csrf=${world.patientA.csrfToken}`,
+      "x-niramoy-csrf": world.patientA.csrfToken,
+    });
+    const res = await call(
+      recordsPost,
+      new Request("http://192.168.0.203:3001/api/records", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ title: "Injected" }),
+      }),
+    );
+    expect(res.status).toBe(403);
+    expect(res.body.error?.code).toBe("CSRF_FAILED");
+  });
+
   it("does not require a CSRF token for a safe method", async () => {
     const headers = new Headers({
       cookie: `niramoy_session=${world.patientA.sessionToken}`,

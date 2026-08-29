@@ -93,6 +93,13 @@ const schema = z
       ...raw,
       isProd,
       isTest,
+      /**
+       * Whether APP_URL was actually set, as opposed to falling back to the
+       * localhost default above. The CSRF origin check needs to tell those
+       * apart: a deployer who names their origin gets it enforced strictly,
+       * and everyone else gets the origin the request actually arrived on.
+       */
+      appUrlConfigured: Boolean(process.env.APP_URL),
       isDev: raw.APP_ENV === "development",
       databaseUrl,
       /** Non-pooled URL for migrations and long transactions. */
