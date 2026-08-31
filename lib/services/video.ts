@@ -102,7 +102,19 @@ export async function getJoinGrant(
 
   let room: RoomHandle;
 
-  if (existing[0] && existing[0].expiresAt.getTime() > now && !existing[0].endedAt) {
+  /*
+   * Reuse a live room, but only one this provider issued. A session created
+   * under a different provider carries that provider's room name — and the demo
+   * provider's name is derived from the appointment id, which must never become
+   * a real room name on a service where the name is the only thing keeping
+   * strangers out.
+   */
+  if (
+    existing[0] &&
+    existing[0].provider === provider.name &&
+    existing[0].expiresAt.getTime() > now &&
+    !existing[0].endedAt
+  ) {
     room = {
       roomName: existing[0].roomName,
       providerRoomId: existing[0].providerRoomId,
