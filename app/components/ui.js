@@ -285,6 +285,116 @@ export function Modal({ open, title, onClose, children, footer, wide = false }) 
 }
 
 /* -------------------------------------------------------------------------- */
+/* Menus                                                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The secondary actions on a card, behind one button.
+ *
+ * A row of six equally-weighted buttons makes the patient read all six every
+ * time to find the one they came for, and puts Cancel the same distance from
+ * the thumb as Join. One primary action stays on the card; everything else
+ * lives in here.
+ *
+ * Keyboard: Escape closes and returns focus to the trigger, arrows move
+ * between items, and the menu closes on outside click or blur.
+ */
+export function ActionMenu({ label = "More actions", items = [], align = "end" }) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef(null);
+  const menuRef = useRef(null);
+
+  const close = useCallback(
+    (returnFocus = true) => {
+      setOpen(false);
+      if (returnFocus) triggerRef.current?.focus();
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const onKey = (event) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        close();
+        return;
+      }
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+
+      event.preventDefault();
+      const focusable = [...(menuRef.current?.querySelectorAll("[role='menuitem']") ?? [])];
+      if (!focusable.length) return;
+      const index = focusable.indexOf(document.activeElement);
+      const next =
+        event.key === "ArrowDown"
+          ? focusable[(index + 1) % focusable.length]
+          : focusable[(index - 1 + focusable.length) % focusable.length];
+      next?.focus();
+    };
+
+    const onPointer = (event) => {
+      if (menuRef.current?.contains(event.target)) return;
+      if (triggerRef.current?.contains(event.target)) return;
+      close(false);
+    };
+
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onPointer);
+    // Open onto the first item so the keyboard path is one key, not three.
+    menuRef.current?.querySelector("[role='menuitem']")?.focus();
+
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onPointer);
+    };
+  }, [open, close]);
+
+  const usable = items.filter(Boolean);
+  if (!usable.length) return null;
+
+  return (
+    <div className="action-menu">
+      <button
+        ref={triggerRef}
+        type="button"
+        className="button ghost small icon-only"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={label}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <Icon name="more" size={15} />
+      </button>
+
+      {open && (
+        <div className={`action-menu-list ${align}`} role="menu" ref={menuRef} aria-label={label}>
+          {usable.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              role="menuitem"
+              className={`action-menu-item${item.danger ? " danger" : ""}`}
+              disabled={item.disabled}
+              title={item.disabledHint && item.disabled ? item.disabledHint : undefined}
+              onClick={() => {
+                close(false);
+                item.onClick?.();
+              }}
+            >
+              {item.icon && <Icon name={item.icon} size={13} />}
+              <span>{item.label}</span>
+              {item.disabled && item.disabledHint && <em>{item.disabledHint}</em>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /* Forms                                                                       */
 /* -------------------------------------------------------------------------- */
 

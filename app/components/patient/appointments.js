@@ -3,8 +3,11 @@
 import { useEffect, useState } from "react";
 import { Icon } from "../icons.js";
 import {
-  Avatar, PageHeading, Empty, Loading, Modal, Field, StatusPill, Rating, Banner,
+  ActionMenu, Avatar, PageHeading, Empty, ErrorState, Loading, Modal, Field,
+  StatusPill, Rating, Banner,
 } from "../ui.js";
+import { downloadAppointmentIcs } from "../../lib/calendar.js";
+import { CancellationPolicy } from "./policy.js";
 
 const TABS = [
   { id: "upcoming", label: "Upcoming", match: (a) => ["confirmed", "pending"].includes(a.status) },
@@ -33,6 +36,88 @@ function PaymentNote({ payment }) {
   return <span className="pay-note failed">bKash payment {payment.status}</span>;
 }
 
+/**
+ * The one action this appointment needs next.
+ *
+ * Ordered by what is blocking: an unpaid consultation needs paying, a
+ * confirmed one needs joining, a finished one needs a review. Everything else
+ * on the card is available, just not competing.
+ */
+function primaryAction(a, { onPay, onJoinCall, setReviewing, onNavigate }) {
+  if (a.status === "confirmed") {
+    if (a.payment?.method === "bkash" && a.payment.status === "pending") {
+      return { label: "Pay with bKash", tone: "primary", onClick: () => onPay?.(a) };
+    }
+    return {
+      label: "Join call",
+      icon: "video",
+      tone: "primary",
+      onClick: () => onJoinCall(a),
+    };
+  }
+  if (a.status === "completed") {
+    return {
+      label: "Leave review",
+      icon: "star",
+      tone: "secondary",
+      onClick: () => setReviewing(a),
+    };
+  }
+  if (a.status === "cancelled" || a.status === "no_show") {
+    return { label: "Book again", tone: "secondary", onClick: () => onNavigate("doctors") };
+  }
+  return null;
+}
+
+/** Everything else, in the menu. */
+function secondaryActions(a, {
+  onPay, onJoinCall, onReschedule, onNavigate, setCancelling, setReviewing, setPolicyFor,
+}) {
+  const calendar = {
+    label: "Add to calendar",
+    icon: "calendar",
+    onClick: () => downloadAppointmentIcs(a, { appUrl: window.location.origin }),
+  };
+  const policy = {
+    label: "Cancellation policy",
+    icon: "shield",
+    onClick: () => setPolicyFor(a),
+  };
+
+  if (a.status === "confirmed") {
+    const unpaid = a.payment?.method === "bkash" && a.payment.status === "pending";
+    return [
+      // Whichever of pay/join is not the primary action stays reachable here.
+      unpaid
+        ? { label: "Join call", icon: "video", onClick: () => onJoinCall(a) }
+        : a.payment?.status === "pending"
+          ? { label: "Pay now", icon: "send", onClick: () => onPay?.(a) }
+          : null,
+      calendar,
+      { label: "Reschedule", icon: "clock", onClick: () => onReschedule(a) },
+      policy,
+      {
+        label: "Cancel appointment",
+        icon: "x",
+        danger: true,
+        disabled: !a.canCancel,
+        disabledHint: "within the last hour",
+        onClick: () => setCancelling(a),
+      },
+    ];
+  }
+
+  if (a.status === "completed") {
+    return [
+      { label: "View notes", icon: "file", onClick: () => onNavigate("records") },
+      { label: "Leave review", icon: "star", onClick: () => setReviewing(a) },
+      { label: "Book again", icon: "calendar", onClick: () => onNavigate("doctors") },
+    ];
+  }
+
+  return [policy];
+}
+
 export function Appointments({
   loading, appointments, waitlist, onNavigate, onCancel, onReschedule,
   onJoinCall, onReview, onLeaveWaitlist, onPay,
@@ -40,6 +125,7 @@ export function Appointments({
   const [tab, setTab] = useState("upcoming");
   const [reviewing, setReviewing] = useState(null);
   const [cancelling, setCancelling] = useState(null);
+  const [policyFor, setPolicyFor] = useState(null);
 
   const shown = appointments.filter(TABS.find((t) => t.id === tab).match);
 
@@ -127,40 +213,29 @@ export function Appointments({
               </div>
 
               <div className="appt-actions">
-                {a.status === "confirmed" && a.payment?.method === "bkash"
-                  && a.payment.status === "pending" && (
-                  <button className="button primary small" onClick={() => onPay?.(a)}>
-                    Pay with bKash
-                  </button>
-                )}
-                {a.status === "confirmed" && (
-                  <>
-                    <button className="button secondary small" onClick={() => onJoinCall(a)}>
-                      <Icon name="video" size={12} />Join call
+                {/*
+                  * One primary action, chosen by what this appointment needs
+                  * next; everything else behind the menu. Six equal buttons
+                  * made the patient read all six to find the one they came
+                  * for, and put Cancel as close to the thumb as Join.
+                  */}
+                {(() => {
+                  const primary = primaryAction(a, { onPay, onJoinCall, setReviewing, onNavigate });
+                  return primary ? (
+                    <button className={`button ${primary.tone} small`} onClick={primary.onClick}>
+                      {primary.icon && <Icon name={primary.icon} size={12} />}
+                      {primary.label}
                     </button>
-                    <button className="button ghost small" onClick={() => onReschedule(a)}>
-                      Reschedule
-                    </button>
-                    <button
-                      className="button ghost small danger"
-                      disabled={!a.canCancel}
-                      title={a.canCancel ? "" : "Too close to the appointment to cancel"}
-                      onClick={() => setCancelling(a)}
-                    >
-                      Cancel
-                    </button>
-                  </>
-                )}
-                {a.status === "completed" && (
-                  <>
-                    <button className="button ghost small" onClick={() => onNavigate("records")}>
-                      <Icon name="file" size={12} />View notes
-                    </button>
-                    <button className="button secondary small" onClick={() => setReviewing(a)}>
-                      <Icon name="star" size={12} />Leave review
-                    </button>
-                  </>
-                )}
+                  ) : null;
+                })()}
+
+                <ActionMenu
+                  label={`More actions for ${a.doctor?.name ?? "this appointment"}`}
+                  items={secondaryActions(a, {
+                    onPay, onJoinCall, onReschedule, onNavigate,
+                    setCancelling, setReviewing, setPolicyFor,
+                  })}
+                />
                 {a.status === "cancelled" && (
                   <button className="button ghost small" onClick={() => onNavigate("doctors")}>
                     Book again
@@ -193,6 +268,14 @@ export function Appointments({
           setReviewing(null);
         }}
       />
+
+      <Modal
+        open={Boolean(policyFor)}
+        title="Cancelling, missing and refunds"
+        onClose={() => setPolicyFor(null)}
+      >
+        <CancellationPolicy appointment={policyFor} compact />
+      </Modal>
 
       <Modal
         open={Boolean(cancelling)}
