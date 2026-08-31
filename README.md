@@ -303,7 +303,7 @@ exist. Each domain moves with its transactional service and its authorization
 rules together — see `docs/IMPLEMENTATION_PLAN.md`.
 
 ## AI layer
-`lib/ai.js` works **without an API key**, using a transparent rule engine, and
+`lib/ai/` works **without an API key**, using a transparent rule engine, and
 upgrades to an LLM when `AI_API_KEY` / `AI_BASE_URL` are set. Safety properties:
 
 - Red-flag symptoms (chest pain, stroke signs, self-harm, …) short-circuit to
@@ -312,6 +312,31 @@ upgrades to an LLM when `AI_API_KEY` / `AI_BASE_URL` are set. Safety properties:
 - LLM failures fall back to the rule engine — fail safe, never fail open.
 - Visit summaries are always returned `requiresReview: true`; the doctor edits and
   confirms before anything reaches a patient record.
+
+### Connecting a model
+
+Any provider speaking the OpenAI `/chat/completions` protocol works — there is
+no vendor SDK. Google AI Studio issues a free key with no card and publishes an
+OpenAI-compatible endpoint, which makes it the least friction:
+
+```
+AI_API_KEY=<AI Studio key>
+AI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
+AI_MODEL=gemini-2.5-flash
+```
+
+```bash
+npm run ai:check
+```
+
+Run that after setting the key. Triage falls back to the rule engine whenever
+the model is unreachable — correct clinically, but it means a wrong key is
+indistinguishable from a working system until you look. `ai:check` calls the
+provider with a benign non-clinical prompt and reports the status, the model
+that answered, and whether JSON mode was honoured.
+
+The model is a refinement layer, not the decision-maker: red flags short-circuit
+before it is called, and it cannot downgrade an urgency the rules raised.
 
 ## Known gaps (next increments)
 
