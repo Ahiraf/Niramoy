@@ -285,6 +285,13 @@ function ReviewModal({ appointment, onClose, onSubmit }) {
   );
 }
 
+/** "Nabila Begum" -> "NB". Falls back to a neutral placeholder. */
+function initialsOf(name) {
+  const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "PT";
+  return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
+}
+
 export function Consultation({ appointment, onNavigate, onComplete }) {
   /** The server-issued join grant. Present once the room has been opened. */
   const call = appointment?.call;
@@ -298,13 +305,26 @@ export function Consultation({ appointment, onNavigate, onComplete }) {
   }, []);
 
   const mmss = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
+
+  /**
+   * Whichever of the two people on the appointment is not you. The doctor sees
+   * the patient here and the patient sees the doctor, so this one screen serves
+   * both sides of the consultation.
+   */
+  const viewerIsDoctor = call?.role === "doctor";
   const doctor = appointment?.doctor;
+  const peer = viewerIsDoctor
+    ? { name: appointment?.patientName || "Your patient", initials: initialsOf(appointment?.patientName), avatar: "sand", subtitle: appointment?.reason || "Patient" }
+    : { name: doctor?.name || "Your doctor", initials: doctor?.initials || "DR", avatar: doctor?.avatar || "teal", subtitle: doctor?.specialty };
+
+  /** A provider that carries media gives us a URL we can frame. */
+  const embedUrl = call?.embedUrl || null;
 
   return (
     <>
       <PageHeading
         title="Video consultation"
-        subtitle="Your secure consultation room."
+        subtitle={viewerIsDoctor ? `Consultation with ${peer.name}.` : "Your secure consultation room."}
         actions={
           <button className="button ghost" onClick={() => onNavigate("appointments")}>
             Leave room
@@ -313,48 +333,61 @@ export function Consultation({ appointment, onNavigate, onComplete }) {
       />
 
       <div className="card consult-shell">
-        <div className="consult-stage">
+        <div className={`consult-stage${embedUrl ? " embedded" : ""}`}>
           <div className="consult-status">
             <span className="live-dot" /> Secure room · {mmss}
           </div>
 
-          <div className="consult-peer">
-            <div className={`avatar ${doctor?.avatar || "teal"}`} style={{ width: 76, height: 76, fontSize: 21, margin: "0 auto 14px" }}>
-              {doctor?.initials || "DR"}
-            </div>
-            <strong>{doctor?.name || "Your doctor"}</strong>
-            <span>{doctor?.specialty}</span>
-            {call?.isDemo ? (
+          {embedUrl ? (
+            /*
+             * The call itself. Camera and microphone are granted to this frame
+             * only, and the URL carries the short-lived join grant — it is not
+             * a bookmarkable room. The provider draws its own controls, so we
+             * do not draw a second, fake set beside them.
+             */
+            <iframe
+              className="consult-frame"
+              title={`Video consultation with ${peer.name}`}
+              src={embedUrl}
+              allow="camera; microphone; fullscreen; display-capture; autoplay; speaker-selection"
+              allowFullScreen
+            />
+          ) : (
+            <div className="consult-peer">
+              <div className={`avatar ${peer.avatar}`} style={{ width: 76, height: 76, fontSize: 21, margin: "0 auto 14px" }}>
+                {peer.initials}
+              </div>
+              <strong>{peer.name}</strong>
+              <span>{peer.subtitle}</span>
               <p className="consult-hint">
                 No video provider is configured, so this is a demo room — the
                 access token is real and scoped to you, but no media is carried.
-                Set VIDEO_PROVIDER to connect Daily or Jitsi.
+                Set VIDEO_PROVIDER=jitsi to hold a real two-way call.
               </p>
-            ) : (
-              <p className="consult-hint">
-                Connected via {call?.provider}. This room is private to you and
-                your doctor, and is not recorded.
-              </p>
-            )}
-          </div>
+            </div>
+          )}
 
-          <div className="consult-self">You</div>
+          {!embedUrl && <div className="consult-self">You</div>}
 
           <div className="consult-controls">
-            <button
-              className={`consult-button ${micOn ? "" : "off"}`}
-              onClick={() => setMicOn((v) => !v)}
-              aria-label={micOn ? "Mute microphone" : "Unmute microphone"}
-            >
-              <Icon name="mic" size={17} />
-            </button>
-            <button
-              className={`consult-button ${camOn ? "" : "off"}`}
-              onClick={() => setCamOn((v) => !v)}
-              aria-label={camOn ? "Turn camera off" : "Turn camera on"}
-            >
-              <Icon name="video" size={17} />
-            </button>
+            {!embedUrl && (
+              <>
+                <button
+                  className={`consult-button ${micOn ? "" : "off"}`}
+                  onClick={() => setMicOn((v) => !v)}
+                  aria-label={micOn ? "Mute microphone" : "Unmute microphone"}
+                >
+                  <Icon name="mic" size={17} />
+                </button>
+                <button
+                  className={`consult-button ${camOn ? "" : "off"}`}
+                  onClick={() => setCamOn((v) => !v)}
+                  aria-label={camOn ? "Turn camera off" : "Turn camera on"}
+                >
+                  <Icon name="video" size={17} />
+                </button>
+              </>
+            )}
             <button
               className="button leave-button"
               onClick={async () => {
@@ -368,7 +401,11 @@ export function Consultation({ appointment, onNavigate, onComplete }) {
         </div>
 
         <div className="consult-footer">
-          <span>Recording is off · This conversation is private and encrypted.</span>
+          <span>
+            {embedUrl
+              ? `Connected via ${call.provider} · not recorded${call.provider === "jitsi-public" ? " · public room, unlisted" : ""}`
+              : "Recording is off · This conversation is private and encrypted."}
+          </span>
           <button className="button secondary small" onClick={() => onNavigate("records")}>
             <Icon name="file" size={12} />View medical history
           </button>

@@ -481,6 +481,13 @@ textarea.field, .textarea { height: auto; padding: 10px 12px; line-height: 1.55;
 .consult-button.off { background: #d86569; border-color: #d86569; }
 .leave-button { background: #d86569; color: #fff; }
 .leave-button:hover { background: #c4565a; }
+/* The embedded provider frame fills the stage; it draws its own controls, so
+   the stage keeps only the status pill and our End consultation button. */
+.consult-stage.embedded { display: block; background: #0d2329; }
+.consult-frame { width: 100%; height: 100%; border: 0; display: block; }
+.consult-stage.embedded .consult-status { z-index: 2; background: rgba(6,24,28,.72); padding: 5px 10px; border-radius: 999px; }
+.consult-stage.embedded .consult-controls { z-index: 2; bottom: 12px; pointer-events: none; }
+.consult-stage.embedded .consult-controls .leave-button { pointer-events: auto; box-shadow: 0 6px 18px rgba(0,0,0,.35); }
 .consult-footer { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 15px 3px 0; color: #b9d0cf; font-size: 10px; }
 
 /* --- AI assistant --------------------------------------------------------- */
