@@ -73,6 +73,7 @@ export function FindDoctors({ reference, initialSearch = "", onOpenDoctor, onNav
   /** Bumping this re-runs the debounced search without touching the filters. */
   const [attempt, setAttempt] = useState(0);
   const slowSearch = useSlowLoad(loading);
+  const stats = reference?.stats ?? null;
 
   useEffect(() => {
     setFilters((f) => ({ ...f, search: initialSearch }));
@@ -237,9 +238,30 @@ export function FindDoctors({ reference, initialSearch = "", onOpenDoctor, onNav
       </Banner>
 
       <SectionHead
-        title={loading ? "Searching…" : `${result.total} doctor${result.total === 1 ? "" : "s"}`}
+        title={
+          loading
+            ? "Searching…"
+            : `${result.total} doctor profile${result.total === 1 ? "" : "s"}`
+        }
         note={SORTS.find((s) => s.value === filters.sort)?.label}
       />
+
+      {/*
+        * How many of the profiles below are real practitioners.
+        *
+        * The directory is mostly seeded sample data, and a patient cannot tell
+        * that from a card alone — every card looks equally official. Saying it
+        * once, above the grid, is what makes the per-card Demo badge legible
+        * as a warning rather than decoration.
+        */}
+      {!loading && stats && (
+        <p className="directory-provenance">
+          <Icon name="shield" size={12} />
+          {stats.realDoctors} BM&amp;DC-verified {stats.realDoctors === 1 ? "doctor" : "doctors"} in
+          the directory · {stats.demoDoctors} demo {stats.demoDoctors === 1 ? "profile" : "profiles"},
+          which are sample data and not bookable care.
+        </p>
+      )}
 
       {searchError && (
         <ErrorState

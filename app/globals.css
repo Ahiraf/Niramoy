@@ -1067,3 +1067,13 @@ body {
 }
 
 .boot-screen .error-state { max-width: 420px; margin-top: 18px; text-align: left; }
+
+/* --- Directory provenance --------------------------------------------------- */
+/* Says how much of the directory is real, once, above the grid — so the
+   per-card Demo badge reads as a warning and not as decoration. */
+.directory-provenance {
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+  font-size: 11px; color: #6d7f7d;
+  margin: -4px 0 14px;
+}
+.directory-provenance svg { color: #4f8f83; flex-shrink: 0; }

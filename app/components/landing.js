@@ -13,7 +13,7 @@ const ROLE_CARDS = [
     role: "patient",
     icon: "heart",
     title: "I need care",
-    blurb: "Find a verified doctor near you, book a slot that is actually free, and keep every prescription in one place.",
+    blurb: "Find a doctor near you, book a slot that is actually free, and keep every prescription in one place.",
     points: ["Search 64 districts by specialty and fee", "AI symptom triage before you book", "Video consultations and family accounts"],
     cta: "Continue as a patient",
   },
@@ -37,7 +37,7 @@ const ROLE_CARDS = [
 
 const STEPS = [
   { icon: "bot", title: "Describe how you feel", text: "The assistant triages your symptoms, flags anything urgent, and suggests the right specialty." },
-  { icon: "search", title: "Pick a verified doctor", text: "Filter by specialty, district, fee and language. Every bookable profile has a confirmed BM&DC registration." },
+  { icon: "search", title: "Pick a doctor", text: "Filter by specialty, district, fee and language. Profiles show whether the BM&DC registration has been confirmed or the profile is sample data." },
   { icon: "calendar", title: "Book a real slot", text: "Availability is generated from the doctor's own hours, and the same slot can never be taken twice." },
   { icon: "video", title: "Consult and keep the record", text: "Meet over video, then get your prescription and visit summary saved to your timeline." },
 ];
@@ -52,9 +52,17 @@ const FEATURES = [
 ];
 
 export function Landing({ stats, onSignIn, onSignUp }) {
+  /*
+   * Two separate numbers, never one.
+   *
+   * The directory is mostly seeded sample profiles, so a single "doctors"
+   * figure next to the word verified would read as a claim that all of them
+   * are. Both counts come from the database, so they cannot drift from what
+   * the directory actually contains.
+   */
   const figures = [
     { value: stats?.doctors ?? "—", label: "Doctor profiles" },
-    { value: stats?.specialties ?? "—", label: "Specialties" },
+    { value: stats?.realDoctors ?? "—", label: "BM&DC-verified" },
     { value: stats?.districtsCovered ?? "—", label: "Districts covered" },
     { value: "24/7", label: "AI triage" },
   ];
@@ -85,13 +93,13 @@ export function Landing({ stats, onSignIn, onSignUp }) {
       <section className="landing-hero">
         <div className="landing-hero-copy">
           <span className="landing-eyebrow">
-            <Icon name="shield" size={12} /> Every doctor BM&amp;DC verified
+            <Icon name="shield" size={12} /> Every bookable doctor is BM&amp;DC-checked by hand
           </span>
           <h1>
             Care that comes to you — <em>নিরাময়</em>
           </h1>
           <p>
-            Niramoy connects patients across Bangladesh with verified doctors: describe your
+            Niramoy connects patients across Bangladesh with doctors whose registration we check: describe your
             symptoms, get pointed to the right specialty, book a slot that is genuinely free, and
             consult over video without leaving home.
           </p>

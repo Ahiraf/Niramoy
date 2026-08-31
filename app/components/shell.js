@@ -34,7 +34,7 @@ const ROLE_LABEL = {
 
 const TITLES = {
   dashboard: ["Dashboard", "Your care at a glance"],
-  doctors: ["Find a doctor", "Search the verified directory"],
+  doctors: ["Find a doctor", "Search the doctor directory"],
   "doctor-profile": ["Doctor profile", "Credentials, reviews and availability"],
   booking: ["Book an appointment", "Pick a time that works for you"],
   appointments: ["My appointments", "Upcoming, past and cancelled"],

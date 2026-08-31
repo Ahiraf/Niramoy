@@ -22,7 +22,7 @@ const ROLE_PITCH = {
   patient: {
     title: "Your care, in one place",
     points: [
-      "Search verified doctors across all 64 districts",
+      "Search doctors across all 64 districts",
       "AI triage points you to the right specialty",
       "Prescriptions and visit history kept together",
       "Book for family members from your own account",
