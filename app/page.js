@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "./lib/api.js";
 import { Sidebar, Topbar } from "./components/shell.js";
-import { Toast } from "./components/ui.js";
+import { ErrorState, OfflineBar, Toast, useOnline } from "./components/ui.js";
 import { Dashboard } from "./components/patient/dashboard.js";
 import { FindDoctors, DoctorProfile } from "./components/patient/find-doctors.js";
 import { Booking } from "./components/patient/booking.js";
@@ -44,6 +44,14 @@ export default function Home() {
   const [family, setFamily] = useState([]);
   const [waitlist, setWaitlist] = useState([]);
   const [loading, setLoading] = useState(true);
+  /**
+   * A load that did not complete. Held separately from `loading` because the
+   * two are not opposites: a failed load finishes, and showing an empty
+   * dashboard afterwards tells the patient they have no appointments when what
+   * actually happened is that we could not ask.
+   */
+  const [loadError, setLoadError] = useState(null);
+  const [retrying, setRetrying] = useState(false);
 
   // Navigation payloads.
   const [selectedDoctor, setSelectedDoctor] = useState(null);
@@ -55,6 +63,7 @@ export default function Home() {
   const [searchTerm, setSearchTerm] = useState("");
 
   const doctorSelf = useDoctorSelf(user, api);
+  const online = useOnline();
 
   const showToast = useCallback((message, tone = "success") => {
     setToast({ message, tone });
@@ -65,42 +74,114 @@ export default function Home() {
   /* Data loading                                                            */
   /* ---------------------------------------------------------------------- */
 
+  /*
+   * Each of these reports whether it worked, and writes nothing when it did
+   * not. Overwriting good data with the empty fallback of a failed request is
+   * how a network blip turns into "your prescriptions are gone".
+   */
+
   const refreshAppointments = useCallback(async () => {
     const data = await api.appointments();
+    if (data.ok === false) return false;
     setAppointments(data.appointments ?? []);
+    return true;
   }, []);
 
   const refreshNotifications = useCallback(async () => {
     const data = await api.notifications();
+    if (data.ok === false) return false;
     setNotifications(data.notifications ?? []);
     setUnread(data.unread ?? 0);
+    return true;
   }, []);
 
   const refreshReference = useCallback(async () => {
     const data = await api.reference();
+    if (data.ok === false) return false;
     setReference(data);
+    return true;
   }, []);
 
   const refreshRecords = useCallback(async () => {
     const data = await api.records();
+    if (data.ok === false) return false;
     setRecords(data.records ?? []);
     setPrescriptions(data.prescriptions ?? []);
+    return true;
   }, []);
 
   /**
    * Session first: the landing page needs the reference stats either way, but
    * nothing personal is fetched until we know who is asking.
    */
-  useEffect(() => {
-    (async () => {
-      const [session] = await Promise.all([api.session(), refreshReference()]);
-      const me = session.user ?? null;
-      setUser(me);
-      setActive(me ? HOME[me.role] : "dashboard");
-      setScreen(me ? "app" : "landing");
-      if (!me) setLoading(false);
-    })();
+  const boot = useCallback(async () => {
+    setLoadError(null);
+    // allSettled, not all: a rejection here used to leave the app on the boot
+    // splash forever, with no way forward but a manual refresh.
+    const [sessionResult] = await Promise.allSettled([api.session(), refreshReference()]);
+
+    const session = sessionResult.status === "fulfilled" ? sessionResult.value : null;
+    if (!session || session.ok === false) {
+      setLoadError({ scope: "boot" });
+      setScreen("boot-failed");
+      setLoading(false);
+      return;
+    }
+
+    const me = session.user ?? null;
+    setUser(me);
+    setActive(me ? HOME[me.role] : "dashboard");
+    setScreen(me ? "app" : "landing");
+    if (!me) setLoading(false);
   }, [refreshReference]);
+
+  useEffect(() => {
+    boot();
+  }, [boot]);
+
+  /**
+   * Everything the workspace needs, in one pass.
+   *
+   * allSettled rather than all: one failing call should not discard the five
+   * that worked. Whatever arrived is rendered, and the parts that did not are
+   * reported together with a way to ask again.
+   */
+  const loadWorkspace = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+
+    const settled = await Promise.allSettled([
+      refreshAppointments(),
+      refreshNotifications(),
+      refreshRecords(),
+      api.doctors({ sort: "rating", perPage: 6 }),
+      api.family(),
+      api.waitlist(),
+    ]);
+
+    const valueAt = (i) => (settled[i].status === "fulfilled" ? settled[i].value : null);
+    const failedAt = (i) => {
+      const value = valueAt(i);
+      return value === null || value === false || value?.ok === false;
+    };
+
+    const top = valueAt(3);
+    const fam = valueAt(4);
+    const wait = valueAt(5);
+    if (top?.doctors) setTopDoctors(top.doctors);
+    if (fam?.members) setFamily(fam.members);
+    if (wait?.entries) setWaitlist(wait.entries);
+
+    setLoading(false);
+    if (settled.some((_, i) => failedAt(i))) setLoadError({ scope: "workspace" });
+  }, [refreshAppointments, refreshNotifications, refreshRecords]);
+
+  const retryLoad = useCallback(async () => {
+    setRetrying(true);
+    if (loadError?.scope === "boot") await boot();
+    else await loadWorkspace();
+    setRetrying(false);
+  }, [boot, loadError, loadWorkspace]);
 
   /** Workspace data. Re-runs on sign-in and sign-out, so no state leaks across. */
   useEffect(() => {
@@ -109,22 +190,8 @@ export default function Home() {
       setNotifications([]); setUnread(0); setFamily([]); setWaitlist([]);
       return;
     }
-    (async () => {
-      setLoading(true);
-      const [, , , top, fam, wait] = await Promise.all([
-        refreshAppointments(),
-        refreshNotifications(),
-        refreshRecords(),
-        api.doctors({ sort: "rating", perPage: 6 }),
-        api.family(),
-        api.waitlist(),
-      ]);
-      setTopDoctors(top.doctors ?? []);
-      setFamily(fam.members ?? []);
-      setWaitlist(wait.entries ?? []);
-      setLoading(false);
-    })();
-  }, [user, refreshAppointments, refreshNotifications, refreshRecords]);
+    loadWorkspace();
+  }, [user, loadWorkspace]);
 
   /* ---------------------------------------------------------------------- */
   /* Actions                                                                 */
@@ -390,6 +457,21 @@ export default function Home() {
     );
   }
 
+  if (screen === "boot-failed") {
+    return (
+      <div className="boot-screen">
+        <div className="brand-mark"><Icon name="heart" size={20} strokeWidth={2.2} /></div>
+        <ErrorState
+          title="Niramoy could not start"
+          message="We couldn't reach the server to see whether you are signed in. Nothing is lost — try again once your connection is back."
+          onRetry={retryLoad}
+          retrying={retrying}
+          offline={typeof navigator !== "undefined" && !navigator.onLine}
+        />
+      </div>
+    );
+  }
+
   if (screen === "landing") {
     return (
       <Landing
@@ -639,7 +721,20 @@ export default function Home() {
           onSearch={onSearch}
           onMenu={() => setMenuOpen(true)}
         />
-        <div className="content">{view}</div>
+        <OfflineBar />
+        <div className="content">
+          {loadError && !loading && (
+            <ErrorState
+              compact
+              title="Some of your data didn't load"
+              message="What you can see below is up to date; the rest is missing because a request failed."
+              onRetry={retryLoad}
+              retrying={retrying}
+              offline={!online}
+            />
+          )}
+          {view}
+        </div>
       </main>
       <Toast toast={toast} />
     </div>

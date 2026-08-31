@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "./icons.js";
 
 /* -------------------------------------------------------------------------- */
@@ -94,10 +94,20 @@ export function Empty({ icon = "search", title, hint, action }) {
   );
 }
 
-export function Loading({ label = "Loading…", rows = 3 }) {
+export function Loading({ label = "Loading…", rows = 3, slow = false, onRetry }) {
   return (
     <div className="loading-block" role="status" aria-live="polite">
       <span className="sr-only">{label}</span>
+      {slow && (
+        <div className="loading-slow">
+          <span>Still loading. This is taking longer than usual.</span>
+          {onRetry && (
+            <button className="text-link" onClick={onRetry}>
+              Try again
+            </button>
+          )}
+        </div>
+      )}
       {Array.from({ length: rows }).map((_, i) => (
         <div className="skeleton-row" key={i}>
           <div className="skeleton circle" />
@@ -107,6 +117,108 @@ export function Loading({ label = "Loading…", rows = 3 }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Network state                                                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Whether the browser thinks it has a connection.
+ *
+ * `navigator.onLine` is a weak signal — it reports the link, not whether
+ * anything is reachable — so it is used to EXPLAIN a failure that already
+ * happened, never to predict one. We do not block requests on it.
+ */
+export function useOnline() {
+  const [online, setOnline] = useState(true);
+
+  useEffect(() => {
+    const sync = () => setOnline(navigator.onLine);
+    sync();
+    window.addEventListener("online", sync);
+    window.addEventListener("offline", sync);
+    return () => {
+      window.removeEventListener("online", sync);
+      window.removeEventListener("offline", sync);
+    };
+  }, []);
+
+  return online;
+}
+
+/**
+ * True once a load has been running longer than it should.
+ *
+ * A skeleton that animates forever is indistinguishable from a hang, and the
+ * patient has no way to tell which they are looking at. After this fires the
+ * skeleton says so and offers a way out.
+ */
+export function useSlowLoad(active, ms = 8000) {
+  const [slow, setSlow] = useState(false);
+
+  useEffect(() => {
+    if (!active) {
+      setSlow(false);
+      return undefined;
+    }
+    const timer = setTimeout(() => setSlow(true), ms);
+    return () => clearTimeout(timer);
+  }, [active, ms]);
+
+  return slow;
+}
+
+/**
+ * A load that failed, with the way to try it again.
+ *
+ * Distinguishes "we could not reach the server" from "the server said no",
+ * because the two call for different actions from the patient and conflating
+ * them is how an offline phone becomes a support ticket.
+ */
+export function ErrorState({
+  title,
+  message,
+  onRetry,
+  retrying = false,
+  offline = false,
+  compact = false,
+}) {
+  const heading = title ?? (offline ? "You appear to be offline" : "That didn't load");
+  const body =
+    message ??
+    (offline
+      ? "Niramoy needs a connection for this. Your place is saved — reconnect and try again."
+      : "Something went wrong on our side. Nothing you entered has been lost.");
+
+  return (
+    <div className={`error-state${compact ? " compact" : ""}`} role="alert">
+      <Icon name={offline ? "info" : "alert"} size={compact ? 18 : 24} />
+      <div className="error-state-text">
+        <strong>{heading}</strong>
+        <p>{body}</p>
+      </div>
+      {onRetry && (
+        <button className="button secondary small" onClick={onRetry} disabled={retrying}>
+          <Icon name="refresh" size={12} />
+          {retrying ? "Retrying…" : "Try again"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** The persistent strip shown while the browser reports no connection. */
+export function OfflineBar() {
+  const online = useOnline();
+  if (online) return null;
+  return (
+    <div className="offline-bar" role="status" aria-live="polite">
+      <Icon name="info" size={13} />
+      You are offline. Niramoy will keep what you have typed; actions will fail
+      until the connection is back.
     </div>
   );
 }

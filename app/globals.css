@@ -1036,3 +1036,34 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/* --- Failure recovery ------------------------------------------------------ */
+/* A failed load has to look different from an empty one. The empty state is
+   calm and grey; this is not, because it is asking for an action. */
+.error-state {
+  display: flex; align-items: flex-start; gap: 13px;
+  padding: 18px 19px; border-radius: 12px;
+  background: #fdf4f2; border: 1px solid #f0d5cd; color: #7b3f33;
+  margin: 0 0 16px;
+}
+.error-state.compact { padding: 13px 15px; align-items: center; }
+.error-state > svg { flex-shrink: 0; margin-top: 2px; color: #c4614f; }
+.error-state.compact > svg { margin-top: 0; }
+.error-state-text { flex: 1; min-width: 0; }
+.error-state-text strong { display: block; font-size: 13px; margin-bottom: 3px; }
+.error-state-text p { font-size: 11.5px; line-height: 1.55; color: #8a5346; margin: 0; }
+.error-state .button { flex-shrink: 0; }
+
+.offline-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 20px; font-size: 11.5px;
+  background: #2f3f45; color: #dbe8ea;
+}
+.offline-bar svg { flex-shrink: 0; }
+
+.loading-slow {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  font-size: 11.5px; color: #6d7f7d; margin-bottom: 12px;
+}
+
+.boot-screen .error-state { max-width: 420px; margin-top: 18px; text-align: left; }

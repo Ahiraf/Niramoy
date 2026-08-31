@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../icons.js";
-import { Avatar, PageHeading, Rating, Banner, Loading } from "../ui.js";
+import { Avatar, ErrorState, PageHeading, Rating, Banner, Loading } from "../ui.js";
 
 const PROMPTS = [
   "I've had a headache every day for two weeks",
@@ -29,6 +29,8 @@ export function Assistant({ api, onOpenDoctor, onNavigate }) {
   ]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
+  /** The description that did not get through, kept so it can be re-sent. */
+  const [failed, setFailed] = useState(null);
   const [result, setResult] = useState(null);
   const scrollRef = useRef(null);
 
@@ -41,6 +43,7 @@ export function Assistant({ api, onOpenDoctor, onNavigate }) {
     if (!message || thinking) return;
 
     setInput("");
+    setFailed(null);
     setMessages((m) => [...m, { id: `u-${Date.now()}`, from: "user", text: message }]);
     setThinking(true);
 
@@ -48,10 +51,21 @@ export function Assistant({ api, onOpenDoctor, onNavigate }) {
     setThinking(false);
 
     if (!data.ok) {
-      setMessages((m) => [...m, {
-        id: `e-${Date.now()}`, from: "ai",
-        text: "Sorry — I couldn't process that just now. Please try again.",
-      }]);
+      /*
+       * Give the words back.
+       *
+       * Someone describing their symptoms has just done the hardest part of
+       * using this app, often in a second language and often while unwell.
+       * Clearing the box on a failed request makes them type it all again, so
+       * the text goes back where they left it and the retry re-sends exactly
+       * what they wrote.
+       */
+      setInput((current) => (current.trim() ? current : message));
+      setFailed({
+        message,
+        offline: data.reason === "network",
+        detail: data.message,
+      });
       return;
     }
 
@@ -96,6 +110,21 @@ export function Assistant({ api, onOpenDoctor, onNavigate }) {
                   <i /><i /><i />
                 </div>
               </div>
+            )}
+
+            {failed && (
+              <ErrorState
+                compact
+                offline={failed.offline}
+                title={failed.offline ? "You're offline" : "That didn't get through"}
+                message={
+                  failed.offline
+                    ? "Your description is still in the box below. Reconnect and send it again."
+                    : (failed.detail ?? "We couldn't reach the assistant. Your description is still in the box below.")
+                }
+                onRetry={() => send(failed.message)}
+                retrying={thinking}
+              />
             )}
 
             {triage && (
