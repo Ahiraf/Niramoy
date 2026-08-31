@@ -11,6 +11,7 @@ import { POST as paymentsPost } from "../../app/api/payments/route";
 import { POST as webhookPost } from "../../app/api/payments/webhook/route";
 import { POST as executePost } from "../../app/api/payments/[id]/execute/route";
 import { resetPaymentProvider, signatureMatches } from "../../lib/payments/provider";
+import { PAYMENT_SESSION_MINUTES } from "../../lib/services/payments";
 import { requestAs, seedAppointment, type World } from "../fixtures";
 import { call, params, setupWorld, teardownWorld } from "../harness";
 
@@ -187,6 +188,59 @@ describe("confirming a bKash payment", () => {
     const res = await execute(world.patientA, id, { walletNumber: "01712345678" });
     expect(res.status).toBe(200);
     expect(res.body.payment.status).toBe("succeeded");
+  });
+
+  it("stops accepting a confirmation once the session has expired", async () => {
+    const id = await startBkash();
+
+    // Age the row past the session window. The deadline is derived from
+    // created_at, so moving it is the same as waiting.
+    await world.h.client.query(
+      `UPDATE payments SET created_at = created_at - ($1 || ' minutes')::interval WHERE id = $2`,
+      [String(PAYMENT_SESSION_MINUTES + 1), id],
+    );
+
+    const res = await execute(world.patientA, id, { walletNumber: "01712345678" });
+    expect(res.status).toBe(422);
+    expect(res.body.message).toMatch(/still booked/i);
+
+    // The expired session is closed, not left pending for a later attempt.
+    const { rows } = await world.h.client.query<{ status: string; failure_reason: string }>(
+      `SELECT status, failure_reason FROM payments WHERE id = $1`,
+      [id],
+    );
+    expect(rows[0]?.status).toBe("cancelled");
+    expect(rows[0]?.failure_reason).toBe("session_expired");
+  });
+
+  it("leaves the appointment booked when the payment session expires", async () => {
+    const appointmentId = await seedAppointment(world, {
+      doctor: world.doctor,
+      patient: world.patientA,
+      startUtc: "2027-06-02T10:00:00Z",
+      status: "confirmed",
+    });
+    const started = await call<{ payment: { id: string } }>(
+      paymentsPost,
+      requestAs(world.patientA, `${BASE}/api/payments`, {
+        method: "POST",
+        body: JSON.stringify({ appointmentId, method: "bkash" }),
+      }),
+    );
+
+    await world.h.client.query(
+      `UPDATE payments SET created_at = created_at - ($1 || ' minutes')::interval WHERE id = $2`,
+      [String(PAYMENT_SESSION_MINUTES + 1), started.body.payment.id],
+    );
+    await execute(world.patientA, started.body.payment.id, { walletNumber: "01712345678" });
+
+    // The session expires. The slot does not — that distinction is the whole
+    // reason the countdown is safe to show.
+    const { rows } = await world.h.client.query<{ status: string }>(
+      `SELECT status FROM appointments WHERE id = $1`,
+      [appointmentId],
+    );
+    expect(rows[0]?.status).toBe("confirmed");
   });
 
   it("refuses a wallet number no bKash account could have", async () => {

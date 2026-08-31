@@ -23,6 +23,23 @@ import {
 } from "../payments/provider";
 import type { Principal } from "../security/authz";
 
+/**
+ * How long a started wallet payment stays confirmable.
+ *
+ * A real bKash tokenized checkout hands out a payment that must be executed
+ * within minutes, and there is no reason for ours to be immortal: a `pending`
+ * row that can be executed a week later is a stale authorisation sitting on an
+ * account. Derived from createdAt rather than stored, so there is no second
+ * source of truth to drift.
+ *
+ * NOTE this is the PAYMENT that expires, not the slot. The appointment is
+ * already booked and stays booked — see the checkout sheet's copy.
+ */
+export const PAYMENT_SESSION_MINUTES = 10;
+
+export const sessionExpiresAt = (createdAt: Date): Date =>
+  new Date(createdAt.getTime() + PAYMENT_SESSION_MINUTES * 60_000);
+
 export interface PaymentView {
   id: string;
   status: PaymentStatus;
@@ -32,6 +49,8 @@ export interface PaymentView {
   provider: string;
   isMock: boolean;
   redirectUrl: string | null;
+  /** When this payment can no longer be confirmed. Null once it is settled. */
+  expiresAt: string | null;
 }
 
 /** Reject anything that is not one of the two instruments we actually offer. */
@@ -90,18 +109,8 @@ export async function startPayment(
     .where(eq(t.payments.idempotencyKey, idempotencyKey))
     .limit(1);
 
-  if (existing[0]) {
-    return {
-      id: existing[0].id,
-      status: existing[0].status as PaymentStatus,
-      method: existing[0].method as PaymentMethod,
-      amount: Number(existing[0].amount),
-      currency: existing[0].currency,
-      provider: existing[0].provider,
-      isMock: existing[0].isMock === "true",
-      redirectUrl: null,
-    };
-  }
+  // Idempotent replay: the same session, with the same deadline it already had.
+  if (existing[0]) return toView(existing[0]);
 
   const amount = Number(appointment.feeAmount);
 
@@ -122,6 +131,8 @@ export async function startPayment(
       });
 
   let paymentId: string;
+  /** The row's own timestamp: the session deadline is derived from it. */
+  let createdAt: Date;
   try {
     const inserted = await db
       .insert(t.payments)
@@ -140,8 +151,9 @@ export async function startPayment(
         status: provider.isMock ? intent.status : "pending",
         idempotencyKey,
       })
-      .returning({ id: t.payments.id });
+      .returning({ id: t.payments.id, createdAt: t.payments.createdAt });
     paymentId = inserted[0]!.id;
+    createdAt = inserted[0]!.createdAt;
   } catch (err) {
     if (isUniqueViolation(err)) {
       // Lost a race with an identical request; return the winner.
@@ -150,8 +162,10 @@ export async function startPayment(
         .from(t.payments)
         .where(eq(t.payments.idempotencyKey, idempotencyKey))
         .limit(1);
-      if (again[0]) paymentId = again[0].id;
-      else throw err;
+      if (again[0]) {
+        paymentId = again[0].id;
+        createdAt = again[0].createdAt;
+      } else throw err;
     } else {
       throw err;
     }
@@ -167,15 +181,23 @@ export async function startPayment(
     metadata: { provider: provider.name, method, isMock: provider.isMock, amount },
   });
 
+  const status = provider.isMock ? intent.status : "pending";
+
   return {
     id: paymentId,
-    status: provider.isMock ? intent.status : "pending",
+    status,
     method,
     amount,
     currency: appointment.currency,
     provider: method === "cash" ? "cash" : provider.name,
     isMock: provider.isMock,
     redirectUrl: intent.redirectUrl,
+    // Cash is settled in person and never expires; a wallet payment is only
+    // confirmable while its session lasts.
+    expiresAt:
+      status === "pending" && method === "bkash"
+        ? sessionExpiresAt(createdAt).toISOString()
+        : null,
   };
 }
 
@@ -215,6 +237,24 @@ export async function executePayment(
   if (payment.status === "succeeded") return toView(payment);
   if (payment.status !== "pending") {
     throw new AppError("NOT_ELIGIBLE", { message: "That payment can no longer be confirmed." });
+  }
+
+  /*
+   * The session, not the slot. Refusing here is what makes the countdown in
+   * the checkout sheet mean something: without this the timer would run out
+   * and the payment would still go through, which is a worse lie than having
+   * no timer at all.
+   */
+  if (Date.now() > sessionExpiresAt(payment.createdAt).getTime()) {
+    await db
+      .update(t.payments)
+      .set({ status: "cancelled", failureReason: "session_expired", updatedAt: new Date() })
+      .where(and(eq(t.payments.id, payment.id), eq(t.payments.status, "pending")));
+
+    throw new AppError("NOT_ELIGIBLE", {
+      message:
+        "This bKash session has expired. Your appointment is still booked — start the payment again from your appointments.",
+    });
   }
 
   const walletNumber = String(input.walletNumber ?? "").replace(/[\s-]/g, "");
@@ -266,6 +306,10 @@ function toView(payment: PaymentRow): PaymentView {
     provider: payment.provider,
     isMock: payment.isMock === "true",
     redirectUrl: null,
+    expiresAt:
+      payment.status === "pending" && payment.method === "bkash"
+        ? sessionExpiresAt(payment.createdAt).toISOString()
+        : null,
   };
 }
 

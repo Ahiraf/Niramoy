@@ -17,19 +17,51 @@
  *      real payment is worse than no payment screen at all.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Icon } from "../icons.js";
 import { Modal, Field, Banner } from "../ui.js";
 
 /** 01712345678, and the same shape the server validates. */
 const WALLET = /^01[3-9]\d{8}$/;
 
+/**
+ * Seconds left on the payment session, or null when it does not expire.
+ *
+ * Ticks locally but is only ever a DISPLAY of the server's deadline: the
+ * server refuses an expired execute regardless of what this shows, so a paused
+ * tab or a fiddled clock cannot buy extra time.
+ */
+function useCountdown(expiresAt) {
+  const [remaining, setRemaining] = useState(null);
+
+  useEffect(() => {
+    if (!expiresAt) {
+      setRemaining(null);
+      return undefined;
+    }
+    const deadline = new Date(expiresAt).getTime();
+    const tick = () => setRemaining(Math.max(0, Math.round((deadline - Date.now()) / 1000)));
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [expiresAt]);
+
+  return remaining;
+}
+
 export function BkashCheckout({ open, payment, appointment, onClose, onPaid, api, notify }) {
   const [wallet, setWallet] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const remaining = useCountdown(payment?.expiresAt ?? null);
 
   if (!payment) return null;
+
+  const expired = remaining === 0;
+  const clock =
+    remaining === null
+      ? null
+      : `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`;
 
   const digits = wallet.replace(/[\s-]/g, "");
 
@@ -63,6 +95,13 @@ export function BkashCheckout({ open, payment, appointment, onClose, onPaid, api
             <span>Amount payable</span>
             <strong>৳ {fee}</strong>
           </div>
+          {clock && (
+            <div className={`bkash-clock ${remaining <= 60 ? "urgent" : ""}`}>
+              <Icon name="clock" size={12} />
+              <strong>{clock}</strong>
+              <span>session</span>
+            </div>
+          )}
         </div>
 
         {appointment && (
@@ -89,6 +128,19 @@ export function BkashCheckout({ open, payment, appointment, onClose, onPaid, api
           />
         </Field>
 
+        {expired ? (
+          <Banner tone="warn" icon="alert" title="This payment session has expired">
+            Your appointment is still booked and still yours. Close this and
+            start the payment again from your appointments.
+          </Banner>
+        ) : (
+          <Banner tone="info" icon="check" title="Your slot is already booked">
+            The countdown is on this bKash session, not on your appointment.
+            Nobody else can take the slot while you pay, and it stays yours if
+            the session runs out.
+          </Banner>
+        )}
+
         <Banner tone="info" icon="shield">
           Niramoy never asks for your bKash PIN. On a live payment you would
           approve it in bKash itself — if any site asks you to type your PIN
@@ -103,9 +155,9 @@ export function BkashCheckout({ open, payment, appointment, onClose, onPaid, api
           <button type="button" className="button ghost" onClick={onClose} disabled={submitting}>
             Pay later
           </button>
-          <button type="submit" className="button primary" disabled={submitting}>
-            {submitting ? "Confirming…" : `Confirm ৳ ${fee}`}
-            {!submitting && <Icon name="arrow" size={14} />}
+          <button type="submit" className="button primary" disabled={submitting || expired}>
+            {submitting ? "Confirming…" : expired ? "Session expired" : `Confirm ৳ ${fee}`}
+            {!submitting && !expired && <Icon name="arrow" size={14} />}
           </button>
         </div>
       </form>

@@ -1085,3 +1085,15 @@ body {
   text-transform: uppercase; background: #f0ece2; color: #8a7a55;
 }
 .toggle.locked { opacity: .55; }
+
+/* --- Payment session clock -------------------------------------------------- */
+/* Counts down the bKash session, never the appointment. The copy beside it
+   says so, because a timer in a booking flow reads as "lose your slot". */
+.bkash-clock {
+  display: flex; align-items: center; gap: 5px; margin-left: auto;
+  padding: 5px 10px; border-radius: 999px;
+  background: rgba(255,255,255,.16); color: #fff; font-size: 11px;
+}
+.bkash-clock strong { font-variant-numeric: tabular-nums; font-size: 12.5px; }
+.bkash-clock span { opacity: .75; font-size: 10px; }
+.bkash-clock.urgent { background: #d86569; }
