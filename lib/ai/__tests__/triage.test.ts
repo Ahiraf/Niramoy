@@ -277,3 +277,83 @@ describe("input limits", () => {
     expect(result.redFlag).toBeNull();
   });
 });
+
+/* ========================================================================== */
+/* Structured intake                                                          */
+/* ========================================================================== */
+
+describe("intake answers raise the floor and never lower it", () => {
+  /** A description with no urgency signal of its own. */
+  const MILD = "I have a mild headache";
+
+  it("changes nothing when nothing is answered", () => {
+    expect(triageByRules(MILD, {}).urgency).toBe(triageByRules(MILD).urgency);
+  });
+
+  it("treats a stated pregnancy the same as writing it in the description", () => {
+    const typed = triageByRules("I am pregnant and I have a mild headache");
+    const ticked = triageByRules(MILD, { pregnant: true });
+
+    // The two routes must agree: a patient who ticked the box and one who
+    // happened to use the word must not get different care.
+    expect(ticked.urgency).toBe(typed.urgency);
+    expect(ticked.urgency).toBe("urgent");
+  });
+
+  it("raises the floor for an infant", () => {
+    expect(triageByRules(MILD, { ageBand: "infant" }).urgency).toBe("urgent");
+  });
+
+  it("raises the floor for an older adult, but less far", () => {
+    expect(triageByRules(MILD, { ageBand: "elderly" }).urgency).toBe("see_doctor_soon");
+  });
+
+  it("raises the floor when the patient calls it severe", () => {
+    expect(triageByRules(MILD, { severity: "severe" }).urgency).toBe("urgent");
+  });
+
+  it("raises the floor for an existing long-term condition", () => {
+    expect(triageByRules(MILD, { conditions: ["diabetes"] }).urgency).toBe("see_doctor_soon");
+  });
+
+  it("cannot lower an urgency the description already earned", () => {
+    const alone = triageByRules("crushing chest pain radiating to my arm");
+    const withMildAnswers = triageByRules("crushing chest pain radiating to my arm", {
+      severity: "mild",
+      ageBand: "adult",
+      durationBand: "months",
+    });
+
+    // "mild" is the patient's own word for something the rules read as an
+    // emergency. The floor is a floor: it is not permitted to argue downward.
+    expect(alone.urgency).toBe("emergency");
+    expect(withMildAnswers.urgency).toBe("emergency");
+  });
+
+  it("keeps the strongest floor when several apply", () => {
+    const result = triageByRules(MILD, {
+      ageBand: "elderly",        // see_doctor_soon
+      pregnant: true,            // urgent
+      conditions: ["asthma"],    // see_doctor_soon
+    });
+    expect(result.urgency).toBe("urgent");
+  });
+
+  it("explains only the floors that actually changed the outcome", () => {
+    const result = triageByRules(MILD, { ageBand: "infant", conditions: ["asthma"] });
+
+    // The infant floor lands on urgent; the comorbidity floor is already
+    // covered by it, so repeating it back would be noise rather than reasoning.
+    const reasons = result.reasons.join(" ");
+    expect(reasons).toMatch(/very young child/i);
+    expect(reasons).not.toMatch(/long-term condition/i);
+  });
+
+  it("does not treat an unanswered pregnancy question as a no", () => {
+    // null and false must behave identically here: neither raises the floor,
+    // and neither is recorded as a claim about the patient.
+    expect(triageByRules(MILD, { pregnant: null }).urgency).toBe(
+      triageByRules(MILD, { pregnant: false }).urgency,
+    );
+  });
+});

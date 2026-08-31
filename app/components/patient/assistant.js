@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "../icons.js";
 import { Avatar, ErrorState, PageHeading, Rating, Banner, Loading } from "../ui.js";
+import { EMPTY_INTAKE, IntakePanel } from "./intake.js";
 
 const PROMPTS = [
   "I've had a headache every day for two weeks",
@@ -100,6 +101,9 @@ export function Assistant({ api, onOpenDoctor, onNavigate }) {
   /** The description that did not get through, kept so it can be re-sent. */
   const [failed, setFailed] = useState(null);
   const [dictationLang, setDictationLang] = useState("bn-BD");
+  const [intake, setIntake] = useState(EMPTY_INTAKE);
+  /** Collapsed once triage has run — the answers stay, the form gets out of the way. */
+  const [intakeOpen, setIntakeOpen] = useState(true);
 
   const dictation = useDictation({
     lang: dictationLang,
@@ -123,7 +127,7 @@ export function Assistant({ api, onOpenDoctor, onNavigate }) {
     setMessages((m) => [...m, { id: `u-${Date.now()}`, from: "user", text: message }]);
     setThinking(true);
 
-    const data = await api.triage({ message });
+    const data = await api.triage({ message, intake });
     setThinking(false);
 
     if (!data.ok) {
@@ -147,6 +151,7 @@ export function Assistant({ api, onOpenDoctor, onNavigate }) {
 
     setMessages((m) => [...m, { id: `a-${Date.now()}`, from: "ai", text: data.reply }]);
     setResult(data);
+    setIntakeOpen(false);
   };
 
   const triage = result?.triage;
@@ -231,6 +236,14 @@ export function Assistant({ api, onOpenDoctor, onNavigate }) {
               ))}
             </div>
           )}
+
+          <IntakePanel
+            intake={intake}
+            onChange={setIntake}
+            collapsed={!intakeOpen}
+            onExpand={() => setIntakeOpen(true)}
+            onSkip={() => setIntakeOpen(false)}
+          />
 
           <form
             className="chat-compose"

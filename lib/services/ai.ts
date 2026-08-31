@@ -16,6 +16,7 @@ import * as clinical from "../repositories/clinical";
 import * as directory from "../repositories/doctors";
 import { draftVisitSummary, type SummaryDraft } from "../ai/summary";
 import { triage, type TriageResult } from "../ai/triage";
+import type { Intake } from "../ai/rules";
 import type { Principal } from "../security/authz";
 
 /* -------------------------------------------------------------------------- */
@@ -72,9 +73,9 @@ async function recordSafetyEvent(input: {
 export async function runTriage(
   principal: Principal | null,
   message: string,
-  context: { requestId?: string },
+  context: { requestId?: string; intake?: Intake },
 ): Promise<{ result: TriageResult; sessionId: string | null }> {
-  const result = await triage(message);
+  const result = await triage(message, context.intake ?? {});
 
   let sessionId: string | null = null;
   try {

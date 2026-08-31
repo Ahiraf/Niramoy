@@ -1218,3 +1218,37 @@ html[data-text-size="larger"] { --text-scale: 1.32; }
 }
 .dictation-row > div { display: flex; gap: 5px; margin-left: auto; }
 .dictation-row .chip.active { background: var(--teal-soft); border-color: var(--mint); color: var(--teal-dark); }
+
+/* --- Guided intake ---------------------------------------------------------- */
+.intake-panel {
+  border: 1px solid var(--line); border-radius: 12px; background: #fbfdfc;
+  padding: 15px 16px; margin: 0 0 12px;
+}
+.intake-panel > header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 13px; }
+.intake-panel header strong { display: block; font-size: calc(12.5px * var(--text-scale)); }
+.intake-panel header p { margin: 3px 0 0; font-size: calc(10.5px * var(--text-scale)); color: var(--muted); }
+.intake-panel header .text-link { margin-left: auto; flex-shrink: 0; }
+.intake-row { border: 0; padding: 0; margin: 0 0 12px; }
+.intake-row legend {
+  padding: 0; margin-bottom: 6px;
+  font-size: calc(11px * var(--text-scale)); font-weight: 650; color: var(--ink);
+}
+.intake-row legend span { font-weight: 400; color: var(--muted); margin-left: 6px; }
+.intake-choices { display: flex; flex-wrap: wrap; gap: 6px; }
+.intake-choices .chip.active {
+  background: var(--teal-soft); border-color: var(--mint);
+  color: var(--teal-dark); font-weight: 650;
+}
+.intake-note {
+  display: flex; align-items: flex-start; gap: 7px; margin: 4px 0 0;
+  font-size: calc(10px * var(--text-scale)); color: var(--muted); line-height: 1.5;
+}
+.intake-note svg { flex-shrink: 0; margin-top: 1px; color: #4f8f83; }
+.intake-summary {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 10px 13px; margin: 0 0 12px;
+  border: 1px dashed var(--line); border-radius: 10px; background: #fbfdfc;
+  font-size: calc(11px * var(--text-scale)); color: var(--muted); text-align: left;
+}
+.intake-summary span { flex: 1; }
+.intake-summary:hover { border-color: var(--mint); background: #f6fbf9; }

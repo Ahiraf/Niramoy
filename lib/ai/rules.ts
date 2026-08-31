@@ -250,6 +250,95 @@ export const URGENCY_HINTS: UrgencyHint[] = [
  * because the same symptom carries more risk at the extremes of age and in
  * pregnancy.
  */
+/* -------------------------------------------------------------------------- */
+/* Structured intake                                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The optional questions asked before the description, and what each answer
+ * does to the urgency FLOOR.
+ *
+ * These duplicate signals VULNERABLE_HINTS already looks for in free text, on
+ * purpose: the text rules only fire if the patient happens to write the word
+ * "pregnant", and someone describing abdominal pain has no reason to think that
+ * is relevant. Asking makes the signal reliable instead of incidental.
+ *
+ * Floors match the free-text equivalents exactly, so answering "pregnant" and
+ * typing "I am pregnant" reach the same result. A floor NEVER lowers urgency —
+ * moreSevere() takes whichever is worse.
+ *
+ * CLINICAL REVIEW OUTSTANDING. These thresholds are conservative guesses by an
+ * engineer, like the rest of this rule set, and carry the same caveat recorded
+ * in docs/AI_SAFETY.md: nothing here has been read by a clinician, and the
+ * sensitivity of the emergency path is unmeasured. Where a value was a
+ * judgement call it errs upward, because over-referral is recoverable and
+ * under-referral is not.
+ */
+export const AGE_BANDS = ["infant", "child", "adult", "elderly"] as const;
+export const DURATION_BANDS = ["hours", "days", "weeks", "months"] as const;
+export const SEVERITY_BANDS = ["mild", "moderate", "severe"] as const;
+export const CONDITIONS = [
+  "diabetes",
+  "hypertension",
+  "heart_disease",
+  "asthma",
+  "kidney_disease",
+  "immunocompromised",
+] as const;
+
+export type AgeBand = (typeof AGE_BANDS)[number];
+export type DurationBand = (typeof DURATION_BANDS)[number];
+export type SeverityBand = (typeof SEVERITY_BANDS)[number];
+
+export interface Intake {
+  ageBand?: AgeBand | null;
+  durationBand?: DurationBand | null;
+  severity?: SeverityBand | null;
+  pregnant?: boolean | null;
+  conditions?: string[];
+  /** The language the patient asked to be answered in. Never affects urgency. */
+  language?: "bn" | "en" | null;
+}
+
+/** Floors keyed by answer. Anything absent contributes nothing. */
+export const INTAKE_FLOORS: Array<{
+  id: string;
+  applies: (intake: Intake) => boolean;
+  floor: Urgency;
+  reason: string;
+}> = [
+  {
+    id: "intake.infant",
+    applies: (i) => i.ageBand === "infant",
+    floor: "urgent",
+    reason: "Symptoms in a very young child are assessed more cautiously.",
+  },
+  {
+    id: "intake.elderly",
+    applies: (i) => i.ageBand === "elderly",
+    floor: "see_doctor_soon",
+    reason: "Symptoms in an older adult are assessed more cautiously.",
+  },
+  {
+    id: "intake.pregnancy",
+    applies: (i) => i.pregnant === true,
+    floor: "urgent",
+    reason: "Symptoms during pregnancy are assessed more cautiously.",
+  },
+  {
+    id: "intake.severe",
+    applies: (i) => i.severity === "severe",
+    floor: "urgent",
+    reason: "You described this as severe, so it is treated as needing prompt attention.",
+  },
+  {
+    id: "intake.comorbidity",
+    applies: (i) => Boolean(i.conditions?.length),
+    floor: "see_doctor_soon",
+    reason: "An existing long-term condition means new symptoms are reviewed sooner.",
+  },
+];
+
 export const VULNERABLE_HINTS: Array<{ id: string; terms: string[]; floor: Urgency }> = [
   {
     id: "vul.infant",
