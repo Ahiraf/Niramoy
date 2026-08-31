@@ -100,3 +100,31 @@ export async function sendWaitlistOffer(input: {
       signOff(),
   });
 }
+
+/**
+ * A copy of an in-app notification, sent to an address.
+ *
+ * Deliberately thin: the title and a one-line body, and then a pointer back
+ * into the app. Everything clinical stays behind the login — an inbox is not a
+ * medical record and we do not control who else reads it.
+ */
+export async function sendNotificationCopy(input: {
+  to: string;
+  name: string;
+  title: string;
+  body: string;
+}): Promise<{ delivered: boolean }> {
+  const url = getEnv().APP_URL;
+  const result = await getEmailProvider().send({
+    to: input.to,
+    subject: `Niramoy — ${input.title}`,
+    text:
+      `Hello ${input.name},\n\n` +
+      `${input.body}\n\n` +
+      `Open Niramoy to see the details: ${url}\n\n` +
+      `You are receiving this because email is switched on in your Niramoy\n` +
+      `notification settings. You can turn it off there at any time.\n` +
+      signOff(),
+  });
+  return { delivered: result.delivered };
+}

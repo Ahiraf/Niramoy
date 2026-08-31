@@ -10,6 +10,8 @@
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { getDb, type Database } from "../db/client";
+import { sendNotificationCopy } from "../notifications";
+import { logger } from "../observability/logger";
 import * as t from "../db/schema";
 
 /* -------------------------------------------------------------------------- */
@@ -527,6 +529,16 @@ export async function markNotificationsRead(
   return rows.length;
 }
 
+/**
+ * Channels a copy can actually be delivered on today.
+ *
+ * SMS and WhatsApp are storable preferences with no provider behind them. They
+ * are not in here, and nothing pretends to send them — a reminder that appears
+ * to send and does not is a missed consultation (lib/notifications/providers.ts
+ * makes the same argument about SMS).
+ */
+const DELIVERABLE_CHANNELS = new Set(["email"]);
+
 export async function notify(
   input: {
     userId: string;
@@ -538,7 +550,7 @@ export async function notify(
   },
   db: Database = getDb(),
 ): Promise<void> {
-  await db
+  const inserted = await db
     .insert(t.notifications)
     .values({
       userId: input.userId,
@@ -552,7 +564,71 @@ export async function notify(
       sentAt: new Date(),
     })
     // A dedupeKey collision means this notification was already delivered.
-    .onConflictDoNothing({ target: t.notifications.dedupeKey });
+    .onConflictDoNothing({ target: t.notifications.dedupeKey })
+    .returning({ id: t.notifications.id });
+
+  // Deduped: this was already delivered, and re-sending the copy would be the
+  // second email for one event.
+  if (!inserted[0]) return;
+
+  await deliverCopies(input, db);
+}
+
+/**
+ * Send the out-of-app copies this person asked for.
+ *
+ * Each attempt gets its own notifications row, so "we emailed you" is a fact
+ * with a status rather than an assumption — and a failed one is picked up by
+ * the notification-retry job like any other.
+ *
+ * Never throws. A mail provider being down must not roll back the appointment
+ * that caused the notification.
+ */
+async function deliverCopies(
+  input: { userId: string; type: string; title: string; body: string; dedupeKey?: string | null },
+  db: Database,
+): Promise<void> {
+  try {
+    const rows = await db
+      .select({
+        email: t.users.email,
+        name: t.users.name,
+        channels: t.users.notificationChannels,
+      })
+      .from(t.users)
+      .where(eq(t.users.id, input.userId))
+      .limit(1);
+
+    const user = rows[0];
+    if (!user) return;
+
+    const wanted = (user.channels ?? []).filter((c) => DELIVERABLE_CHANNELS.has(c));
+    if (!wanted.includes("email") || !user.email) return;
+
+    const { delivered } = await sendNotificationCopy({
+      to: user.email,
+      name: user.name,
+      title: input.title,
+      body: input.body,
+    });
+
+    await db
+      .insert(t.notifications)
+      .values({
+        userId: input.userId,
+        channel: "email",
+        type: input.type,
+        title: input.title,
+        body: input.body,
+        payload: {},
+        dedupeKey: input.dedupeKey ? `${input.dedupeKey}:email` : null,
+        status: delivered ? "sent" : "failed",
+        sentAt: delivered ? new Date() : null,
+      })
+      .onConflictDoNothing({ target: t.notifications.dedupeKey });
+  } catch (err) {
+    logger.warn("notification copy failed", { type: input.type, err });
+  }
 }
 
 /* -------------------------------------------------------------------------- */

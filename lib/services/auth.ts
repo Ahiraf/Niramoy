@@ -49,6 +49,8 @@ export interface PublicUser {
   doctorId: string | null;
   verificationStatus: string | null;
   emailVerified: boolean;
+  /** Extra channels a copy of each notification goes out on. */
+  notificationChannels: string[];
   district: string;
   division: string;
   createdAt: string;
@@ -518,6 +520,7 @@ export function toPublicUser(
     doctorId: extra.doctorId ?? null,
     verificationStatus: extra.verificationStatus ?? null,
     emailVerified: Boolean(user.emailVerifiedAt),
+    notificationChannels: user.notificationChannels ?? [],
     district: extra.district ?? "",
     division: extra.division ?? "",
     createdAt: user.createdAt.toISOString(),

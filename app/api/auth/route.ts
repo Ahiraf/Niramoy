@@ -25,6 +25,13 @@ export const GET = withRoute("GET /api/auth", async (request) => {
   return ok({ user: toPublicUser(user, { patientId: principal.patientId }) });
 });
 
+/**
+ * The channels a person may choose. Mirrors ck_users_notification_channels.
+ * `sms` and `whatsapp` are storable but have no provider yet, so choosing one
+ * records the preference and delivers nothing — the settings screen says so.
+ */
+const NOTIFICATION_CHANNELS = ["email", "sms", "whatsapp"];
+
 /** PATCH — edit your own profile. Never anyone else's: the id is the session's. */
 export const PATCH = withRoute("PATCH /api/auth", async (request, { requestId }) => {
   const principal = await requireUser(request);
@@ -35,9 +42,30 @@ export const PATCH = withRoute("PATCH /api/auth", async (request, { requestId })
     throw new AppError("VALIDATION_FAILED", { details: { name: ["Please tell us your name."] } });
   }
 
+  /*
+   * Notification channels. `in_app` is not one of them and cannot be turned
+   * off — the notification row is the record that we told the patient, and the
+   * platform needs it whether or not they read it. Unknown values are rejected
+   * here as well as by a CHECK constraint, so a typo fails at the edge with a
+   * readable message rather than at the database with a 500.
+   */
+  let notificationChannels: string[] | undefined;
+  if (body.notificationChannels !== undefined) {
+    const raw = Array.isArray(body.notificationChannels) ? body.notificationChannels : [];
+    const cleaned = [...new Set(raw.map((c) => String(c)))];
+    const unknown = cleaned.filter((c) => !NOTIFICATION_CHANNELS.includes(c));
+    if (unknown.length) {
+      throw new AppError("VALIDATION_FAILED", {
+        details: { notificationChannels: [`Unknown channel: ${unknown.join(", ")}`] },
+      });
+    }
+    notificationChannels = cleaned;
+  }
+
   const updated = await users.updateProfile(principal.userId, {
     ...(name !== undefined ? { name } : {}),
     ...(body.phone !== undefined ? { phone: String(body.phone).trim() || null } : {}),
+    ...(notificationChannels !== undefined ? { notificationChannels } : {}),
   });
   if (!updated) throw new AppError("NOT_FOUND");
 

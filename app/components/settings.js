@@ -20,15 +20,29 @@ const ROLE_LABEL = {
 };
 
 /** A preference row. Toggles are local to this build — nothing is sent yet. */
-function ToggleRow({ icon, title, hint, on, onToggle }) {
+/**
+ * `locked` is for a channel that cannot be switched off. `pending` marks one
+ * the patient can choose but that nothing delivers yet — it is stored against
+ * the account, and starts sending when a provider is configured. Saying that
+ * out loud beats a toggle that appears to arrange a reminder and does not.
+ */
+function ToggleRow({ icon, title, hint, on, onToggle, locked = false, pending = false, busy = false }) {
   return (
-    <button className="appointment-row as-button" onClick={onToggle} aria-pressed={on}>
+    <button
+      className="appointment-row as-button"
+      onClick={locked ? undefined : onToggle}
+      aria-pressed={on}
+      disabled={locked || busy}
+    >
       <div className="triage-option-icon"><Icon name={icon} size={15} /></div>
       <div className="appt-main">
-        <strong>{title}</strong>
+        <strong>
+          {title}
+          {pending && <span className="channel-pending">not connected</span>}
+        </strong>
         <span>{hint}</span>
       </div>
-      <span className={`toggle ${on ? "on" : ""}`} aria-hidden="true"><i /></span>
+      <span className={`toggle ${on ? "on" : ""} ${locked ? "locked" : ""}`} aria-hidden="true"><i /></span>
     </button>
   );
 }
@@ -56,8 +70,39 @@ export function Settings({ user, role, doctor, reference, api, onNavigate, onUse
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
-  const [reminders, setReminders] = useState(true);
-  const [emails, setEmails] = useState(true);
+  /**
+   * Where notifications are copied to, as stored on the account.
+   *
+   * These used to be local component state that persisted nothing: the toggles
+   * moved, the server never heard, and every notification went to the in-app
+   * bell regardless. They now write to the account and gate real delivery.
+   */
+  const [channels, setChannels] = useState(user?.notificationChannels ?? []);
+  const [savingChannels, setSavingChannels] = useState(null);
+
+  useEffect(() => {
+    setChannels(user?.notificationChannels ?? []);
+  }, [user]);
+
+  const toggleChannel = async (channel) => {
+    const next = channels.includes(channel)
+      ? channels.filter((c) => c !== channel)
+      : [...channels, channel];
+
+    // Optimistic, then reconciled: a toggle that silently failed to save is
+    // exactly the bug this replaces.
+    setChannels(next);
+    setSavingChannels(channel);
+    const result = await api.updateProfile({ notificationChannels: next });
+    setSavingChannels(null);
+
+    if (!result.ok) {
+      setChannels(channels);
+      notify?.(result.message ?? "Could not save that preference.", "error");
+      return;
+    }
+    onUserChange?.(result.user);
+  };
 
   // Keep the form in step with the session (e.g. after a doctor is verified).
   useEffect(() => {
@@ -187,14 +232,32 @@ export function Settings({ user, role, doctor, reference, api, onNavigate, onUse
           {role === "patient" && (
             <>
               <ToggleRow
-                icon="bell" title="Appointment reminders"
-                hint="An in-app reminder one hour before your visit"
-                on={reminders} onToggle={() => setReminders((v) => !v)}
+                icon="bell" title="In-app reminders"
+                hint="Always on. The notification is also the record that we told you."
+                on locked
               />
               <ToggleRow
-                icon="send" title="Email notifications"
-                hint="Booking confirmations and prescription updates"
-                on={emails} onToggle={() => setEmails((v) => !v)}
+                icon="send" title="Email"
+                hint="A copy of each reminder and confirmation, with no clinical detail"
+                on={channels.includes("email")}
+                busy={savingChannels === "email"}
+                onToggle={() => toggleChannel("email")}
+              />
+              <ToggleRow
+                icon="bell" title="SMS"
+                hint="Saved, but not delivered yet — no SMS provider is connected"
+                on={channels.includes("sms")}
+                busy={savingChannels === "sms"}
+                pending
+                onToggle={() => toggleChannel("sms")}
+              />
+              <ToggleRow
+                icon="send" title="WhatsApp"
+                hint="Saved, but not delivered yet — no WhatsApp provider is connected"
+                on={channels.includes("whatsapp")}
+                busy={savingChannels === "whatsapp"}
+                pending
+                onToggle={() => toggleChannel("whatsapp")}
               />
               <LinkRow
                 icon="users" title="Family account access"

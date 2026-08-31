@@ -1077,3 +1077,11 @@ body {
   margin: -4px 0 14px;
 }
 .directory-provenance svg { color: #4f8f83; flex-shrink: 0; }
+
+/* --- Notification channels -------------------------------------------------- */
+.channel-pending {
+  display: inline-block; margin-left: 7px; padding: 1px 6px;
+  border-radius: 999px; font-size: 9px; font-weight: 700; letter-spacing: .03em;
+  text-transform: uppercase; background: #f0ece2; color: #8a7a55;
+}
+.toggle.locked { opacity: .55; }

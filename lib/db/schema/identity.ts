@@ -9,7 +9,7 @@
 
 import { sql } from "drizzle-orm";
 import {
-  boolean, index, integer, pgTable, text, timestamp, uniqueIndex, uuid,
+  boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid,
 } from "drizzle-orm/pg-core";
 
 import { tokenPurpose, userRole, userStatus } from "./enums";
@@ -25,6 +25,23 @@ export const users = pgTable(
     /** Stored already lower-cased and trimmed; uniqueness is enforced on it. */
     email: text("email").notNull(),
     phone: text("phone"),
+
+    /**
+     * Where this person wants to be told about their care.
+     *
+     * `in_app` is not in here and cannot be switched off: the notification row
+     * IS the record that we told them, and the platform needs that record to
+     * exist whether or not they read it. These are the ADDITIONAL channels a
+     * copy goes out on.
+     *
+     * A channel with no provider configured is stored but not delivered — see
+     * lib/repositories/clinical.ts. Storing it anyway means the preference
+     * survives until the provider exists, rather than being silently dropped.
+     */
+    notificationChannels: jsonb("notification_channels")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'["email"]'::jsonb`),
 
     /** Argon2id. The algorithm is recorded so legacy scrypt hashes can be
      *  verified and transparently upgraded on next successful login. */

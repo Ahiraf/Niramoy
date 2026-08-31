@@ -19,6 +19,8 @@ export interface UserRow {
   passwordHash: string;
   passwordAlgo: PasswordAlgo;
   emailVerifiedAt: Date | null;
+  /** Extra delivery channels; `in_app` is implicit and not listed. */
+  notificationChannels: string[];
   failedLoginCount: number;
   lockedUntil: Date | null;
   createdAt: Date;
@@ -34,6 +36,7 @@ const userColumns = {
   passwordHash: t.users.passwordHash,
   passwordAlgo: t.users.passwordAlgo,
   emailVerifiedAt: t.users.emailVerifiedAt,
+  notificationChannels: t.users.notificationChannels,
   failedLoginCount: t.users.failedLoginCount,
   lockedUntil: t.users.lockedUntil,
   createdAt: t.users.createdAt,
@@ -83,12 +86,15 @@ export async function createUser(input: CreateUserInput, db: Database = getDb())
 
 export async function updateProfile(
   userId: string,
-  patch: { name?: string; phone?: string | null },
+  patch: { name?: string; phone?: string | null; notificationChannels?: string[] },
   db: Database = getDb(),
 ): Promise<UserRow | null> {
   const values: Record<string, unknown> = {};
   if (patch.name !== undefined) values.name = patch.name;
   if (patch.phone !== undefined) values.phone = patch.phone;
+  if (patch.notificationChannels !== undefined) {
+    values.notificationChannels = patch.notificationChannels;
+  }
   if (!Object.keys(values).length) return findById(userId, db);
 
   const rows = await db.update(t.users).set(values).where(eq(t.users.id, userId)).returning(userColumns);
