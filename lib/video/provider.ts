@@ -38,6 +38,13 @@ export interface JoinGrant {
   provider: string;
   /** Signals to the UI that no real provider is configured. */
   isDemo: boolean;
+  /**
+   * A URL a plain <iframe> may load to carry the actual media, with the token
+   * already attached. Null when the provider needs an SDK, or when there is no
+   * media to carry at all. The UI renders a frame when this is present and says
+   * so plainly when it is not, so a placeholder is never mistaken for a call.
+   */
+  embedUrl: string | null;
 }
 
 export interface VideoProvider {
@@ -90,6 +97,7 @@ const demoProvider: VideoProvider = {
       expiresAt,
       provider: "demo",
       isDemo: true,
+      embedUrl: null,
     };
   },
 
@@ -165,12 +173,15 @@ function dailyProvider(apiKey: string, domain: string | undefined): VideoProvide
         }),
       })) as { token: string };
 
+      const url = `https://${domain ?? "niramoy"}.daily.co/${room.roomName}`;
+
       return {
-        url: `https://${domain ?? "niramoy"}.daily.co/${room.roomName}`,
+        url,
         token: token.token,
         expiresAt,
         provider: "daily",
         isDemo: false,
+        embedUrl: `${url}?t=${encodeURIComponent(token.token)}`,
       };
     },
 
@@ -187,6 +198,71 @@ function dailyProvider(apiKey: string, domain: string | undefined): VideoProvide
 /* -------------------------------------------------------------------------- */
 /* Jitsi                                                                       */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * The bit after the `#` that configures the embedded Jitsi client: skip the
+ * pre-join lobby (the participant has already been authorized by us, so asking
+ * them to knock twice is noise) and carry their name in, so the other side sees
+ * who joined rather than "Fellow Jitser".
+ */
+function jitsiFragment(displayName: string): string {
+  const params = [
+    "config.prejoinPageEnabled=false",
+    "config.disableDeepLinking=true",
+    `userInfo.displayName=${encodeURIComponent(JSON.stringify(displayName))}`,
+  ];
+  return `#${params.join("&")}`;
+}
+
+/**
+ * Jitsi on the public meet.jit.si, with no account.
+ *
+ * This is the mode that makes a two-way consultation demonstrable without
+ * signing up to a vendor: real media, two real participants, zero credentials.
+ * What it is NOT is access control. The public service admits anyone who has
+ * the room URL, so the guarantee here is obscurity — a random room name that is
+ * never shown outside the two authorized participants' own join responses, and
+ * that expires with the appointment.
+ *
+ * Our own rules still run in front of it: only the patient and the doctor on
+ * the appointment can obtain the URL, and only inside the join window. But the
+ * room itself is not token-gated, so this mode is refused in production, where
+ * VIDEO_API_KEY / VIDEO_API_SECRET (JWT-authenticated Jitsi) is required.
+ */
+function jitsiPublicProvider(domain: string): VideoProvider {
+  return {
+    name: "jitsi-public",
+
+    async createRoom({ appointmentId, expiresAt }) {
+      // 12 random bytes. The room name is the only thing standing between this
+      // consultation and an uninvited participant, so it is not derived from
+      // anything guessable such as the appointment id or the patient's name.
+      return {
+        roomName: `niramoy-${appointmentId.slice(0, 8)}-${randomBytes(12).toString("hex")}`,
+        providerRoomId: null,
+        expiresAt,
+      };
+    },
+
+    async getJoinToken({ room, displayName, ttlSeconds }) {
+      const url = `https://${domain}/${room.roomName}`;
+      return {
+        url,
+        // No token to mint: the public service does not accept one. The empty
+        // string is honest about that; it is not a credential.
+        token: "",
+        expiresAt: new Date(Date.now() + ttlSeconds * 1000),
+        provider: "jitsi-public",
+        isDemo: false,
+        embedUrl: `${url}${jitsiFragment(displayName)}`,
+      };
+    },
+
+    async endRoom() {
+      /* Jitsi rooms are ephemeral; they disappear when empty */
+    },
+  };
+}
 
 /**
  * Jitsi with JWT authentication. The secret signs a token naming the room and
@@ -227,12 +303,16 @@ function jitsiProvider(appId: string, secret: string, domain: string): VideoProv
         .update(`${header}.${payload}`)
         .digest("base64url");
 
+      const url = `https://${domain}/${room.roomName}`;
+      const jwt = `${header}.${payload}.${signature}`;
+
       return {
-        url: `https://${domain}/${room.roomName}`,
-        token: `${header}.${payload}.${signature}`,
+        url,
+        token: jwt,
         expiresAt,
         provider: "jitsi",
         isDemo: false,
+        embedUrl: `${url}?jwt=${encodeURIComponent(jwt)}${jitsiFragment(displayName)}`,
       };
     },
 
@@ -258,6 +338,10 @@ export function getVideoProvider(): VideoProvider {
       env.VIDEO_API_SECRET,
       env.VIDEO_DOMAIN ?? "meet.jit.si",
     );
+  } else if (env.videoProvider === "jitsi") {
+    // Asked for Jitsi with no credentials. The public service can carry the
+    // call; env.ts has already refused this combination in production.
+    cached = jitsiPublicProvider(env.VIDEO_DOMAIN ?? "meet.jit.si");
   } else {
     cached = demoProvider;
   }
