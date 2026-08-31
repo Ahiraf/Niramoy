@@ -9,6 +9,7 @@ import { FindDoctors, DoctorProfile } from "./components/patient/find-doctors.js
 import { Booking } from "./components/patient/booking.js";
 import { BkashCheckout } from "./components/patient/bkash-checkout.js";
 import { Appointments, Consultation } from "./components/patient/appointments.js";
+import { Booked } from "./components/patient/booked.js";
 import { Assistant } from "./components/patient/assistant.js";
 import { Records, Family } from "./components/patient/records.js";
 import { Settings } from "./components/settings.js";
@@ -61,6 +62,8 @@ export default function Home() {
   /** A started bKash payment awaiting the payer's confirmation. */
   const [pendingPayment, setPendingPayment] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
+  /** The appointment just booked, shown on the confirmation screen. */
+  const [justBooked, setJustBooked] = useState(null);
 
   const doctorSelf = useDoctorSelf(user, api);
   const online = useOnline();
@@ -290,7 +293,15 @@ export default function Home() {
       idempotencyKey: `appt:${result.appointment.id}`,
     });
 
-    navigate("appointments");
+    /*
+     * Land on "what happens next" rather than the appointments list.
+     *
+     * A toast answers "did it work" and none of the questions someone actually
+     * has at this point: when do I join, what if I can't make it, will I be
+     * reminded, is my money at risk.
+     */
+    setJustBooked(result.appointment);
+    navigate("booked");
 
     if (method === "bkash" && payment.ok && payment.payment.status === "pending") {
       setPendingPayment({ payment: payment.payment, appointment: result.appointment });
@@ -652,6 +663,19 @@ export default function Home() {
         break;
       case "consultation":
         view = <Consultation appointment={activeCall} onNavigate={navigate} onComplete={completeCall} />;
+        break;
+      case "booked":
+        view = (
+          <Booked
+            appointment={
+              // Prefer the refreshed copy: it carries the server's timezone
+              // label and cancellation state.
+              appointments.find((a) => a.id === justBooked?.id) ?? justBooked
+            }
+            onNavigate={navigate}
+            onOpenSettings={() => navigate("profile")}
+          />
+        );
         break;
       case "assistant":
         view = <Assistant api={api} onOpenDoctor={openDoctor} onNavigate={navigate} />;

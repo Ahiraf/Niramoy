@@ -380,6 +380,29 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 /** Render a slot in the display timezone, in the shape the existing UI reads. */
+/**
+ * A short, unambiguous name for the zone a time is being shown in.
+ *
+ * Every time in this application is stored in UTC and rendered in one display
+ * zone, which is correct — and invisible. A patient in Dhaka and a relative
+ * booking for them from Jeddah see the same string and have no way to tell
+ * which clock it refers to. Naming the zone next to the time is the whole fix.
+ *
+ * Computed from the zone and the instant, never hardcoded: Bangladesh has run
+ * daylight saving before (2009), and a frozen "+6" would have been wrong then.
+ */
+export function timezoneLabel(timeZone: string, at: Date = new Date()): string {
+  const offset =
+    new Intl.DateTimeFormat("en-GB", { timeZone, timeZoneName: "shortOffset" })
+      .formatToParts(at)
+      .find((part) => part.type === "timeZoneName")?.value ?? "";
+
+  // "Asia/Dhaka" -> "Dhaka". The city is what a patient recognises; the offset
+  // is what someone abroad needs.
+  const city = timeZone.split("/").pop()?.replace(/_/g, " ") ?? timeZone;
+  return offset ? `${city} time (${offset})` : `${city} time`;
+}
+
 export function describeSlot(slot: Slot, timeZone: string): DescribedSlot {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone,

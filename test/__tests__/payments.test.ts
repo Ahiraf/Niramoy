@@ -200,7 +200,14 @@ describe("confirming a bKash payment", () => {
       [String(PAYMENT_SESSION_MINUTES + 1), id],
     );
 
-    const res = await execute(world.patientA, id, { walletNumber: "01712345678" });
+    const res = await call<{ message?: string }>(
+      executePost,
+      requestAs(world.patientA, `${BASE}/api/payments/${id}/execute`, {
+        method: "POST",
+        body: JSON.stringify({ walletNumber: "01712345678" }),
+      }),
+      params({ id }),
+    );
     expect(res.status).toBe(422);
     expect(res.body.message).toMatch(/still booked/i);
 

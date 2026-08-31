@@ -120,6 +120,9 @@ export function Appointments({
               <div className="appt-time">
                 <strong>{a.time}</strong>
                 <span>{a.day}, {a.date} {a.month}</span>
+                {/* Which clock. Obvious to a patient in Dhaka, not at all
+                    obvious to a son booking from Jeddah for his mother. */}
+                <span className="appt-tz">{a.timezoneLabel ?? "Bangladesh time"}</span>
                 <em>{a.doctor?.feeLabel}</em>
               </div>
 

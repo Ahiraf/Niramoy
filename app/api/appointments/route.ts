@@ -14,7 +14,7 @@ import { requireUser, requirePatient } from "../../../lib/security/authz";
 import { enforceRateLimit } from "../../../lib/security/rate-limit";
 import { book } from "../../../lib/services/booking";
 import { canCancel } from "../../../lib/scheduling/engine";
-import { describeSlot } from "../../../lib/scheduling/engine";
+import { describeSlot, timezoneLabel } from "../../../lib/scheduling/engine";
 import { getEnv } from "../../../lib/config/env";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +35,11 @@ function hydrate(row: appointments.HydratedAppointment) {
     time: described.localLabel,
     fee: Number(row.feeAmount),
     canCancel: canCancel({ appointmentStart: row.startUtc }),
+    // Which clock the time above refers to. Sent from the server because the
+    // server owns DISPLAY_TIMEZONE; a browser guessing from its own locale is
+    // how a relative abroad reads a Dhaka appointment in their own time.
+    timezone: getEnv().DISPLAY_TIMEZONE,
+    timezoneLabel: timezoneLabel(getEnv().DISPLAY_TIMEZONE, new Date(row.startUtc)),
   };
 }
 
