@@ -58,6 +58,57 @@ password `niramoy123` for each:
 | Doctor | `ayesha@example.com` | Schedule, availability, earnings, prescription writer |
 | Admin | `sakib@example.com` | Verification queue, directory, specialties |
 
+### Showing the video consultation
+
+A consultation room only opens 15 minutes before the appointment and closes 30
+minutes after it ends (`lib/services/video.ts`), so a seeded appointment next
+week has nothing to join. Rather than weaken that rule for a demo, put an
+appointment on the clock:
+
+```bash
+npm run demo:live               # starts 2 minutes ago, runs 20 minutes
+npm run demo:live -- --in 5     # starts 5 minutes from now
+npm run demo:live -- --minutes 45
+```
+
+It books `NRM-DEMO-LIVE` between the seeded patient and doctor. Re-running moves
+the same appointment instead of creating another, and it refuses to run when
+`ALLOW_DEMO_PROFILES` is false, which is the production default.
+
+**Restart `npm run dev` afterwards.** On the default in-process database
+(PGlite) the server owns its own copy: a script writing to `.pglite` from a
+second process is invisible to a dev server that was already running, so the
+appointment simply does not appear and it looks like the app has lost it. The
+script warns when it detects this. Pointing `DATABASE_URL` at a real PostgreSQL
+server removes the problem entirely.
+
+**Turn on real video.** With no provider configured the room is a placeholder:
+the join grant is real and scoped, but no media is carried, and the UI says so.
+For a live two-way call put this in `.env.local` — no vendor account needed:
+
+```
+VIDEO_PROVIDER=jitsi
+```
+
+That uses a public `meet.jit.si` room whose name is random and given only to the
+two participants. Real camera and microphone, both directions, nothing to sign
+up for. It is *unlisted*, not access-controlled, so `APP_ENV=production` refuses
+it and requires `VIDEO_API_KEY` / `VIDEO_API_SECRET` (JWT-authenticated Jitsi)
+instead — worth saying out loud if you are asked about it.
+
+**Two people, two machines.** Camera and microphone need a secure context, so
+`http://192.168.x.x:3000` will not work — the browser blocks media on a plain
+LAN address. Either:
+
+- *One machine:* patient in a normal window, doctor in a second browser profile
+  (or a private window). Both sides visible on one screen for the projector.
+- *Two machines:* expose the dev server over HTTPS, e.g. `npx localtunnel --port
+  3000`, and set `APP_URL` to the tunnel URL so the CSRF origin check matches.
+
+Both sides use the same screen: the doctor presses **Open room** from Schedule,
+the patient presses **Join call** from Appointments, and each sees the other
+named in the call.
+
 Signing up as a doctor is the real path: the BM&DC number is format-checked at
 sign-up, you complete the profile form, and the account stays on a "being
 verified" screen until an admin approves it — only then is a bookable profile
@@ -291,3 +342,38 @@ The app runs in development with none of them set. Production is stricter:
 `APP_ENV=production` makes `DATABASE_URL`, `SESSION_SECRET`,
 `NIRAMOY_ADMIN_CODE` and `CRON_SECRET` mandatory, refuses to boot on a defaulted
 secret, and refuses to run on the in-process database.
+
+### Deploying the demonstration
+
+A deployed instance is the practical way to run the consultation across two
+devices: Vercel serves HTTPS, which is what the browser requires before it will
+grant a page camera and microphone. Over plain `http://` on a LAN address it
+will not, whatever the app does.
+
+Four things are refused in production by default and have to be set on purpose,
+because each one trades a real guarantee for convenience:
+
+| Variable | Why it is needed | What it costs |
+|---|---|---|
+| `DATABASE_URL` | PGlite is refused; serverless functions do not share a filesystem anyway | — |
+| `SESSION_SECRET`, `CRON_SECRET`, `NIRAMOY_ADMIN_CODE` | no defaulted secrets in production | — |
+| `ALLOW_DEMO_PROFILES=true` | `db:seed` and `demo:live` refuse to write synthetic people into a production directory | the directory contains invented practitioners, badged **Demo profile** |
+| `ALLOW_PUBLIC_VIDEO_ROOM=true` | credential-free Jitsi is refused in production | the room is unlisted, not access-controlled |
+
+Then, from your machine, pointed at the deployed database:
+
+```bash
+export DATABASE_URL='postgresql://…'   # the same one Vercel uses
+export ALLOW_DEMO_PROFILES=true
+npm run db:migrate
+npm run db:seed
+npm run demo:live       # re-run shortly before you present
+```
+
+Set `APP_URL` to the deployment's own URL — the CSRF origin check enforces it
+strictly once it is named. Vercel gives every preview deployment a different
+hostname, so demonstrate from the production URL rather than a preview.
+
+Both devices then sign in to the same deployment: one as
+`nabila@example.com` (patient), one as `ayesha@example.com` (doctor), and each
+presses Join call / Open room inside the join window.
