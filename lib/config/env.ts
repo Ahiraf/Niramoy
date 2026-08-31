@@ -77,6 +77,17 @@ const schema = z
     /** IANA zone. Never a hardcoded UTC offset — see docs/ARCHITECTURE.md. */
     DISPLAY_TIMEZONE: z.string().default("Asia/Dhaka"),
     EMERGENCY_NUMBER: z.string().default("999"),
+    /**
+     * Deliberately run the credential-free public video room in production.
+     *
+     * Exists for one case: a deployed demonstration, where the two participants
+     * are on different devices and there is no vendor account. It is off by
+     * default and must be set by hand, because it swaps an access-controlled
+     * room for an unlisted one — see docs/REGULATORY_ASSUMPTIONS.md before
+     * using it in front of anyone who is not a marker.
+     */
+    ALLOW_PUBLIC_VIDEO_ROOM: z.enum(["true", "false"]).optional(),
+
     /** Seeded synthetic profiles are refused in production. */
     // Left as the raw string: an `.optional().transform(v => v === "true")`
     // would collapse "unset" into `false`, defeating the `?? !isProd` default
@@ -109,6 +120,8 @@ const schema = z
       sessionSecret: raw.SESSION_SECRET ?? (isProd ? undefined : DEV_SESSION_SECRET),
       adminInviteCode: raw.NIRAMOY_ADMIN_CODE ?? (isProd ? undefined : "NIRAMOY-ADMIN"),
       cronSecret: raw.CRON_SECRET ?? (isProd ? undefined : "dev-cron-secret"),
+      /** Never defaulted on. An unlisted room is a decision, not a fallback. */
+      allowPublicVideoRoom: raw.ALLOW_PUBLIC_VIDEO_ROOM === "true",
       /** Demo profiles are on everywhere except production, unless overridden. */
       allowDemoProfiles:
         raw.ALLOW_DEMO_PROFILES === undefined ? !isProd : raw.ALLOW_DEMO_PROFILES === "true",
@@ -142,6 +155,27 @@ const schema = z
       if (value && !secret.safeParse(value).success) {
         ctx.addIssue({ code: "custom", path: [name], message: `${name} must be at least 32 characters` });
       }
+    }
+
+    /**
+     * Jitsi without credentials falls back to a public meet.jit.si room, which
+     * is unlisted but not access-controlled — anyone holding the URL can enter.
+     * That is acceptable for a demonstration and not for a consultation.
+     */
+    if (
+      cfg.videoProvider === "jitsi" &&
+      !(cfg.VIDEO_API_KEY && cfg.VIDEO_API_SECRET) &&
+      !cfg.allowPublicVideoRoom
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["VIDEO_API_SECRET"],
+        message:
+          "VIDEO_PROVIDER=jitsi in production requires VIDEO_API_KEY and VIDEO_API_SECRET, " +
+          "because the credential-free public room is unlisted rather than " +
+          "access-controlled. For a deployed demonstration, acknowledge that " +
+          "explicitly with ALLOW_PUBLIC_VIDEO_ROOM=true.",
+      });
     }
 
     if (cfg.databaseDriver === "pglite") {
