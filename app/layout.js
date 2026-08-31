@@ -18,9 +18,22 @@ export const metadata = {
   description: "An AI-assisted telemedicine and appointment platform for Bangladesh.",
 };
 
+/**
+ * Applied before first paint, so a patient who has chosen larger type does not
+ * watch the page render at the default size and then jump. It is inlined
+ * rather than run from a component for the same reason.
+ */
+const TEXT_SIZE_BOOTSTRAP = `try{
+  var s = localStorage.getItem('niramoy:text-size');
+  if (s === 'large' || s === 'larger') document.documentElement.setAttribute('data-text-size', s);
+}catch(e){}`;
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: TEXT_SIZE_BOOTSTRAP }} />
+      </head>
       <body>{children}</body>
     </html>
   );

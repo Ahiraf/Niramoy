@@ -250,16 +250,67 @@ export function Banner({ tone = "info", icon = "info", title, children, action }
   );
 }
 
-/** Accessible modal: focuses on open, closes on Escape and backdrop click. */
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), ' +
+  'textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Modal dialog: focuses on open, traps Tab, closes on Escape and backdrop
+ * click, and puts focus back where it came from.
+ *
+ * The trap is the part that was missing. aria-modal tells a screen reader that
+ * the rest of the page is inert; it does nothing for a sighted keyboard user,
+ * who could Tab straight out of "Cancel this appointment?" into the page behind
+ * it and press buttons they could no longer see.
+ */
 export function Modal({ open, title, onClose, children, footer, wide = false }) {
   const ref = useRef(null);
+  /** Whatever had focus before we opened, so it can be handed back. */
+  const restoreTo = useRef(null);
 
   useEffect(() => {
     if (!open) return undefined;
-    const onKey = (e) => e.key === "Escape" && onClose?.();
+
+    restoreTo.current = document.activeElement;
+
+    const onKey = (event) => {
+      if (event.key === "Escape") {
+        onClose?.();
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const items = [...(ref.current?.querySelectorAll(FOCUSABLE) ?? [])].filter(
+        (el) => el.offsetParent !== null,
+      );
+      if (!items.length) {
+        event.preventDefault();
+        return;
+      }
+
+      const first = items[0];
+      const last = items[items.length - 1];
+      // Wrap at both ends, and pull focus back in if it has already escaped.
+      if (event.shiftKey && (document.activeElement === first || !ref.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
     document.addEventListener("keydown", onKey);
-    ref.current?.focus();
-    return () => document.removeEventListener("keydown", onKey);
+
+    // Prefer the first control over the dialog itself: a screen reader
+    // announces the dialog's label either way, and this saves a Tab.
+    const firstControl = ref.current?.querySelector(FOCUSABLE);
+    (firstControl ?? ref.current)?.focus();
+
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      restoreTo.current?.focus?.();
+    };
   }, [open, onClose]);
 
   if (!open) return null;
@@ -280,6 +331,67 @@ export function Modal({ open, title, onClose, children, footer, wide = false }) 
         <div className="modal-body">{children}</div>
         {footer && <footer className="modal-foot">{footer}</footer>}
       </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Tabs                                                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A tablist wired up the way assistive technology expects: each tab owns its
+ * panel by id, only the selected tab is in the tab order, and the arrow keys
+ * move between them. Without aria-controls a screen reader announces "tab" and
+ * cannot say what it governs.
+ */
+export function Tabs({ tabs, value, onChange, idPrefix }) {
+  const onKeyDown = (event) => {
+    const index = tabs.findIndex((t) => t.id === value);
+    let next = null;
+    if (event.key === "ArrowRight") next = tabs[(index + 1) % tabs.length];
+    else if (event.key === "ArrowLeft") next = tabs[(index - 1 + tabs.length) % tabs.length];
+    else if (event.key === "Home") next = tabs[0];
+    else if (event.key === "End") next = tabs[tabs.length - 1];
+    if (!next) return;
+
+    event.preventDefault();
+    onChange(next.id);
+    document.getElementById(`${idPrefix}-tab-${next.id}`)?.focus();
+  };
+
+  return (
+    <div className="appointment-tabs" role="tablist" onKeyDown={onKeyDown}>
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          id={`${idPrefix}-tab-${tab.id}`}
+          role="tab"
+          type="button"
+          aria-selected={value === tab.id}
+          aria-controls={`${idPrefix}-panel-${tab.id}`}
+          // Roving tabindex: one stop for the whole tablist, then arrows.
+          tabIndex={value === tab.id ? 0 : -1}
+          className={`tab ${value === tab.id ? "active" : ""}`}
+          onClick={() => onChange(tab.id)}
+        >
+          {tab.label}
+          {tab.count > 0 && <em>({tab.count})</em>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function TabPanel({ idPrefix, id, children }) {
+  return (
+    <div
+      role="tabpanel"
+      id={`${idPrefix}-panel-${id}`}
+      aria-labelledby={`${idPrefix}-tab-${id}`}
+      tabIndex={0}
+    >
+      {children}
     </div>
   );
 }

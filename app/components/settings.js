@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Icon } from "./icons.js";
 import { Avatar, PageHeading, SectionHead, Field, Select, Banner, VerifiedBadge } from "./ui.js";
+import { TEXT_SIZES, readTextSize, setTextSize } from "../lib/preferences.js";
 
 /**
  * Settings for whoever is signed in.
@@ -78,6 +79,12 @@ export function Settings({ user, role, doctor, reference, api, onNavigate, onUse
    * bell regardless. They now write to the account and gate real delivery.
    */
   const [channels, setChannels] = useState(user?.notificationChannels ?? []);
+  const [textSize, setTextSizePref] = useState("default");
+
+  // Read on mount: localStorage is not available during the server render.
+  useEffect(() => {
+    setTextSizePref(readTextSize());
+  }, []);
   const [savingChannels, setSavingChannels] = useState(null);
 
   useEffect(() => {
@@ -229,6 +236,35 @@ export function Settings({ user, role, doctor, reference, api, onNavigate, onUse
           <SectionHead title="Preferences" />
 
           {/* ---------------------------------------------------------- */}
+          {/*
+            * Display preferences sit above the notification ones for every
+            * role: someone who cannot comfortably read the page needs this
+            * before anything else on the screen is useful to them.
+            */}
+          <div className="text-size-row">
+            <div className="triage-option-icon"><Icon name="settings" size={15} /></div>
+            <div className="appt-main">
+              <strong>Text size</strong>
+              <span>Applies on this device, signed in or not</span>
+            </div>
+            <div className="text-size-choices" role="group" aria-label="Text size">
+              {TEXT_SIZES.map((size) => (
+                <button
+                  key={size.id}
+                  type="button"
+                  className={`chip ${textSize === size.id ? "active" : ""}`}
+                  aria-pressed={textSize === size.id}
+                  onClick={() => {
+                    setTextSizePref(size.id);
+                    setTextSize(size.id);
+                  }}
+                >
+                  {size.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {role === "patient" && (
             <>
               <ToggleRow

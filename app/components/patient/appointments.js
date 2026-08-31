@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { Icon } from "../icons.js";
 import {
-  ActionMenu, Avatar, PageHeading, Empty, ErrorState, Loading, Modal, Field,
-  StatusPill, Rating, Banner,
+  ActionMenu, Avatar, PageHeading, Empty, Loading, Modal, Field,
+  StatusPill, Rating, Banner, Tabs, TabPanel,
 } from "../ui.js";
 import { downloadAppointmentIcs } from "../../lib/calendar.js";
 import { CancellationPolicy } from "./policy.js";
@@ -163,23 +163,18 @@ export function Appointments({
       )}
 
       <div className="card tabs-card">
-        <div className="appointment-tabs" role="tablist">
-          {TABS.map((t) => {
-            const count = appointments.filter(t.match).length;
-            return (
-              <button
-                key={t.id}
-                role="tab"
-                aria-selected={tab === t.id}
-                className={`tab ${tab === t.id ? "active" : ""}`}
-                onClick={() => setTab(t.id)}
-              >
-                {t.label} {count > 0 && <em>({count})</em>}
-              </button>
-            );
-          })}
-        </div>
+        <Tabs
+          idPrefix="appointments"
+          value={tab}
+          onChange={setTab}
+          tabs={TABS.map((t) => ({
+            id: t.id,
+            label: t.label,
+            count: appointments.filter(t.match).length,
+          }))}
+        />
 
+        <TabPanel idPrefix="appointments" id={tab}>
         {loading ? (
           <Loading rows={3} />
         ) : shown.length ? (
@@ -258,6 +253,7 @@ export function Appointments({
             }
           />
         )}
+        </TabPanel>
       </div>
 
       <ReviewModal

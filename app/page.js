@@ -726,6 +726,8 @@ export default function Home() {
 
   return (
     <div className="app-shell">
+      {/* First stop for a keyboard user: the sidebar is ~12 tab stops deep. */}
+      <a className="skip-link" href="#main-content">Skip to main content</a>
       <Sidebar
         active={active}
         onNavigate={navigate}
@@ -746,7 +748,7 @@ export default function Home() {
           onMenu={() => setMenuOpen(true)}
         />
         <OfflineBar />
-        <div className="content">
+        <div className="content" id="main-content" tabIndex={-1}>
           {loadError && !loading && (
             <ErrorState
               compact

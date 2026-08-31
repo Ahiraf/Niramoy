@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "../icons.js";
 import { Avatar, ErrorState, PageHeading, Rating, Banner, Loading } from "../ui.js";
 
@@ -19,6 +19,74 @@ const URGENCY_TONE = {
   self_care: "good",
 };
 
+/**
+ * Dictation, where the browser offers it.
+ *
+ * Typing a symptom description is the highest-effort thing this app asks
+ * anyone to do, and it asks it of people who are unwell, possibly one-handed,
+ * possibly more fluent speaking Bangla than typing it. Where the browser has
+ * speech recognition, they can say it instead.
+ *
+ * Progressive enhancement in the strict sense: SpeechRecognition is a Chrome
+ * and Safari feature, so the button simply does not render elsewhere and the
+ * textarea is unaffected. Recognition happens through the browser's own
+ * service; Niramoy never receives audio.
+ */
+const DICTATION_LANGS = [
+  { code: "bn-BD", label: "বাংলা" },
+  { code: "en-US", label: "English" },
+];
+
+function useDictation({ lang, onText }) {
+  const [listening, setListening] = useState(false);
+  const [supported, setSupported] = useState(false);
+  const recognitionRef = useRef(null);
+
+  useEffect(() => {
+    const Recognition =
+      typeof window !== "undefined" &&
+      (window.SpeechRecognition || window.webkitSpeechRecognition);
+    setSupported(Boolean(Recognition));
+  }, []);
+
+  const stop = useCallback(() => {
+    recognitionRef.current?.stop();
+    setListening(false);
+  }, []);
+
+  const start = useCallback(() => {
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) return;
+
+    const recognition = new Recognition();
+    recognition.lang = lang;
+    recognition.interimResults = true;
+    recognition.continuous = false;
+
+    recognition.onresult = (event) => {
+      // Only final results are committed; interim text flickers as the
+      // recogniser changes its mind, and watching your symptoms rewrite
+      // themselves is unsettling.
+      const text = [...event.results]
+        .filter((r) => r.isFinal)
+        .map((r) => r[0].transcript)
+        .join(" ")
+        .trim();
+      if (text) onText(text);
+    };
+    recognition.onerror = () => setListening(false);
+    recognition.onend = () => setListening(false);
+
+    recognitionRef.current = recognition;
+    setListening(true);
+    recognition.start();
+  }, [lang, onText]);
+
+  useEffect(() => () => recognitionRef.current?.abort?.(), []);
+
+  return { supported, listening, start, stop };
+}
+
 export function Assistant({ api, onOpenDoctor, onNavigate }) {
   const [messages, setMessages] = useState([
     {
@@ -31,6 +99,14 @@ export function Assistant({ api, onOpenDoctor, onNavigate }) {
   const [thinking, setThinking] = useState(false);
   /** The description that did not get through, kept so it can be re-sent. */
   const [failed, setFailed] = useState(null);
+  const [dictationLang, setDictationLang] = useState("bn-BD");
+
+  const dictation = useDictation({
+    lang: dictationLang,
+    // Append rather than replace: dictation is often a second thought added to
+    // something already typed.
+    onText: (text) => setInput((current) => (current ? `${current} ${text}` : text)),
+  });
   const [result, setResult] = useState(null);
   const scrollRef = useRef(null);
 
@@ -167,10 +243,43 @@ export function Assistant({ api, onOpenDoctor, onNavigate }) {
               aria-label="Describe your symptoms"
               disabled={thinking}
             />
+            {dictation.supported && (
+              <button
+                type="button"
+                className={`button ghost mic-button ${dictation.listening ? "listening" : ""}`}
+                aria-label={dictation.listening ? "Stop dictating" : "Dictate your symptoms"}
+                aria-pressed={dictation.listening}
+                onClick={() => (dictation.listening ? dictation.stop() : dictation.start())}
+                disabled={thinking}
+              >
+                <Icon name="mic" size={15} />
+              </button>
+            )}
             <button className="button primary" type="submit" aria-label="Send" disabled={thinking || !input.trim()}>
               <Icon name="send" size={15} />
             </button>
           </form>
+
+          {dictation.supported && (
+            <div className="dictation-row">
+              <span aria-live="polite">
+                {dictation.listening ? "Listening — speak now" : "You can dictate instead of typing"}
+              </span>
+              <div role="group" aria-label="Dictation language">
+                {DICTATION_LANGS.map((l) => (
+                  <button
+                    key={l.code}
+                    type="button"
+                    className={`chip ${dictationLang === l.code ? "active" : ""}`}
+                    aria-pressed={dictationLang === l.code}
+                    onClick={() => setDictationLang(l.code)}
+                  >
+                    {l.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <p className="ai-disclaimer">
             Niramoy AI offers general guidance, not a diagnosis. In an emergency, call 999.
