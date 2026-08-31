@@ -40,8 +40,15 @@ describe("appointment reminders", () => {
     expect(first.skipped).toBe(false);
     expect(first.processed).toBe(1);
 
+    /*
+     * Count the in-app rows, not every row. One reminder can legitimately
+     * write several: the in_app record plus a copy on each channel the
+     * account asked for. The property under test is that the patient was
+     * told once, not that exactly one row exists.
+     */
     const { rows } = await world.h.client.query<{ n: number }>(
-      `SELECT count(*)::int AS n FROM notifications WHERE type = 'appointment_reminder'`,
+      `SELECT count(*)::int AS n FROM notifications
+         WHERE type = 'appointment_reminder' AND channel = 'in_app'`,
     );
     expect(rows[0]!.n).toBe(1);
   });
@@ -78,7 +85,8 @@ describe("appointment reminders", () => {
     await sendReminders(now);
 
     const { rows } = await world.h.client.query<{ n: number }>(
-      `SELECT count(*)::int AS n FROM notifications WHERE type = 'appointment_reminder'`,
+      `SELECT count(*)::int AS n FROM notifications
+         WHERE type = 'appointment_reminder' AND channel = 'in_app'`,
     );
     expect(rows[0]!.n).toBe(1);
   });
@@ -179,7 +187,8 @@ describe("no-show sweep", () => {
     await sweepNoShows(now);
 
     const { rows } = await world.h.client.query<{ n: number }>(
-      `SELECT count(*)::int AS n FROM notifications WHERE type = 'appointment_no_show'`,
+      `SELECT count(*)::int AS n FROM notifications
+         WHERE type = 'appointment_no_show' AND channel = 'in_app'`,
     );
     expect(rows[0]!.n).toBe(1);
   });
