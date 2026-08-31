@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Icon } from "../icons.js";
+import { useT } from "../../lib/i18n.js";
 import {
   Avatar, PageHeading, Empty, Loading, VerifiedBadge, Field, Select, Banner,
 } from "../ui.js";
@@ -14,6 +15,7 @@ const PAYMENT_METHODS = [
 ];
 
 export function Booking({ doctor, family, onConfirm, onBack, onJoinWaitlist, api, notify }) {
+  const { t } = useT();
   const [days, setDays] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState(0);
@@ -103,7 +105,7 @@ export function Booking({ doctor, family, onConfirm, onBack, onJoinWaitlist, api
           ) : (
             <>
               <div className="booking-section">
-                <h3>Select a date</h3>
+                <h3>{t("booking.pickDay")}</h3>
                 <div className="date-row">
                   {days.map((d, i) => (
                     <button
@@ -125,9 +127,12 @@ export function Booking({ doctor, family, onConfirm, onBack, onJoinWaitlist, api
 
               <div className="booking-section">
                 <h3>
-                  Available times
+                  {t("booking.pickTime")}
                   <span className="section-note">· {day?.day}, {day?.date} {day?.month}</span>
                 </h3>
+                {/* Named once at the point of choosing, not only on the
+                    confirmation — the choice is made here. */}
+                <p className="booking-tz">{t("booking.timezone")}</p>
                 {Object.entries(grouped).map(([period, slots]) => (
                   <div className="slot-group" key={period}>
                     <span className="slot-label">{period}</span>
@@ -159,8 +164,8 @@ export function Booking({ doctor, family, onConfirm, onBack, onJoinWaitlist, api
                   />
                 </Field>
                 <Field
-                  label="What would you like to discuss?"
-                  hint="Optional, but it helps the doctor prepare."
+                  label={t("booking.reason")}
+                  hint={t("booking.reasonHint")}
                 >
                   <textarea
                     className="field textarea"
@@ -199,7 +204,7 @@ export function Booking({ doctor, family, onConfirm, onBack, onJoinWaitlist, api
             <strong>Video · {doctor.consultationMinutes} min</strong>
           </div>
           <div className="summary-total">
-            <span>Total fee</span>
+            <span>{t("booking.fee")}</span>
             <strong>{doctor.feeLabel}</strong>
           </div>
 

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "./icons.js";
 import { Avatar } from "./ui.js";
+import { LANGUAGES, useT } from "../lib/i18n.js";
 
 export const NAV = {
   patient: [
@@ -27,9 +28,9 @@ export const NAV = {
 };
 
 const ROLE_LABEL = {
-  patient: "Patient workspace",
-  doctor: "Doctor workspace",
-  admin: "Admin workspace",
+  patient: "role.patient",
+  doctor: "role.doctor",
+  admin: "role.admin",
 };
 
 const TITLES = {
@@ -55,6 +56,7 @@ const TITLES = {
 };
 
 export function Sidebar({ active, onNavigate, role, user, onSignOut, counts, open, onClose }) {
+  const { t } = useT();
 
   return (
     <>
@@ -77,7 +79,7 @@ export function Sidebar({ active, onNavigate, role, user, onSignOut, counts, ope
                 aria-current={active === item.id ? "page" : undefined}
               >
                 <Icon name={item.icon} size={17} />
-                <span>{item.label}</span>
+                <span>{t(`nav.${item.id}`)}</span>
                 {count > 0 && <span className="nav-count">{count}</span>}
               </button>
             );
@@ -88,11 +90,11 @@ export function Sidebar({ active, onNavigate, role, user, onSignOut, counts, ope
         <nav className="nav-list">
           {role === "patient" && (
             <button className={`nav-item ${active === "family" ? "active" : ""}`} onClick={() => { onNavigate("family"); onClose?.(); }}>
-              <Icon name="users" size={17} /><span>Family members</span>
+              <Icon name="users" size={17} /><span>{t("nav.family")}</span>
             </button>
           )}
           <button className={`nav-item ${active === "profile" ? "active" : ""}`} onClick={() => { onNavigate("profile"); onClose?.(); }}>
-            <Icon name="settings" size={17} /><span>Settings</span>
+            <Icon name="settings" size={17} /><span>{t("nav.profile")}</span>
           </button>
         </nav>
 
@@ -111,15 +113,41 @@ export function Sidebar({ active, onNavigate, role, user, onSignOut, counts, ope
             <Avatar person={user} />
             <div className="user-mini-text">
               <strong>{user?.name ?? "Signed in"}</strong>
-              <span>{ROLE_LABEL[role]}</span>
+              <span>{t(ROLE_LABEL[role])}</span>
             </div>
-            <button className="icon-button" onClick={onSignOut} aria-label="Sign out" title="Sign out">
+            <button className="icon-button" onClick={onSignOut} aria-label={t("nav.signout")} title={t("nav.signout")}>
               <Icon name="logout" size={15} />
             </button>
           </div>
         </div>
       </aside>
     </>
+  );
+}
+
+/**
+ * The language switch.
+ *
+ * In the topbar rather than buried in settings: a patient who cannot read the
+ * interface cannot navigate to the page where they would change it.
+ */
+function LanguageSwitch() {
+  const { lang, setLang, t } = useT();
+  return (
+    <div className="lang-switch" role="group" aria-label={t("common.language")}>
+      {LANGUAGES.map((option) => (
+        <button
+          key={option.id}
+          type="button"
+          className={lang === option.id ? "active" : ""}
+          aria-pressed={lang === option.id}
+          lang={option.id}
+          onClick={() => setLang(option.id)}
+        >
+          {option.short}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -170,6 +198,8 @@ export function Topbar({ active, notifications, unread, onReadNotifications, onS
 
       <div className="topbar-actions">
         <div style={{ position: "relative" }} ref={popRef}>
+          <LanguageSwitch />
+
           <button className="icon-button" aria-label={`Notifications, ${unread} unread`} onClick={toggle}>
             <Icon name="bell" size={17} />
             {unread > 0 && <i className="notification-dot" />}

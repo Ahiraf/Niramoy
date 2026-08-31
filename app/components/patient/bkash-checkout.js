@@ -20,6 +20,7 @@
 import { useEffect, useState } from "react";
 import { Icon } from "../icons.js";
 import { Modal, Field, Banner } from "../ui.js";
+import { useT } from "../../lib/i18n.js";
 
 /** 01712345678, and the same shape the server validates. */
 const WALLET = /^01[3-9]\d{8}$/;
@@ -54,6 +55,7 @@ export function BkashCheckout({ open, payment, appointment, onClose, onPaid, api
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const remaining = useCountdown(payment?.expiresAt ?? null);
+  const { t } = useT();
 
   if (!payment) return null;
 
@@ -87,12 +89,12 @@ export function BkashCheckout({ open, payment, appointment, onClose, onPaid, api
   const fee = new Intl.NumberFormat("en-BD").format(payment.amount);
 
   return (
-    <Modal open={open} title="Pay with bKash" onClose={onClose}>
+    <Modal open={open} title={t("pay.title")} onClose={onClose}>
       <form className="bkash-sheet" onSubmit={submit}>
         <div className="bkash-head">
           <span className="bkash-mark">bKash</span>
           <div className="bkash-amount">
-            <span>Amount payable</span>
+            <span>{t("pay.amount")}</span>
             <strong>৳ {fee}</strong>
           </div>
           {clock && (
@@ -112,8 +114,8 @@ export function BkashCheckout({ open, payment, appointment, onClose, onPaid, api
         )}
 
         <Field
-          label="Your bKash account number"
-          hint="The 11-digit number the wallet is registered to."
+          label={t("pay.walletLabel")}
+          hint={t("pay.walletHint")}
           error={error}
         >
           <input
@@ -129,31 +131,28 @@ export function BkashCheckout({ open, payment, appointment, onClose, onPaid, api
         </Field>
 
         {expired ? (
-          <Banner tone="warn" icon="alert" title="This payment session has expired">
-            Your appointment is still booked and still yours. Close this and
-            start the payment again from your appointments.
+          <Banner tone="warn" icon="alert" title={t("pay.expired")}>
+            Close this and start the payment again from your appointments.
           </Banner>
         ) : (
-          <Banner tone="info" icon="check" title="Your slot is already booked">
-            The countdown is on this bKash session, not on your appointment.
-            Nobody else can take the slot while you pay, and it stays yours if
-            the session runs out.
+          <Banner tone="info" icon="check" title={t("booking.booked")}>
+            {t("pay.slotSafe")}
           </Banner>
         )}
 
+        {/* The anti-phishing line, in the patient's own language. This is
+            the string most worth translating in the whole payment flow. */}
         <Banner tone="info" icon="shield">
-          Niramoy never asks for your bKash PIN. On a live payment you would
-          approve it in bKash itself — if any site asks you to type your PIN
-          into their page, it is not bKash.
+          {t("pay.noPin")}
         </Banner>
 
         <Banner tone="warn" icon="info">
-          Sandbox payment. Nothing is charged and no money moves.
+          {t("pay.sandbox")}
         </Banner>
 
         <div className="bkash-actions">
           <button type="button" className="button ghost" onClick={onClose} disabled={submitting}>
-            Pay later
+            {t("pay.later")}
           </button>
           <button type="submit" className="button primary" disabled={submitting || expired}>
             {submitting ? "Confirming…" : expired ? "Session expired" : `Confirm ৳ ${fee}`}

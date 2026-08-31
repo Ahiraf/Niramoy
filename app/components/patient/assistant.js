@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "../icons.js";
 import { Avatar, ErrorState, PageHeading, Rating, Banner, Loading } from "../ui.js";
 import { EMPTY_INTAKE, IntakePanel } from "./intake.js";
+import { useT } from "../../lib/i18n.js";
 
 const PROMPTS = [
   "I've had a headache every day for two weeks",
@@ -105,6 +106,7 @@ export function Assistant({ api, onOpenDoctor, onNavigate }) {
   /** Collapsed once triage has run — the answers stay, the form gets out of the way. */
   const [intakeOpen, setIntakeOpen] = useState(true);
 
+  const { t } = useT();
   const dictation = useDictation({
     lang: dictationLang,
     // Append rather than replace: dictation is often a second thought added to
@@ -155,6 +157,7 @@ export function Assistant({ api, onOpenDoctor, onNavigate }) {
   };
 
   const triage = result?.triage;
+  const emergencyNumber = result?.emergencyNumber ?? "999";
 
   return (
     <>
@@ -221,9 +224,30 @@ export function Assistant({ api, onOpenDoctor, onNavigate }) {
                   </p>
                 )}
                 {triage.redFlag && (
-                  <a className="button emergency-button" href="tel:999">
-                    <Icon name="alert" size={14} /> Call 999 now
-                  </a>
+                  /*
+                   * The one block that is always shown in both languages at
+                   * once, whatever the switch says. Someone reading this is
+                   * frightened and may not be the person who set the language
+                   * — a relative who grabbed the phone, a bystander. The cost
+                   * of two extra lines is nothing against the cost of the
+                   * warning being in a language the reader cannot use.
+                   */
+                  <div className="emergency-block" role="alert">
+                    <strong lang="en">{t("emergency.title", {}, "en")}</strong>
+                    <p lang="en">
+                      {t("emergency.call", { number: emergencyNumber }, "en")}{" "}
+                      {t("emergency.dontWait", {}, "en")}
+                    </p>
+                    <strong lang="bn">{t("emergency.title", {}, "bn")}</strong>
+                    <p lang="bn">
+                      {t("emergency.call", { number: emergencyNumber }, "bn")}{" "}
+                      {t("emergency.dontWait", {}, "bn")}
+                    </p>
+                    <a className="button emergency-button" href={`tel:${emergencyNumber}`}>
+                      <Icon name="alert" size={14} />
+                      {t("emergency.button", { number: emergencyNumber })}
+                    </a>
+                  </div>
                 )}
               </div>
             )}

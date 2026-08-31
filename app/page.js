@@ -18,11 +18,20 @@ import { Icon } from "./components/icons.js";
 import { DoctorWorkspace, useDoctorSelf } from "./components/doctor-workspace.js";
 import { AdminWorkspace } from "./components/admin-workspace.js";
 import { Landing } from "./components/landing.js";
+import { LanguageProvider } from "./lib/i18n.js";
 import { AuthPage } from "./components/auth-page.js";
 
 const HOME = { patient: "dashboard", doctor: "doctor-home", admin: "admin-home" };
 
 export default function Home() {
+  return (
+    <LanguageProvider>
+      <Workspace />
+    </LanguageProvider>
+  );
+}
+
+function Workspace() {
   // Screens: booting → landing / auth (signed out) → app (signed in).
   const [user, setUser] = useState(null);
   const [screen, setScreen] = useState("booting");

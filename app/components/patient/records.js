@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Icon } from "../icons.js";
+import { useT } from "../../lib/i18n.js";
 import {
   Avatar, PageHeading, SectionHead, Empty, Loading, Modal, Field, Select, Banner,
 } from "../ui.js";
@@ -123,9 +124,10 @@ export function Records({ loading, records, prescriptions, appointments, onAddRe
 }
 
 function PrescriptionModal({ prescription, onClose }) {
+  const { t } = useT();
   if (!prescription) return null;
   return (
-    <Modal open title="Prescription" onClose={onClose} wide
+    <Modal open title={t("rx.title")} onClose={onClose} wide
       footer={<button className="button primary" onClick={() => window.print()}>
         <Icon name="download" size={14} />Download PDF
       </button>}
@@ -145,7 +147,7 @@ function PrescriptionModal({ prescription, onClose }) {
 
         {prescription.diagnosis && (
           <div className="rx-block">
-            <span className="rx-label">Diagnosis</span>
+            <span className="rx-label">{t("rx.diagnosis")}</span>
             <p>{prescription.diagnosis}</p>
           </div>
         )}
@@ -153,7 +155,12 @@ function PrescriptionModal({ prescription, onClose }) {
         <div className="rx-block">
           <span className="rx-label">℞ Medicines</span>
           <table className="rx-table">
-            <thead><tr><th>Medicine</th><th>Dose</th><th>Frequency</th><th>Duration</th></tr></thead>
+            <thead><tr>
+              <th>{t("rx.title")}</th>
+              <th>{t("rx.dose")}</th>
+              <th>{t("rx.frequency")}</th>
+              <th>{t("rx.duration")}</th>
+            </tr></thead>
             <tbody>
               {prescription.items.map((it, i) => (
                 <tr key={i}>
@@ -169,10 +176,21 @@ function PrescriptionModal({ prescription, onClose }) {
 
         {prescription.notes && (
           <div className="rx-block">
-            <span className="rx-label">Advice</span>
+            <span className="rx-label">{t("rx.advice")}</span>
             <p>{prescription.notes}</p>
           </div>
         )}
+
+        {/*
+          * How to take it, and what not to do with it. The medicine names and
+          * the doctor's own words stay exactly as written — translating a
+          * prescriber's instruction would be practising medicine. These are
+          * Niramoy's standing advice, and they are translated.
+          */}
+        <div className="rx-block rx-guidance">
+          <p>{t("rx.finishCourse")}</p>
+          <p>{t("rx.notADiagnosis")}</p>
+        </div>
 
         {prescription.aiSummary && (
           <div className="rx-block ai">

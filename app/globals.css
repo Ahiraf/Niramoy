@@ -1252,3 +1252,24 @@ html[data-text-size="larger"] { --text-scale: 1.32; }
 }
 .intake-summary span { flex: 1; }
 .intake-summary:hover { border-color: var(--mint); background: #f6fbf9; }
+
+/* --- Language switch -------------------------------------------------------- */
+.lang-switch { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: #fff; }
+.lang-switch button {
+  border: 0; background: none; padding: 0 11px; height: 35px;
+  font-size: calc(11px * var(--text-scale)); font-weight: 650; color: var(--muted); cursor: pointer;
+}
+.lang-switch button.active { background: var(--teal-soft); color: var(--teal-dark); }
+.lang-switch button + button { border-left: 1px solid var(--line); }
+
+/* --- Emergency block -------------------------------------------------------- */
+/* Shown in Bangla and English together, always. The reader may not be the
+   person who chose the language. */
+.emergency-block { margin-top: 12px; }
+.emergency-block strong { display: block; font-size: calc(13px * var(--text-scale)); margin-top: 9px; }
+.emergency-block strong:first-child { margin-top: 0; }
+.emergency-block p { margin: 3px 0 0; font-size: calc(11.5px * var(--text-scale)); line-height: 1.55; }
+.emergency-block .emergency-button { margin-top: 13px; }
+.rx-guidance { border-top: 1px dashed var(--line); padding-top: 12px; }
+.rx-guidance p { font-size: calc(11px * var(--text-scale)); color: var(--muted); line-height: 1.6; margin: 0 0 6px; }
+.booking-tz { font-size: calc(10.5px * var(--text-scale)); color: var(--muted); margin: -4px 0 10px; }
