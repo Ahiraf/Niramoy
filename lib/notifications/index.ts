@@ -42,17 +42,33 @@ export async function sendEmailVerification(input: {
 /**
  * The sign-up verification code.
  *
- * Bilingual, and in that order: the code itself is the only part that has to be
- * read accurately, so it appears once in ASCII digits — a Bangla-numeral code
- * (১২৩৪৫৬) would have to be transcribed back into an ASCII field, which is a
- * transcription error waiting to lock someone out of their own account. The
- * Bangla line carries the meaning around it, which is the part a patient who
- * does not read English otherwise loses.
+ * Every word here is chosen against the constraints of one SMS segment, so the
+ * reasoning is worth writing down.
  *
- * Deliberately short: Bangla text is sent as UCS-2, which is 70 characters per
- * SMS segment rather than 160, and every extra segment is another chance for a
- * handset relay to deliver half a message.
+ *   ONE SEGMENT. Any Bangla character forces the whole message to UCS-2, which
+ *   is 70 characters per segment instead of GSM-7's 160. This message is 59,
+ *   with room to edit. The earlier bilingual version was 97 — two segments,
+ *   which on a handset gateway means two billed messages and two chances to
+ *   deliver half a code. `SMS_SEGMENT_LIMIT` below is asserted in the tests.
+ *
+ *   BANGLA FOR THE WARNING. "Do not share this code" is the only sentence here
+ *   that does any work, and it is the sentence that stops an OTP scam. A
+ *   warning the reader cannot read protects nobody, and the app now opens in
+ *   Bangla, so this is the language they were reading a moment ago.
+ *
+ *   LATIN FOR THE NAME AND ASCII FOR EVERY DIGIT. A phone that cannot render
+ *   Bangla shows boxes — still common on older handsets, and the number on an
+ *   account is not always a smartphone. Keeping the sender name, the code and
+ *   the expiry outside Bangla means that on such a device the message still
+ *   reads "Niramoy … 821842 (10 min)", which is everything needed to act. The
+ *   code in Bangla numerals (১২৩৪৫৬) would also have to be transcribed back
+ *   into an ASCII field, which is its own way to lock somebody out.
+ *
+ * No link, deliberately: a URL in an OTP message is the phishing pattern the
+ * warning is about, and the fastest route into an operator's spam filter.
  */
+export const SMS_SEGMENT_LIMIT = 70;
+
 export async function sendPhoneVerificationCode(input: {
   to: string;
   code: string;
@@ -61,8 +77,8 @@ export async function sendPhoneVerificationCode(input: {
   return getSmsProvider().send({
     to: input.to,
     text:
-      `Niramoy code: ${input.code} (${input.expiresInMinutes} min). Do not share it.\n` +
-      `নিরাময় কোড: ${input.code} — ${input.expiresInMinutes} মিনিট। কাউকে জানাবেন না।`,
+      `Niramoy যাচাই কোড: ${input.code} (${input.expiresInMinutes} min)। ` +
+      `কোডটি কাউকে জানাবেন না।`,
   });
 }
 

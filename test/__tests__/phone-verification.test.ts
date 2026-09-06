@@ -21,6 +21,7 @@ import { PATCH as confirmPhone, POST as sendPhone } from "../../app/api/auth/ver
 import { resetEnvCache } from "../../lib/config/env";
 import * as t from "../../lib/db/schema";
 import { maskPhone, normalisePhone } from "../../lib/auth/phone";
+import { SMS_SEGMENT_LIMIT } from "../../lib/notifications";
 import { resetSmsProvider } from "../../lib/notifications/sms";
 import { PHONE_CODE_MAX_ATTEMPTS } from "../../lib/services/phone-verification";
 import { requestAs, type World } from "../fixtures";
@@ -158,9 +159,18 @@ describe("sending the code", () => {
     expect(sent[0]!.url).toBe("https://sms.invalid/api/v1/gateway/devices/test-device/send-sms");
     expect(sent[0]!.apiKey).toBe("test-gateway-key");
     expect(sent[0]!.recipients).toEqual(["+8801712345678"]);
-    // Bilingual, and the code appears in ASCII digits so it can be typed back.
-    expect(sent[0]!.message).toContain("নিরাময়");
+    // The warning is in Bangla; the name, the code and the expiry are not, so
+    // a handset that cannot render Bangla still shows something actionable.
+    expect(sent[0]!.message).toContain("কোডটি কাউকে জানাবেন না");
+    expect(sent[0]!.message).toContain("Niramoy");
     expect(lastCode()).toMatch(/^\d{6}$/);
+
+    /**
+     * One SMS segment. Bangla forces UCS-2, so the budget is 70 UTF-16 units,
+     * not 160 — and a second segment is a second billed message out of the
+     * handset and a second chance to deliver half a code.
+     */
+    expect(sent[0]!.message.length).toBeLessThanOrEqual(SMS_SEGMENT_LIMIT);
 
     // Stored normalised, whatever was typed.
     expect((await storedUser()).phone).toBe("+8801712345678");
