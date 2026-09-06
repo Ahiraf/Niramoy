@@ -26,9 +26,10 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 
 const LANG_KEY = "niramoy:language";
 
+/** Bangla first, because it is the default and the first language here. */
 export const LANGUAGES = [
-  { id: "en", label: "English", short: "EN" },
   { id: "bn", label: "বাংলা", short: "বাং" },
+  { id: "en", label: "English", short: "EN" },
 ];
 
 const STRINGS = {
@@ -152,6 +153,12 @@ const STRINGS = {
     bn: "প্রতিটি বুকযোগ্য ডাক্তারের বিএমডিসি নিবন্ধন হাতে যাচাই করা",
   },
   "landing.hero.title": { en: "Care that comes to you", bn: "চিকিৎসা আসবে আপনার কাছে" },
+  /*
+   * The name, in the script of the page it is on. It is one word — নিরাময়,
+   * "cure" — and an English sentence ending in Bangla script asks a reader who
+   * chose English to read something they may not be able to.
+   */
+  "landing.hero.brand": { en: "Niramoy", bn: "নিরাময়" },
   "landing.hero.body": {
     en: "Niramoy connects patients across Bangladesh with doctors whose registration we check: describe your symptoms, get pointed to the right specialty, book a slot that is genuinely free, and consult over video without leaving home.",
     bn: "নিরাময় সারা বাংলাদেশের রোগীদের এমন ডাক্তারদের সঙ্গে যুক্ত করে, যাঁদের নিবন্ধন আমরা যাচাই করি: আপনার উপসর্গ বলুন, সঠিক বিশেষজ্ঞের দিশা নিন, সত্যিই খালি আছে এমন সময় বুক করুন, আর ঘরে বসেই ভিডিওতে পরামর্শ নিন।",

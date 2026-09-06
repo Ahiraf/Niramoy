@@ -81,7 +81,7 @@ export function Landing({ stats, onSignIn, onSignUp }) {
             <Icon name="shield" size={12} /> {t("landing.hero.eyebrow")}
           </span>
           <h1>
-            {t("landing.hero.title")} — <em>নিরাময়</em>
+            {t("landing.hero.title")} — <em>{t("landing.hero.brand")}</em>
           </h1>
           <p>{t("landing.hero.body")}</p>
 

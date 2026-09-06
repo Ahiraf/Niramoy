@@ -678,6 +678,10 @@ textarea.field, .textarea { height: auto; padding: 10px 12px; line-height: 1.55;
 .landing-eyebrow.plain { background: var(--teal-soft); border-color: transparent; }
 
 .landing-hero { max-width: 1220px; margin: 0 auto; padding: 62px 44px 34px; display: grid; grid-template-columns: 1.08fr .92fr; gap: 40px; align-items: center; }
+/* A grid item will not shrink below its min-content by default, and an image's
+   min-content is its intrinsic width — 586px here, wider than the column's
+   share, which pushed the whole row out past the container's right edge. */
+.landing-hero > * { min-width: 0; }
 .landing-hero h1 { font-size: calc(50px * var(--text-scale)); line-height: 1.05; letter-spacing: -1.8px; margin: 20px 0 16px; }
 .landing-hero h1 em { font-style: normal; color: var(--teal); }
 .landing-hero-copy > p { color: var(--muted); font-size: calc(14px * var(--text-scale)); line-height: 1.7; max-width: 500px; margin: 0; }
