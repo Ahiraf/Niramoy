@@ -39,6 +39,13 @@ export const RATE_LIMITS = {
   "register:ip": { limit: 5, windowSeconds: 3600 },
   "password-reset:ip": { limit: 5, windowSeconds: 3600 },
   "password-reset:email": { limit: 3, windowSeconds: 3600 },
+  // Every send is a real SMS out of a real handset, so this bucket is about
+  // somebody else's phone bill and somebody else's inbox, not just our load.
+  // Three per hour covers a mistyped number and a resend; nothing more.
+  "phone-verify:send": { limit: 3, windowSeconds: 3600 },
+  // The per-code guess cap is the real defence (see services/phone-verification);
+  // this stops the same client working through fresh codes all afternoon.
+  "phone-verify:confirm": { limit: 15, windowSeconds: 900 },
   "doctor-search": { limit: 120, windowSeconds: 60 },
   "appointment-book": { limit: 20, windowSeconds: 300 },
   // Confirming a wallet payment reaches out to the gateway, so a retry loop

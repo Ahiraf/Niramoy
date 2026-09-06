@@ -7,6 +7,7 @@
  */
 import { json, ok, withRoute } from "../../../lib/api/respond";
 import { clearAuthCookies, readCookie, SESSION_COOKIE, withCookies } from "../../../lib/auth/cookies";
+import { normalisePhone } from "../../../lib/auth/phone";
 import { getPrincipal, requireUser } from "../../../lib/security/authz";
 import { logout, toPublicUser } from "../../../lib/services/auth";
 import * as users from "../../../lib/repositories/users";
@@ -62,12 +63,41 @@ export const PATCH = withRoute("PATCH /api/auth", async (request, { requestId })
     notificationChannels = cleaned;
   }
 
+  /*
+   * A number that is given must be one we can send to, in the one shape the
+   * gateway accepts. Editing it also un-verifies it — that happens inside the
+   * update statement — so any code already in flight is for a number this
+   * account no longer claims, and is revoked below.
+   */
+  let phone: string | null | undefined;
+  if (body.phone !== undefined) {
+    const raw = String(body.phone ?? "").trim();
+    const parsed = raw ? normalisePhone(raw) : null;
+    if (raw && !parsed) {
+      throw new AppError("VALIDATION_FAILED", {
+        details: {
+          phone: [
+            "Enter a Bangladeshi mobile number, like 01712 345678.",
+            "বাংলাদেশি মোবাইল নম্বর দিন, যেমন ০১৭১২ ৩৪৫৬৭৮।",
+          ],
+        },
+      });
+    }
+    phone = parsed?.e164 ?? null;
+  }
+
+  const before = phone !== undefined ? await users.findById(principal.userId) : null;
+
   const updated = await users.updateProfile(principal.userId, {
     ...(name !== undefined ? { name } : {}),
-    ...(body.phone !== undefined ? { phone: String(body.phone).trim() || null } : {}),
+    ...(phone !== undefined ? { phone } : {}),
     ...(notificationChannels !== undefined ? { notificationChannels } : {}),
   });
   if (!updated) throw new AppError("NOT_FOUND");
+
+  if (before && before.phone !== updated.phone) {
+    await users.revokeAuthTokens(principal.userId, "phone_verification");
+  }
 
   // Keep the clinical identity's display name in step with the account's.
   if (principal.patientId) {

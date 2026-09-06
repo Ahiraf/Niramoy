@@ -14,6 +14,7 @@ import { clientIp } from "../../../../lib/security/authz";
 import { enforceRateLimit } from "../../../../lib/security/rate-limit";
 import { register } from "../../../../lib/services/auth";
 import { sendEmailVerification } from "../../../../lib/notifications";
+import { startPhoneVerification } from "../../../../lib/services/phone-verification";
 import { validateRegistrationNumber } from "../../../../lib/bmdc.js";
 
 export const dynamic = "force-dynamic";
@@ -50,10 +51,30 @@ export const POST = withRoute("POST /api/auth/register", async (request, { reque
     (err: unknown) => logger.error("verification email failed", { err, userId: user.id }),
   );
 
+  /**
+   * The first SMS code, sent as part of sign-up so the person is still holding
+   * their phone when it arrives.
+   *
+   * A gateway outage must not fail the registration either: the account exists,
+   * the session is issued, and the verification screen offers a resend. What it
+   * must not do is claim a code is on its way when none is — hence
+   * `phoneVerification: null` rather than an optimistic shape.
+   */
+  let phoneVerification = null;
+  if (user.phone) {
+    phoneVerification = await startPhoneVerification(user.id, {}, { ip, requestId }).catch(
+      (err: unknown) => {
+        logger.error("verification sms failed at sign-up", { err, userId: user.id });
+        return null;
+      },
+    );
+  }
+
   return withCookies(
     created({
       user,
       csrfToken: session.csrfToken,
+      phoneVerification,
       // Carries the sign-up details through to the BM&DC application form.
       draft: bmdc
         ? {

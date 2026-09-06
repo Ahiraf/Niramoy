@@ -26,6 +26,7 @@ import {
   burnPasswordTime, checkPasswordStrength, hashPassword, needsRehash, verifyPassword,
 } from "../auth/password";
 import { generateToken, hashClientAttribute, hashToken } from "../auth/tokens";
+import { normalisePhone } from "../auth/phone";
 import { SESSION_TTL_SECONDS } from "../auth/cookies";
 import { checkAdminInviteCode } from "../security/authz";
 import * as sessions from "../repositories/sessions";
@@ -49,6 +50,8 @@ export interface PublicUser {
   doctorId: string | null;
   verificationStatus: string | null;
   emailVerified: boolean;
+  /** Whether a code was read back from the number in `phone`. */
+  phoneVerified: boolean;
   /** Extra channels a copy of each notification goes out on. */
   notificationChannels: string[];
   district: string;
@@ -136,6 +139,20 @@ export async function register(
   if (!EMAIL_RE.test(email)) problems.email = ["That doesn't look like a valid email address."];
   if (!role) problems.role = ["Pick patient, doctor or admin."];
 
+  /**
+   * The number is optional, but a number that is given has to be one we can
+   * send to. Storing "0171-234" would produce an account that looks reachable
+   * and is not, and the person would find out when they missed a consultation.
+   */
+  const phoneGiven = String(input.phone ?? "").trim();
+  const phone = phoneGiven ? normalisePhone(phoneGiven) : null;
+  if (phoneGiven && !phone) {
+    problems.phone = [
+      "Enter a Bangladeshi mobile number, like 01712 345678.",
+      "বাংলাদেশি মোবাইল নম্বর দিন, যেমন ০১৭১২ ৩৪৫৬৭৮।",
+    ];
+  }
+
   const passwordProblems = checkPasswordStrength(password);
   if (passwordProblems.length) problems.password = passwordProblems;
 
@@ -165,7 +182,8 @@ export async function register(
     role: role!,
     name: displayName,
     email,
-    phone: String(input.phone ?? "").trim() || null,
+    // Stored in E.164, which is what the SMS gateway is handed later.
+    phone: phone?.e164 ?? null,
     passwordHash: hashed.hash,
     passwordAlgo: hashed.algo,
   });
@@ -520,6 +538,7 @@ export function toPublicUser(
     doctorId: extra.doctorId ?? null,
     verificationStatus: extra.verificationStatus ?? null,
     emailVerified: Boolean(user.emailVerifiedAt),
+    phoneVerified: Boolean(user.phoneVerifiedAt),
     notificationChannels: user.notificationChannels ?? [],
     district: extra.district ?? "",
     division: extra.division ?? "",

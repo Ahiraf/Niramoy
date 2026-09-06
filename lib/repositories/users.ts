@@ -1,7 +1,7 @@
 /**
  * Users, patients and the auth token tables.
  */
-import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
 
 import { getDb, type Database } from "../db/client";
 import * as t from "../db/schema";
@@ -19,6 +19,7 @@ export interface UserRow {
   passwordHash: string;
   passwordAlgo: PasswordAlgo;
   emailVerifiedAt: Date | null;
+  phoneVerifiedAt: Date | null;
   /** Extra delivery channels; `in_app` is implicit and not listed. */
   notificationChannels: string[];
   failedLoginCount: number;
@@ -36,6 +37,7 @@ const userColumns = {
   passwordHash: t.users.passwordHash,
   passwordAlgo: t.users.passwordAlgo,
   emailVerifiedAt: t.users.emailVerifiedAt,
+  phoneVerifiedAt: t.users.phoneVerifiedAt,
   notificationChannels: t.users.notificationChannels,
   failedLoginCount: t.users.failedLoginCount,
   lockedUntil: t.users.lockedUntil,
@@ -91,7 +93,17 @@ export async function updateProfile(
 ): Promise<UserRow | null> {
   const values: Record<string, unknown> = {};
   if (patch.name !== undefined) values.name = patch.name;
-  if (patch.phone !== undefined) values.phone = patch.phone;
+  if (patch.phone !== undefined) {
+    values.phone = patch.phone;
+    /**
+     * Changing the number un-verifies it, in the same statement that changes
+     * it. Comparing here rather than in a read-then-write means there is no
+     * window in which the row says "verified" about a number nobody proved,
+     * and re-saving the same number does not make somebody verify it twice.
+     */
+    values.phoneVerifiedAt = sql`CASE WHEN ${t.users.phone} IS DISTINCT FROM ${patch.phone}
+                                      THEN NULL ELSE ${t.users.phoneVerifiedAt} END`;
+  }
   if (patch.notificationChannels !== undefined) {
     values.notificationChannels = patch.notificationChannels;
   }
@@ -115,6 +127,26 @@ export async function setPassword(
 
 export async function markEmailVerified(userId: string, db: Database = getDb()): Promise<void> {
   await db.update(t.users).set({ emailVerifiedAt: new Date() }).where(eq(t.users.id, userId));
+}
+
+/**
+ * Record that the number on the account was proved.
+ *
+ * Conditional on the number still being the one that was verified: between
+ * sending a code and reading it back, the same person may have edited their
+ * profile in another tab, and the code proves nothing about the new number.
+ */
+export async function markPhoneVerified(
+  userId: string,
+  phone: string,
+  db: Database = getDb(),
+): Promise<boolean> {
+  const rows = await db
+    .update(t.users)
+    .set({ phoneVerifiedAt: new Date() })
+    .where(and(eq(t.users.id, userId), eq(t.users.phone, phone)))
+    .returning({ id: t.users.id });
+  return Boolean(rows[0]);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -235,7 +267,7 @@ export async function updatePatient(
 /* Auth tokens                                                                 */
 /* -------------------------------------------------------------------------- */
 
-export type TokenPurpose = "email_verification" | "password_reset";
+export type TokenPurpose = "email_verification" | "password_reset" | "phone_verification";
 
 export async function createAuthToken(
   input: { userId: string; purpose: TokenPurpose; tokenHash: string; expiresAt: Date; ipHash?: string | null },
@@ -285,6 +317,88 @@ export async function consumeAuthToken(
       expiresAt: t.authTokens.expiresAt,
     });
   return (rows[0] as AuthTokenRow | undefined) ?? null;
+}
+
+export interface LiveTokenRow {
+  id: string;
+  tokenHash: string;
+  attemptCount: number;
+  expiresAt: Date;
+}
+
+/**
+ * The newest unconsumed, unexpired token of a purpose for one user.
+ *
+ * Link tokens are looked up BY their hash — the token is the credential and the
+ * account is whatever it points at. A six-digit code cannot work that way: the
+ * codes are short enough to collide across accounts, so the account comes from
+ * the session and the code is checked against it. That is also what lets the
+ * wrong guesses be counted somewhere.
+ */
+export async function findLiveAuthToken(
+  userId: string,
+  purpose: TokenPurpose,
+  db: Database = getDb(),
+): Promise<LiveTokenRow | null> {
+  const rows = await db
+    .select({
+      id: t.authTokens.id,
+      tokenHash: t.authTokens.tokenHash,
+      attemptCount: t.authTokens.attemptCount,
+      expiresAt: t.authTokens.expiresAt,
+    })
+    .from(t.authTokens)
+    .where(
+      and(
+        eq(t.authTokens.userId, userId),
+        eq(t.authTokens.purpose, purpose),
+        isNull(t.authTokens.consumedAt),
+        sql`${t.authTokens.expiresAt} > now()`,
+      ),
+    )
+    .orderBy(desc(t.authTokens.createdAt))
+    .limit(1);
+  return (rows[0] as LiveTokenRow | undefined) ?? null;
+}
+
+/**
+ * Count a wrong guess, and burn the token once there have been too many.
+ *
+ * Both happen in one statement: an attacker firing concurrent guesses must not
+ * be able to have several of them read the same count and each decide it is
+ * still under the limit. Returns how many attempts have now been made.
+ */
+export async function recordTokenAttempt(
+  tokenId: string,
+  maxAttempts: number,
+  db: Database = getDb(),
+): Promise<number> {
+  const rows = await db
+    .update(t.authTokens)
+    .set({
+      attemptCount: sql`${t.authTokens.attemptCount} + 1`,
+      consumedAt: sql`CASE WHEN ${t.authTokens.attemptCount} + 1 >= ${maxAttempts}
+                           THEN now() ELSE ${t.authTokens.consumedAt} END`,
+    })
+    .where(eq(t.authTokens.id, tokenId))
+    .returning({ attemptCount: t.authTokens.attemptCount });
+  return Number(rows[0]?.attemptCount ?? maxAttempts);
+}
+
+/**
+ * Spend a token found by id. Conditional on it still being unconsumed, so two
+ * concurrent requests holding the same correct code cannot both succeed.
+ */
+export async function consumeAuthTokenById(
+  tokenId: string,
+  db: Database = getDb(),
+): Promise<boolean> {
+  const rows = await db
+    .update(t.authTokens)
+    .set({ consumedAt: new Date() })
+    .where(and(eq(t.authTokens.id, tokenId), isNull(t.authTokens.consumedAt)))
+    .returning({ id: t.authTokens.id });
+  return Boolean(rows[0]);
 }
 
 /** Invalidate outstanding tokens of a purpose — e.g. after a password change. */

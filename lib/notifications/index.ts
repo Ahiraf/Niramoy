@@ -14,8 +14,10 @@
 
 import { getEnv } from "../config/env";
 import { getEmailProvider } from "./providers";
+import { getSmsProvider, type SmsResult } from "./sms";
 
 export * from "./providers";
+export * from "./sms";
 
 const signOff = (): string =>
   `\n—\nNiramoy · নিরাময়\nIf you did not expect this email, you can ignore it.\n`;
@@ -34,6 +36,33 @@ export async function sendEmailVerification(input: {
       `Confirm your email address to finish setting up your Niramoy account:\n\n${url}\n\n` +
       `This link expires in 24 hours.\n` +
       signOff(),
+  });
+}
+
+/**
+ * The sign-up verification code.
+ *
+ * Bilingual, and in that order: the code itself is the only part that has to be
+ * read accurately, so it appears once in ASCII digits — a Bangla-numeral code
+ * (১২৩৪৫৬) would have to be transcribed back into an ASCII field, which is a
+ * transcription error waiting to lock someone out of their own account. The
+ * Bangla line carries the meaning around it, which is the part a patient who
+ * does not read English otherwise loses.
+ *
+ * Deliberately short: Bangla text is sent as UCS-2, which is 70 characters per
+ * SMS segment rather than 160, and every extra segment is another chance for a
+ * handset relay to deliver half a message.
+ */
+export async function sendPhoneVerificationCode(input: {
+  to: string;
+  code: string;
+  expiresInMinutes: number;
+}): Promise<SmsResult> {
+  return getSmsProvider().send({
+    to: input.to,
+    text:
+      `Niramoy code: ${input.code} (${input.expiresInMinutes} min). Do not share it.\n` +
+      `নিরাময় কোড: ${input.code} — ${input.expiresInMinutes} মিনিট। কাউকে জানাবেন না।`,
   });
 }
 
@@ -125,6 +154,28 @@ export async function sendNotificationCopy(input: {
       `You are receiving this because email is switched on in your Niramoy\n` +
       `notification settings. You can turn it off there at any time.\n` +
       signOff(),
+  });
+  return { delivered: result.delivered };
+}
+
+/**
+ * The same in-app notification, as a text message.
+ *
+ * Thinner than the email and for the same reason, plus one of its own: an SMS
+ * sits unencrypted on a lock screen anyone standing nearby can read. Title and
+ * one line, no link — a URL in an SMS is both a phishing pattern and the fastest
+ * way onto an operator's spam filter — and a hard cap, because a long Bangla
+ * message becomes several segments and a handset relay may deliver only some.
+ */
+export async function sendNotificationSms(input: {
+  to: string;
+  title: string;
+  body: string;
+}): Promise<{ delivered: boolean }> {
+  const line = `Niramoy — ${input.title}. ${input.body}`;
+  const result = await getSmsProvider().send({
+    to: input.to,
+    text: line.length > 300 ? `${line.slice(0, 297)}…` : line,
   });
   return { delivered: result.delivered };
 }
