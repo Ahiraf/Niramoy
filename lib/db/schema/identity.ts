@@ -50,6 +50,13 @@ export const users = pgTable(
     passwordChangedAt: timestamp("password_changed_at", { withTimezone: true }),
 
     emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+    /**
+     * When this person proved they hold the SIM, by reading back a code we sent
+     * to it. Cleared whenever `phone` changes: verification is a fact about a
+     * number, not about an account, and it does not survive the number being
+     * edited.
+     */
+    phoneVerifiedAt: timestamp("phone_verified_at", { withTimezone: true }),
 
     /** Brute-force / credential-stuffing counters (brief §7). */
     failedLoginCount: integer("failed_login_count").notNull().default(0),
@@ -151,6 +158,16 @@ export const authTokens = pgTable(
     tokenHash: text("token_hash").notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     consumedAt: timestamp("consumed_at", { withTimezone: true }),
+
+    /**
+     * Wrong guesses against this token.
+     *
+     * A link token has 256 bits of entropy and nobody guesses it; a six-digit
+     * SMS code has about twenty, and the cap on guesses is what stands between
+     * that code and an attacker with a loop. Counted per token rather than per
+     * account so a burnt code dies on its own without locking the person out.
+     */
+    attemptCount: integer("attempt_count").notNull().default(0),
 
     requestedIpHash: text("requested_ip_hash"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

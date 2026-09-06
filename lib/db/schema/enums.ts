@@ -161,4 +161,8 @@ export const paymentStatus = pgEnum("payment_status", [
   "cancelled",
 ]);
 
-export const tokenPurpose = pgEnum("token_purpose", ["email_verification", "password_reset"]);
+export const tokenPurpose = pgEnum("token_purpose", [
+  "email_verification",
+  "password_reset",
+  "phone_verification",
+]);

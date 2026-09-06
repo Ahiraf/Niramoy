@@ -29,6 +29,13 @@
       "when": 1788194856454,
       "tag": "0003_notification_channels",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788700000000,
+      "tag": "0004_phone_verification",
+      "breakpoints": true
     }
   ]
 }
