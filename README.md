@@ -16,6 +16,10 @@ adds symptom triage, doctor recommendation, and automated visit summaries.
   on a clean checkout with no infrastructure
 - **Session auth** — email + password accounts for the three roles
   (patient / doctor / admin), hashed, HttpOnly session cookie
+- **TextBee** — SMS through an Android handset on a Bangladeshi SIM: the
+  six-digit code that proves a mobile number at sign-up, and reminders to
+  numbers that were proved. With no key the code prints to the server log and
+  the API says it was not delivered, so sign-up still works on a clean checkout
 - **Vercel Cron** — appointment reminders + no-show sweep *(next increment)*
 - **Jitsi / Daily** — embedded video consultation *(room placeholder in place)*
 - **Gemma / OpenAI** — AI triage, recommendation, visit summaries
@@ -231,6 +235,8 @@ GET    /api/auth                         current session ({user: null} when sign
 DELETE /api/auth                         sign out
 POST   /api/auth/login                   email + password + role
 POST   /api/auth/register                sign up (doctor: BM&DC no.; admin: invite code)
+POST   /api/auth/verify-phone            send a six-digit SMS code to the account's mobile
+PATCH  /api/auth/verify-phone            confirm that code
 GET    /api/reference                    specialties + divisions + facilities + stats
 GET    /api/doctors                      search: text, specialty, division, district,
                                          language, maxFee, minRating, sort, paging
