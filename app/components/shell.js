@@ -131,7 +131,7 @@ export function Sidebar({ active, onNavigate, role, user, onSignOut, counts, ope
  * In the topbar rather than buried in settings: a patient who cannot read the
  * interface cannot navigate to the page where they would change it.
  */
-function LanguageSwitch() {
+export function LanguageSwitch() {
   const { lang, setLang, t } = useT();
   return (
     <div className="lang-switch" role="group" aria-label={t("common.language")}>

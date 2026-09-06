@@ -30,7 +30,8 @@ const TEXT_SIZE_BOOTSTRAP = `try{
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    // Bangla is the default; LanguageProvider updates this when it is changed.
+    <html lang="bn">
       <head>
         <script dangerouslySetInnerHTML={{ __html: TEXT_SIZE_BOOTSTRAP }} />
       </head>
