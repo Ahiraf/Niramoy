@@ -43,6 +43,18 @@ export const RATE_LIMITS = {
   // somebody else's phone bill and somebody else's inbox, not just our load.
   // Three per hour covers a mistyped number and a resend; nothing more.
   "phone-verify:send": { limit: 3, windowSeconds: 3600 },
+  /*
+   * The sign-up code is the only endpoint in the application where somebody
+   * with no account can make us text a stranger. Limited on both axes, because
+   * either one alone is trivially defeated: per number, so nobody can be texted
+   * repeatedly however many addresses the requests come from; per address, so
+   * one script cannot walk a list of numbers. The IP bucket is the looser of
+   * the two — a Bangladeshi mobile network puts a great many real people behind
+   * one address, and locking them out to stop one script is the wrong trade.
+   */
+  "signup-otp:phone": { limit: 3, windowSeconds: 3600 },
+  "signup-otp:ip": { limit: 15, windowSeconds: 3600 },
+  "signup-otp:confirm": { limit: 20, windowSeconds: 900 },
   // The per-code guess cap is the real defence (see services/phone-verification);
   // this stops the same client working through fresh codes all afternoon.
   "phone-verify:confirm": { limit: 15, windowSeconds: 900 },
