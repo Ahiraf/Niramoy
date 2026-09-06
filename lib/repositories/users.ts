@@ -66,6 +66,8 @@ export interface CreateUserInput {
   name: string;
   email: string;
   phone?: string | null;
+  /** True only when a code was read back before the account was created. */
+  phoneVerified?: boolean;
   passwordHash: string;
   passwordAlgo: PasswordAlgo;
 }
@@ -78,6 +80,7 @@ export async function createUser(input: CreateUserInput, db: Database = getDb())
       name: input.name,
       email: normaliseEmail(input.email),
       phone: input.phone ?? null,
+      phoneVerifiedAt: input.phoneVerified ? new Date() : null,
       passwordHash: input.passwordHash,
       passwordAlgo: input.passwordAlgo,
       passwordChangedAt: new Date(),

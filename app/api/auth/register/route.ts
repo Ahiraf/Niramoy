@@ -52,16 +52,17 @@ export const POST = withRoute("POST /api/auth/register", async (request, { reque
   );
 
   /**
-   * The first SMS code, sent as part of sign-up so the person is still holding
-   * their phone when it arrives.
+   * A code, only for an account that arrived here without a proved number.
    *
-   * A gateway outage must not fail the registration either: the account exists,
-   * the session is issued, and the verification screen offers a resend. What it
-   * must not do is claim a code is on its way when none is — hence
+   * Patients and doctors cannot: they passed /api/auth/signup-otp before this
+   * form appeared, and their number is already verified. What is left is the
+   * staff path, where an admin may have given a number without one. A gateway
+   * outage must not fail the registration — the account exists and the session
+   * is issued — but it must not claim a code is coming either, hence
    * `phoneVerification: null` rather than an optimistic shape.
    */
   let phoneVerification = null;
-  if (user.phone) {
+  if (user.phone && !user.phoneVerified) {
     phoneVerification = await startPhoneVerification(user.id, {}, { ip, requestId }).catch(
       (err: unknown) => {
         logger.error("verification sms failed at sign-up", { err, userId: user.id });

@@ -27,6 +27,7 @@ import {
 } from "../auth/password";
 import { generateToken, hashClientAttribute, hashToken } from "../auth/tokens";
 import { normalisePhone } from "../auth/phone";
+import { claimSignupVerification } from "./phone-verification";
 import { SESSION_TTL_SECONDS } from "../auth/cookies";
 import { checkAdminInviteCode } from "../security/authz";
 import * as sessions from "../repositories/sessions";
@@ -121,6 +122,8 @@ export interface RegisterInput {
   inviteCode?: unknown;
   division?: unknown;
   district?: unknown;
+  /** Proof from /api/auth/signup-otp that this number was confirmed. */
+  verificationTicket?: unknown;
 }
 
 const ROLES: UserRole[] = ["patient", "doctor", "admin"];
@@ -140,9 +143,15 @@ export async function register(
   if (!role) problems.role = ["Pick patient, doctor or admin."];
 
   /**
-   * The number is optional, but a number that is given has to be one we can
-   * send to. Storing "0171-234" would produce an account that looks reachable
-   * and is not, and the person would find out when they missed a consultation.
+   * The number, and whether it was proved.
+   *
+   * Patients and doctors reach this endpoint having already passed the code
+   * step, so a verified number is required of them: it is the one contact
+   * detail this platform actually depends on, and an account whose number was
+   * never proved is an account we cannot reach about a consultation. Admin
+   * accounts are staff accounts gated by an invite code, and are not held to
+   * it — a member of staff being added by their own team is a different
+   * situation from a stranger claiming a number.
    */
   const phoneGiven = String(input.phone ?? "").trim();
   const phone = phoneGiven ? normalisePhone(phoneGiven) : null;
@@ -151,6 +160,8 @@ export async function register(
       "Enter a Bangladeshi mobile number, like 01712 345678.",
       "বাংলাদেশি মোবাইল নম্বর দিন, যেমন ০১৭১২ ৩৪৫৬৭৮।",
     ];
+  } else if (!phone && role !== "admin") {
+    problems.phone = ["Confirm your mobile number to continue."];
   }
 
   const passwordProblems = checkPasswordStrength(password);
@@ -165,6 +176,25 @@ export async function register(
     throw new AppError("VALIDATION_FAILED", {
       details: { inviteCode: ["That staff invite code isn't valid."] },
     });
+  }
+
+  /**
+   * Spend the ticket from the code step.
+   *
+   * Done before the account is created and never after: a ticket that is
+   * checked but not consumed is a ticket that can be used twice, and this one
+   * is the only evidence that the number on the account belongs to whoever is
+   * filling in the form.
+   */
+  let phoneVerified = false;
+  if (phone && role !== "admin") {
+    phoneVerified = await claimSignupVerification(phone.e164, input.verificationTicket);
+    if (!phoneVerified) {
+      throw new AppError("NOT_ELIGIBLE", {
+        message: "That number needs confirming again. Ask for a new code.",
+        meta: { reason: "signup_ticket_invalid" },
+      });
+    }
   }
 
   if (await users.findByEmail(email)) {
@@ -184,6 +214,7 @@ export async function register(
     email,
     // Stored in E.164, which is what the SMS gateway is handed later.
     phone: phone?.e164 ?? null,
+    phoneVerified,
     passwordHash: hashed.hash,
     passwordAlgo: hashed.algo,
   });
