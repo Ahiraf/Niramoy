@@ -689,13 +689,14 @@ textarea.field, .textarea { height: auto; padding: 10px 12px; line-height: 1.55;
 .landing-figures span { display: block; color: var(--muted); font-size: calc(10.5px * var(--text-scale)); margin-top: 4px; }
 
 .landing-hero-art { display: flex; justify-content: center; }
-/* Portrait art in a landscape hero: bound it by height and let the width
-   follow, so the whole scene stays visible instead of being cropped, and the
-   column never grows taller than the copy beside it. */
+/* Portrait art in a landscape hero. Sized from the WIDTH of its column, not
+   capped by height: a height cap left it floating in the middle of a column
+   twice its width, reading as a thumbnail rather than as the hero image. It is
+   allowed to run a little taller than the copy beside it — the section is
+   centre-aligned, so the two columns balance. */
 .landing-hero-art img {
-  width: auto; height: auto;
-  max-width: 100%; max-height: 540px;
-  border-radius: 22px; box-shadow: 0 20px 44px rgba(31,75,78,.16);
+  width: 100%; height: auto; max-width: 470px;
+  border-radius: 24px; box-shadow: 0 22px 50px rgba(31,75,78,.18);
 }
 
 .landing-section { max-width: 1220px; margin: 0 auto; padding: 58px 44px; }
@@ -806,7 +807,7 @@ textarea.field, .textarea { height: auto; padding: 10px 12px; line-height: 1.55;
   .landing-hero h1 { font-size: calc(40px * var(--text-scale)); }
   /* Stacked under the copy rather than dropped: it is the illustration of what
      the product does, and it is the first thing a phone visitor scrolls past. */
-  .landing-hero-art img { max-height: 420px; }
+  .landing-hero-art img { max-width: 400px; }
   .landing-role-grid, .landing-feature-grid { grid-template-columns: repeat(2, 1fr); }
   .landing-steps { grid-template-columns: repeat(2, 1fr); }
   .auth-page { grid-template-columns: 1fr; }
