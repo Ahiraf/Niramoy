@@ -55,6 +55,17 @@ const schema = z
     EMAIL_API_KEY: z.string().optional(),
     EMAIL_FROM: z.string().optional(),
 
+    /**
+     * SMS. `console` prints the message instead of sending it, which is what
+     * makes sign-up reviewable without a gateway; `textbee` posts to a TextBee
+     * account, which relays through an Android handset on a Bangladeshi SIM.
+     */
+    SMS_PROVIDER: z.enum(["console", "textbee"]).optional(),
+    TEXTBEE_API_KEY: z.string().optional(),
+    /** Optional: send from one specific handset rather than the account default. */
+    TEXTBEE_DEVICE_ID: z.string().optional(),
+    TEXTBEE_BASE_URL: z.string().url().optional(),
+
     VIDEO_PROVIDER: z.enum(["demo", "daily", "jitsi"]).optional(),
     VIDEO_API_KEY: z.string().optional(),
     VIDEO_API_SECRET: z.string().optional(),
@@ -128,11 +139,26 @@ const schema = z
       /** No key means the rule engine. This is a safety property, not a default. */
       aiProvider: raw.AI_PROVIDER ?? (raw.AI_API_KEY && raw.AI_BASE_URL ? "openai-compatible" : "rules"),
       emailProvider: raw.EMAIL_PROVIDER ?? (raw.EMAIL_API_KEY ? "resend" : "console"),
+      /** A key means a gateway; no key means the code is printed, never sent. */
+      smsProvider: raw.SMS_PROVIDER ?? (raw.TEXTBEE_API_KEY ? "textbee" : "console"),
       videoProvider: raw.VIDEO_PROVIDER ?? (raw.VIDEO_API_KEY ? "daily" : "demo"),
       paymentProvider: raw.PAYMENT_PROVIDER ?? "mock",
     };
   })
   .superRefine((cfg, ctx) => {
+    /**
+     * Asking for the gateway without a key is a misconfiguration in every
+     * environment, not just production: the code would be generated, the
+     * account would be told it was sent, and nothing would leave the building.
+     */
+    if (cfg.smsProvider === "textbee" && !cfg.TEXTBEE_API_KEY) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["TEXTBEE_API_KEY"],
+        message: "SMS_PROVIDER=textbee requires TEXTBEE_API_KEY",
+      });
+    }
+
     if (!cfg.isProd) return;
 
     // Production must not run on a defaulted secret.

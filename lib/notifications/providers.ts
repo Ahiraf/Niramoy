@@ -4,10 +4,10 @@
  * An interface with two implementations, so the application works with no email
  * credentials configured and gains real delivery by setting one variable.
  *
- * SMS is not implemented. The interface is shaped so it can be added without
- * touching a caller, but shipping a stub that silently drops messages would be
- * worse than not having it: an appointment reminder that appears to send and
- * does not is a missed consultation.
+ * SMS lives next door in ./sms.ts and follows the same shape. It differs in one
+ * respect worth knowing before copying this file: its console implementation
+ * reports `delivered: false`, because a verification code that appears to send
+ * and does not is an account nobody can finish creating.
  */
 
 import { getEnv } from "../config/env";
