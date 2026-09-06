@@ -95,6 +95,10 @@ export const api = {
   requestPasswordReset: (body) => request("/api/auth/password-reset", { method: "POST", body }),
   completePasswordReset: (body) => request("/api/auth/password-reset", { method: "PATCH", body }),
   verifyEmail: (body) => request("/api/auth/verify-email", { method: "POST", body }),
+  /** The code at the front of sign-up, before any account exists. */
+  sendSignupOtp: (body) => request("/api/auth/signup-otp", { method: "POST", body }),
+  confirmSignupOtp: (body) => request("/api/auth/signup-otp", { method: "PATCH", body }),
+
   /** Sends an SMS code. Pass `{ phone }` to correct the number first. */
   sendPhoneCode: (body = {}) => request("/api/auth/verify-phone", { method: "POST", body }),
   confirmPhoneCode: (body) => request("/api/auth/verify-phone", { method: "PATCH", body }),

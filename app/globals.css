@@ -1095,6 +1095,40 @@ body {
 }
 .toggle.locked { opacity: .55; }
 
+/* --- Sign-up: the code step ------------------------------------------------- */
+/* Two steps, and the second one is not reachable until the first is done, so
+   the indicator is a statement of where you are rather than navigation. */
+.auth-step-line { display: flex; align-items: center; gap: 9px; margin-bottom: 18px; }
+.auth-step-line span {
+  width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+  font-size: calc(10px * var(--text-scale)); font-weight: 800;
+  background: #eef2f1; color: #8b9b9f;
+}
+.auth-step-line span.on { background: var(--teal); color: #fff; }
+.auth-step-line i { flex: 1; height: 2px; background: #eef2f1; border-radius: 2px; }
+
+/* Wide, spaced digits: this field is read off one screen and typed into
+   another, and the spacing is what makes a mistyped digit visible. */
+.field.auth-otp {
+  font-size: calc(20px * var(--text-scale)); font-weight: 750;
+  letter-spacing: .34em; text-align: center; font-variant-numeric: tabular-nums;
+}
+
+.auth-countdown {
+  display: flex; align-items: center; gap: 7px; margin: -6px 0 16px;
+  color: var(--muted); font-size: calc(11px * var(--text-scale)); font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.auth-countdown.out { color: var(--red); }
+
+.auth-verified-phone {
+  display: flex; align-items: center; gap: 9px;
+  border: 1px solid var(--mint); background: var(--teal-soft); color: var(--teal-dark);
+  border-radius: 10px; padding: 11px 13px; font-size: calc(12px * var(--text-scale));
+}
+.auth-verified-phone strong { font-variant-numeric: tabular-nums; }
+.auth-verified-phone .text-link { margin-left: auto; font-size: calc(11px * var(--text-scale)); }
+
 /* --- Confirming a mobile number --------------------------------------------- */
 /* Sits under the phone field in Settings and inside the sign-up step. Set apart
    from the fields around it because it is an action on the number, not another

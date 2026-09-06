@@ -78,6 +78,179 @@ const EMPTY = {
 };
 
 /**
+ * The first step of signing up: prove the number before filling in anything
+ * else.
+ *
+ * Patients and doctors pass through here; staff accounts do not, because an
+ * invite code already establishes who they are. Nothing is created until the
+ * code comes back — there is no half-made account to clean up if somebody
+ * mistypes a digit and walks away.
+ *
+ * The five-minute clock is shown counting down rather than left implicit. A
+ * code that has quietly expired looks exactly like a code that is wrong, and
+ * the difference — resend, versus check what you typed — is the one thing the
+ * person needs to know.
+ */
+function SignupOtpStep({ api, role, onVerified, onBack }) {
+  const [phone, setPhone] = useState("");
+  const [code, setCode] = useState("");
+  const [sent, setSent] = useState(null);
+  const [deadline, setDeadline] = useState(null);
+  const [now, setNow] = useState(() => Date.now());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Computed from wall-clock rather than counted down, so a tab that slept
+  // through the window comes back showing the truth instead of 4:58.
+  useEffect(() => {
+    if (!deadline) return undefined;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [deadline]);
+
+  const secondsLeft = deadline ? Math.max(0, Math.ceil((deadline - now) / 1000)) : 0;
+  const expired = Boolean(sent) && secondsLeft === 0;
+  const clock = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")}`;
+
+  const send = async () => {
+    setBusy(true);
+    setError(null);
+    const result = await api.sendSignupOtp({ phone });
+    setBusy(false);
+
+    if (!result.ok) {
+      setError(result.error?.details?.phone?.[0] ?? result.message);
+      return;
+    }
+    setSent(result.phoneVerification);
+    setDeadline(Date.now() + result.phoneVerification.expiresInSeconds * 1000);
+    setNow(Date.now());
+    setCode("");
+  };
+
+  const confirm = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    const result = await api.confirmSignupOtp({ phone, code });
+    setBusy(false);
+
+    if (!result.ok) {
+      setError(result.error?.details?.code?.[0] ?? result.message);
+      return;
+    }
+    // The ticket is what registration spends; the raw number goes with it,
+    // because a ticket is only good for the number it was issued against.
+    onVerified({ phone, masked: result.phoneVerification.phone, ticket: result.phoneVerification.ticket });
+  };
+
+  return (
+    <div className="auth-card">
+      <div className="auth-step-line" aria-hidden="true">
+        <span className="on">1</span>
+        <i />
+        <span>2</span>
+      </div>
+
+      <h1>{role === "doctor" ? "Confirm your mobile number" : "Start with your mobile number"}</h1>
+      <p className="auth-sub">
+        {sent
+          ? `We sent a six-digit code to ${sent.phone}.`
+          : "We'll text you a six-digit code. Appointment reminders go to this number too."}
+        <br />
+        <span lang="bn">
+          {sent ? "কোডটি নিচে লিখুন।" : "আপনার মোবাইলে একটি কোড পাঠানো হবে।"}
+        </span>
+      </p>
+
+      {error && (
+        <div className="auth-error" role="alert">
+          <Icon name="alert" size={14} /> {error}
+        </div>
+      )}
+
+      {sent && !sent.delivered && (
+        <p className="auth-note">
+          <Icon name="alert" size={13} />
+          No SMS gateway is connected to this deployment, so the code was written to the server
+          log instead of sent.
+        </p>
+      )}
+
+      {!sent ? (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            send();
+          }}
+          noValidate
+        >
+          <Field label="Mobile number" hint="Bangladeshi mobile numbers only.">
+            <input
+              className="field" value={phone} autoComplete="tel" inputMode="tel" required
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="01712 345678"
+            />
+          </Field>
+          <button className="button primary auth-submit" type="submit" disabled={busy || !phone.trim()}>
+            {busy ? "Sending…" : "Send OTP"}
+            {!busy && <Icon name="arrow" size={13} />}
+          </button>
+        </form>
+      ) : (
+        <form onSubmit={confirm} noValidate>
+          <Field label="Six-digit code">
+            <input
+              className="field auth-otp" value={code} required autoFocus
+              inputMode="numeric" autoComplete="one-time-code" maxLength={6} pattern="[0-9]*"
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="123456"
+              disabled={expired}
+            />
+          </Field>
+
+          <p className={`auth-countdown ${expired ? "out" : ""}`} role="timer" aria-live="off">
+            <Icon name="clock" size={13} />
+            {expired ? "This code has expired. Send a new one." : `Expires in ${clock}`}
+          </p>
+
+          <button
+            className="button primary auth-submit"
+            type="submit"
+            disabled={busy || expired || code.length !== 6}
+          >
+            {busy ? "Checking…" : "Verify and continue"}
+            {!busy && <Icon name="arrow" size={13} />}
+          </button>
+        </form>
+      )}
+
+      <p className="auth-swap">
+        {sent && (
+          <>
+            <button className="text-link" onClick={send} disabled={busy}>
+              {expired ? "Send a new code" : "Send it again"}
+            </button>
+            {" · "}
+            <button
+              className="text-link"
+              onClick={() => { setSent(null); setDeadline(null); setError(null); }}
+              disabled={busy}
+            >
+              Change number
+            </button>
+          </>
+        )}
+      </p>
+
+      <p className="auth-legal">
+        <button className="text-link" onClick={onBack}>Back to sign in</button>
+      </p>
+    </div>
+  );
+}
+
+/**
  * The step between "account created" and "you're in": read the six digits we
  * just sent to the number on the account, and type them back.
  *
@@ -228,12 +401,21 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
   const [showPassword, setShowPassword] = useState(false);
   /** Set once an account exists but its number is still unproved. */
   const [pending, setPending] = useState(null);
+  /** Set once the number is proved and before the account exists. */
+  const [verified, setVerified] = useState(null);
 
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
   useEffect(() => { setMode(initialMode ?? "signin"); }, [initialMode]);
   useEffect(() => { setRole(initialRole ?? "patient"); }, [initialRole]);
-  useEffect(() => { setError(null); setFieldErrors({}); }, [mode, role]);
+  // A proved number belongs to the tab it was proved on. Switching role or
+  // going to sign-in drops it: the ticket is for one number and one account,
+  // and carrying it around would be a claim nobody made.
+  useEffect(() => {
+    setError(null);
+    setFieldErrors({});
+    setVerified(null);
+  }, [mode, role]);
 
   const specialties = reference?.specialties ?? [];
   const divisions = reference?.divisions ?? [];
@@ -263,7 +445,10 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
           name: form.name,
           email: form.email,
           password: form.password,
-          phone: form.phone,
+          // The proved number and the ticket that proves it, together: the
+          // server will only accept the ticket for the number it was issued to.
+          phone: verified?.phone ?? form.phone,
+          ...(verified ? { verificationTicket: verified.ticket } : {}),
           role,
           ...(role === "patient" ? { division: form.division, district: form.district } : {}),
           ...(role === "doctor"
@@ -355,7 +540,14 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
 
       {/* ------------------------------------------------------------------ */}
       <main className="auth-main">
-        {pending ? (
+        {signUp && role !== "admin" && !verified && !pending ? (
+          <SignupOtpStep
+            api={api}
+            role={role}
+            onVerified={setVerified}
+            onBack={() => setMode("signin")}
+          />
+        ) : pending ? (
           <PhoneStep
             api={api}
             pending={pending}
@@ -416,11 +608,30 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
               />
             </Field>
 
-            {signUp && (
+            {/* Already proved, one step ago. Shown rather than asked for again,
+                and not editable here: the ticket the server will check was
+                issued against this exact number. */}
+            {signUp && verified && (
+              <Field label="Mobile number" hint="Confirmed. Appointment reminders go here.">
+                <div className="auth-verified-phone">
+                  <Icon name="check" size={14} />
+                  <strong>{verified.masked}</strong>
+                  <button
+                    type="button"
+                    className="text-link"
+                    onClick={() => setVerified(null)}
+                  >
+                    Use a different number
+                  </button>
+                </div>
+              </Field>
+            )}
+
+            {signUp && !verified && (
               <Field
                 label="Mobile number"
                 error={fieldErrors.phone}
-                hint="We'll text a code to confirm it. Appointment reminders go here."
+                hint="Optional for staff accounts."
               >
                 <input
                   className="field" value={form.phone} autoComplete="tel" inputMode="tel"
