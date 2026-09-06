@@ -1095,6 +1095,18 @@ body {
 }
 .toggle.locked { opacity: .55; }
 
+/* --- Confirming a mobile number --------------------------------------------- */
+/* Sits under the phone field in Settings and inside the sign-up step. Set apart
+   from the fields around it because it is an action on the number, not another
+   thing to type into the profile form. */
+.settings-phone-verify {
+  border: 1px dashed var(--line); border-radius: 12px;
+  padding: 13px 14px 4px; margin: -4px 0 16px;
+}
+.settings-phone-verify .auth-note { margin-bottom: 12px; }
+.settings-phone-verify .button { margin-bottom: 10px; }
+.settings-phone-verify .text-link { margin-left: 12px; }
+
 /* --- Payment session clock -------------------------------------------------- */
 /* Counts down the bKash session, never the appointment. The copy beside it
    says so, because a timer in a booking flow reads as "lose your slot". */

@@ -48,6 +48,104 @@ function ToggleRow({ icon, title, hint, on, onToggle, locked = false, pending = 
   );
 }
 
+/**
+ * Confirming the number from Settings — the other half of the promise the
+ * sign-up screen makes when it offers "you can do this later".
+ *
+ * It verifies the SAVED number, not what is currently typed in the field above,
+ * and says so when those differ: sending a code to a number the account does
+ * not hold yet would prove something about nothing.
+ */
+function PhoneVerification({ api, user, typedPhone, onUserChange, notify }) {
+  const [sent, setSent] = useState(null);
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  if (!user?.phone) return null;
+
+  if (user.phoneVerified) {
+    return (
+      <p className="auth-note" role="status">
+        <Icon name="check" size={13} /> This number is confirmed.
+      </p>
+    );
+  }
+
+  const unsaved = (typedPhone ?? "") !== (user.phone ?? "");
+
+  const send = async () => {
+    setBusy(true);
+    setError(null);
+    const result = await api.sendPhoneCode();
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error?.details?.phone?.[0] ?? result.message);
+      return;
+    }
+    setSent(result.phoneVerification);
+    notify?.(
+      result.phoneVerification.delivered
+        ? "Code sent."
+        : "No SMS gateway is connected — the code went to the server log."
+    );
+  };
+
+  const confirm = async () => {
+    setBusy(true);
+    setError(null);
+    const result = await api.confirmPhoneCode({ code });
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error?.details?.code?.[0] ?? result.message);
+      return;
+    }
+    onUserChange?.({ ...user, phoneVerified: true });
+    notify?.("Mobile number confirmed");
+  };
+
+  return (
+    <div className="settings-phone-verify">
+      <p className="auth-note">
+        <Icon name="alert" size={13} />
+        This number isn&rsquo;t confirmed yet, so appointment reminders can&rsquo;t be sent to it
+        by SMS. <span lang="bn">নম্বরটি যাচাই করুন।</span>
+      </p>
+
+      {error && <p className="field-error" role="alert">{error}</p>}
+
+      {sent ? (
+        <>
+          <Field label={`Code sent to ${sent.phone}`}>
+            <input
+              className="field" value={code} inputMode="numeric" autoComplete="one-time-code"
+              maxLength={6} placeholder="123456"
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            />
+          </Field>
+          <button
+            className="button primary" type="button"
+            disabled={busy || code.length !== 6} onClick={confirm}
+          >
+            {busy ? "Checking…" : "Confirm number"}
+          </button>
+          <button className="text-link" type="button" onClick={send} disabled={busy}>
+            Send it again
+          </button>
+        </>
+      ) : (
+        <button className="button" type="button" onClick={send} disabled={busy || unsaved}>
+          {busy ? "Sending…" : "Send a confirmation code"}
+        </button>
+      )}
+
+      {unsaved && !sent && (
+        <p className="auth-note">Save your new number first, then confirm it.</p>
+      )}
+    </div>
+  );
+}
+
 function LinkRow({ icon, title, hint, action, onClick }) {
   return (
     <button className="appointment-row as-button" onClick={onClick}>
@@ -191,13 +289,21 @@ export function Settings({ user, role, doctor, reference, api, onNavigate, onUse
               <input className="field" type="email" value={user?.email ?? ""} readOnly disabled />
             </Field>
 
-            <Field label="Phone number">
+            <Field label="Phone number" hint="Bangladeshi mobile number — where SMS reminders go.">
               <input
                 className="field" value={form.phone} inputMode="tel"
                 onChange={(e) => set("phone", e.target.value)}
-                placeholder="+880 1XXX XXXXXX"
+                placeholder="01712 345678"
               />
             </Field>
+
+            <PhoneVerification
+              api={api}
+              user={user}
+              typedPhone={form.phone}
+              onUserChange={onUserChange}
+              notify={notify}
+            />
 
             {role !== "admin" && (
               <div className="field-row">
@@ -281,10 +387,14 @@ export function Settings({ user, role, doctor, reference, api, onNavigate, onUse
               />
               <ToggleRow
                 icon="bell" title="SMS"
-                hint="Saved, but not delivered yet — no SMS provider is connected"
+                hint={
+                  user?.phoneVerified
+                    ? "A short text for each reminder, sent to your confirmed number"
+                    : "Confirm your mobile number above and reminders start arriving by SMS"
+                }
                 on={channels.includes("sms")}
                 busy={savingChannels === "sms"}
-                pending
+                pending={!user?.phoneVerified}
                 onToggle={() => toggleChannel("sms")}
               />
               <ToggleRow

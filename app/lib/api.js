@@ -95,6 +95,9 @@ export const api = {
   requestPasswordReset: (body) => request("/api/auth/password-reset", { method: "POST", body }),
   completePasswordReset: (body) => request("/api/auth/password-reset", { method: "PATCH", body }),
   verifyEmail: (body) => request("/api/auth/verify-email", { method: "POST", body }),
+  /** Sends an SMS code. Pass `{ phone }` to correct the number first. */
+  sendPhoneCode: (body = {}) => request("/api/auth/verify-phone", { method: "POST", body }),
+  confirmPhoneCode: (body) => request("/api/auth/verify-phone", { method: "PATCH", body }),
 
   reference: () => request("/api/reference"),
 

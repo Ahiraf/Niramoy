@@ -77,6 +77,147 @@ const EMPTY = {
   inviteCode: "",
 };
 
+/**
+ * The step between "account created" and "you're in": read the six digits we
+ * just sent to the number on the account, and type them back.
+ *
+ * Skippable, deliberately. The account already exists and the session is
+ * already issued, so blocking here would strand somebody whose handset is out
+ * of signal on a screen they cannot leave. What skipping costs is stated on the
+ * screen rather than discovered later: no SMS reminders until it is done.
+ *
+ * `delivered: false` means no gateway is configured and the code was printed to
+ * the server log instead of sent. That is said plainly — a screen that asks for
+ * a code nobody could receive, without explaining why, is the worst version of
+ * this flow.
+ */
+function PhoneStep({ api, pending, onVerified, onSkip }) {
+  const [state, setState] = useState(pending.state);
+  const [code, setCode] = useState("");
+  const [phone, setPhone] = useState("");
+  const [editing, setEditing] = useState(!pending.state);
+  const [error, setError] = useState(null);
+  const [note, setNote] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const resend = async (nextPhone) => {
+    setBusy(true);
+    setError(null);
+    setNote(null);
+    const result = await api.sendPhoneCode(nextPhone ? { phone: nextPhone } : {});
+    setBusy(false);
+
+    if (!result.ok) {
+      setError(result.error?.details?.phone?.[0] ?? result.message);
+      return;
+    }
+    setState(result.phoneVerification);
+    setEditing(false);
+    setCode("");
+    setNote(
+      result.phoneVerification.delivered
+        ? "A new code is on its way."
+        : "No SMS gateway is configured here, so the code was printed to the server log."
+    );
+  };
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    setNote(null);
+    const result = await api.confirmPhoneCode({ code });
+    setBusy(false);
+
+    if (!result.ok) {
+      setError(result.error?.details?.code?.[0] ?? result.message);
+      return;
+    }
+    onVerified();
+  };
+
+  return (
+    <div className="auth-card">
+      <h1>Confirm your mobile number</h1>
+      <p className="auth-sub">
+        {state
+          ? `We sent a six-digit code to ${state.phone}. It expires in ${state.expiresInMinutes} minutes.`
+          : "We couldn't send a code just now. Check the number and try again."}
+        <br />
+        <span lang="bn">আপনার মোবাইলে পাঠানো ছয় সংখ্যার কোডটি লিখুন।</span>
+      </p>
+
+      {error && (
+        <div className="auth-error" role="alert">
+          <Icon name="alert" size={14} /> {error}
+        </div>
+      )}
+      {note && <p className="auth-note" role="status">{note}</p>}
+
+      {state && !state.delivered && (
+        <p className="auth-note">
+          <Icon name="alert" size={13} />
+          No SMS gateway is connected to this deployment, so the code was written to the server
+          log instead of sent.
+        </p>
+      )}
+
+      {editing ? (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            resend(phone);
+          }}
+          noValidate
+        >
+          <Field label="Mobile number" hint="Bangladeshi mobile numbers only — that's where the code goes.">
+            <input
+              className="field" value={phone} autoComplete="tel" inputMode="tel" required
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="01712 345678"
+            />
+          </Field>
+          <button className="button primary auth-submit" type="submit" disabled={busy}>
+            {busy ? "Sending…" : "Send the code"}
+          </button>
+        </form>
+      ) : (
+        <form onSubmit={submit} noValidate>
+          <Field label="Six-digit code">
+            <input
+              className="field" value={code} required
+              inputMode="numeric" autoComplete="one-time-code" maxLength={6} pattern="[0-9]*"
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="123456"
+              aria-describedby="phone-step-help"
+            />
+          </Field>
+          <button className="button primary auth-submit" type="submit" disabled={busy || code.length !== 6}>
+            {busy ? "Checking…" : "Confirm number"}
+            {!busy && <Icon name="arrow" size={13} />}
+          </button>
+        </form>
+      )}
+
+      <p className="auth-swap" id="phone-step-help">
+        <button className="text-link" onClick={() => resend()} disabled={busy}>
+          Send it again
+        </button>
+        {" · "}
+        <button className="text-link" onClick={() => { setEditing(true); setNote(null); }} disabled={busy}>
+          Use a different number
+        </button>
+      </p>
+
+      <p className="auth-legal">
+        You can do this later from Settings. Until then we can email you, but appointment
+        reminders won&rsquo;t reach you by SMS.
+      </p>
+      <button className="text-link" onClick={onSkip}>Skip for now</button>
+    </div>
+  );
+}
+
 export function AuthPage({ mode: initialMode, role: initialRole, reference, api, onBack, onAuthenticated }) {
   const [mode, setMode] = useState(initialMode ?? "signin");
   const [role, setRole] = useState(initialRole ?? "patient");
@@ -85,6 +226,8 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
   const [fieldErrors, setFieldErrors] = useState({});
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  /** Set once an account exists but its number is still unproved. */
+  const [pending, setPending] = useState(null);
 
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
@@ -143,11 +286,25 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
         return;
       }
       const message = explain(result);
-      if (result.reason?.startsWith("password_")) setFieldErrors({ password: message });
+      const phoneProblem = result.error?.details?.phone?.[0];
+      if (phoneProblem) setFieldErrors({ phone: phoneProblem });
+      else if (result.reason?.startsWith("password_")) setFieldErrors({ password: message });
       else if (result.reason?.startsWith("bmdc_")) setFieldErrors({ bmdcNumber: message });
       else if (result.reason === "invite_invalid") setFieldErrors({ inviteCode: message });
       else if (result.reason === "email_taken" || result.reason === "email_invalid") setFieldErrors({ email: message });
       else setError(message);
+      return;
+    }
+
+    // A new account with an unproved number stops here first. Signing in does
+    // not: the number was proved once, or it was skipped once, and re-asking on
+    // every sign-in would be a nag rather than a check.
+    if (signUp && result.user?.phone && !result.user.phoneVerified) {
+      setPending({
+        user: result.user,
+        draft: result.draft ?? null,
+        state: result.phoneVerification ?? null,
+      });
       return;
     }
 
@@ -198,6 +355,16 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
 
       {/* ------------------------------------------------------------------ */}
       <main className="auth-main">
+        {pending ? (
+          <PhoneStep
+            api={api}
+            pending={pending}
+            onVerified={() =>
+              onAuthenticated({ ...pending.user, phoneVerified: true }, pending.draft)
+            }
+            onSkip={() => onAuthenticated(pending.user, pending.draft)}
+          />
+        ) : (
         <div className="auth-card">
           <div className="auth-role-tabs" role="tablist" aria-label="Account type">
             {ROLE_TABS.map((tab) => (
@@ -250,11 +417,15 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
             </Field>
 
             {signUp && (
-              <Field label="Mobile number" hint="Used for appointment reminders.">
+              <Field
+                label="Mobile number"
+                error={fieldErrors.phone}
+                hint="We'll text a code to confirm it. Appointment reminders go here."
+              >
                 <input
                   className="field" value={form.phone} autoComplete="tel" inputMode="tel"
                   onChange={(e) => set("phone", e.target.value)}
-                  placeholder="+880 1XXX XXXXXX"
+                  placeholder="01712 345678"
                 />
               </Field>
             )}
@@ -376,6 +547,7 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
             emergencies, call 999.
           </p>
         </div>
+        )}
       </main>
     </div>
   );
