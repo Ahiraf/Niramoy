@@ -688,22 +688,15 @@ textarea.field, .textarea { height: auto; padding: 10px 12px; line-height: 1.55;
 .landing-figures strong { display: block; font-size: calc(25px * var(--text-scale)); letter-spacing: -.8px; }
 .landing-figures span { display: block; color: var(--muted); font-size: calc(10.5px * var(--text-scale)); margin-top: 4px; }
 
-.landing-hero-art { position: relative; min-height: 420px; }
-.landing-hero-art:before { content: ""; position: absolute; inset: 26px 0 26px 18px; border-radius: 26px; background: linear-gradient(150deg, #0b847a 0%, #2f9488 55%, #7cbda6 100%); box-shadow: var(--shadow); }
-.landing-card-float { position: absolute; background: #fff; border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 14px 32px rgba(31,75,78,.13); padding: 13px 15px; }
-.landing-card-float.top { top: 4px; left: -14px; display: flex; align-items: center; gap: 11px; }
-.landing-card-float.top strong { display: block; font-size: calc(12px * var(--text-scale)); }
-.landing-card-float.top span:not(.verified) { display: block; color: var(--muted); font-size: calc(10px * var(--text-scale)); margin-top: 3px; }
-.landing-card-float.mid { top: 132px; right: -10px; width: 218px; }
-.landing-card-float.mid strong { display: block; font-size: calc(14px * var(--text-scale)); margin-top: 6px; letter-spacing: -.3px; }
-.landing-card-float.mid p { color: var(--muted); font-size: calc(10.5px * var(--text-scale)); margin: 5px 0 12px; }
-.landing-slotline { display: flex; gap: 5px; }
-.landing-slotline span { flex: 1; text-align: center; border-radius: 7px; background: #f3f7f5; color: #677376; font-size: calc(9.5px * var(--text-scale)); font-weight: 700; padding: 5px 0; }
-.landing-slotline span.on { background: var(--teal); color: #fff; }
-.landing-card-float.low { bottom: 12px; left: 6px; display: flex; align-items: center; gap: 11px; max-width: 268px; }
-.landing-card-float.low strong { display: block; font-size: calc(11.5px * var(--text-scale)); }
-.landing-card-float.low span { display: block; color: var(--muted); font-size: calc(10px * var(--text-scale)); margin-top: 3px; }
-.landing-triage-icon { width: 32px; height: 32px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 10px; background: #f1effc; color: var(--purple); }
+.landing-hero-art { display: flex; justify-content: center; }
+/* Portrait art in a landscape hero: bound it by height and let the width
+   follow, so the whole scene stays visible instead of being cropped, and the
+   column never grows taller than the copy beside it. */
+.landing-hero-art img {
+  width: auto; height: auto;
+  max-width: 100%; max-height: 540px;
+  border-radius: 22px; box-shadow: 0 20px 44px rgba(31,75,78,.16);
+}
 
 .landing-section { max-width: 1220px; margin: 0 auto; padding: 58px 44px; }
 .landing-section.tinted { max-width: none; background: #fff; border-block: 1px solid var(--line); }
@@ -811,7 +804,9 @@ textarea.field, .textarea { height: auto; padding: 10px 12px; line-height: 1.55;
 @media (max-width: 1080px) {
   .landing-hero { grid-template-columns: 1fr; padding-top: 44px; }
   .landing-hero h1 { font-size: calc(40px * var(--text-scale)); }
-  .landing-hero-art { display: none; }
+  /* Stacked under the copy rather than dropped: it is the illustration of what
+     the product does, and it is the first thing a phone visitor scrolls past. */
+  .landing-hero-art img { max-height: 420px; }
   .landing-role-grid, .landing-feature-grid { grid-template-columns: repeat(2, 1fr); }
   .landing-steps { grid-template-columns: repeat(2, 1fr); }
   .auth-page { grid-template-columns: 1fr; }

@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 import { Icon } from "./icons.js";
 
 /**
@@ -123,32 +125,25 @@ export function Landing({ stats, onSignIn, onSignUp }) {
           </div>
         </div>
 
-        <aside className="landing-hero-art" aria-hidden="true">
-          <div className="landing-card-float top">
-            <div className="avatar teal md">AK</div>
-            <div>
-              <strong>Dr. Ayesha Khan</strong>
-              <span>Cardiologist · Dhaka</span>
-            </div>
-            <span className="verified"><Icon name="check" size={10} /> BM&amp;DC</span>
-          </div>
+        {/*
+          One illustration instead of the three mocked-up cards that used to sit
+          here. Those cards named a doctor, a fee and a slot that did not exist,
+          which is a strange thing to put on the page of a product whose whole
+          argument is that its directory is checked by hand.
 
-          <div className="landing-card-float mid">
-            <span className="eyebrow">Next appointment</span>
-            <strong>Tomorrow, 5:20 PM</strong>
-            <p>Video consultation · ৳ 900</p>
-            <div className="landing-slotline">
-              <span className="on">5:20</span><span>5:40</span><span>6:00</span><span>6:20</span>
-            </div>
-          </div>
-
-          <div className="landing-card-float low">
-            <div className="landing-triage-icon"><Icon name="bot" size={15} /></div>
-            <div>
-              <strong>Triage suggests Cardiology</strong>
-              <span>Chest tightness on exertion · non-urgent</span>
-            </div>
-          </div>
+          The alt text describes what the picture shows rather than repeating the
+          headline: somebody using a screen reader gets the scene, not a second
+          copy of the sentence beside it.
+        */}
+        <aside className="landing-hero-art">
+          <Image
+            src="/landing-hero.png"
+            alt="A woman at home on her sofa consulting a doctor by video on her phone, surrounded by panels for the AI health assistant, booking an appointment, a digital prescription and her medical history."
+            width={586}
+            height={880}
+            sizes="(max-width: 1080px) 100vw, 44vw"
+            priority
+          />
         </aside>
       </section>
 
