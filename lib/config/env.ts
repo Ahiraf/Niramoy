@@ -236,7 +236,22 @@ let cached: Env | undefined;
 export function getEnv(): Env {
   if (cached) return cached;
 
-  const parsed = schema.safeParse(process.env);
+  /**
+   * An empty value means "not set", not "set to empty string".
+   *
+   * `.env.example` documents every variable as `NAME=` with nothing after it,
+   * and the file says to copy it and fill in what you need — so a blank line is
+   * the NORMAL state of most of these. Without this, copying the documented
+   * template verbatim makes the application refuse to boot on `AI_PROVIDER=`,
+   * because "" is not one of the enum's values. The error names the variable
+   * the deployer deliberately left alone, which is the least useful place to
+   * send them looking.
+   */
+  const present = Object.fromEntries(
+    Object.entries(process.env).filter(([, value]) => value !== ""),
+  );
+
+  const parsed = schema.safeParse(present);
   if (!parsed.success) {
     const lines = parsed.error.issues.map((i) => `  - ${i.path.join(".") || "(root)"}: ${i.message}`);
     throw new Error(`Invalid environment configuration:\n${lines.join("\n")}`);
