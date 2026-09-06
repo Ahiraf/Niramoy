@@ -32,6 +32,7 @@ import { logger } from "../observability/logger";
 import { sendAppointmentReminder } from "../notifications";
 import * as appointments from "../repositories/appointments";
 import * as clinical from "../repositories/clinical";
+import { deleteExpired as deleteExpiredPhoneVerifications } from "../repositories/phone-verifications";
 import { deleteExpiredAuthTokens } from "../repositories/users";
 import { deleteExpiredSessions } from "../repositories/sessions";
 import { purgeExpiredCounters } from "../security/rate-limit";
@@ -242,14 +243,19 @@ export async function sweepExpired(now = new Date()): Promise<JobResult> {
   const runId = await claimRun(job, runKey);
   if (!runId) return { job, runKey, skipped: true, processed: 0 };
 
-  const [sessions, tokens, counters] = await Promise.all([
+  const [sessions, tokens, counters, phoneCodes] = await Promise.all([
     deleteExpiredSessions(),
     deleteExpiredAuthTokens(),
     purgeExpiredCounters(),
+    // Sign-up codes for numbers that never became accounts. Kept a day past
+    // expiry so a burst of guessing at one number is still visible the morning
+    // after, then removed — they are a list of phone numbers, and one nobody
+    // needs is one we should not be holding.
+    deleteExpiredPhoneVerifications(),
   ]);
 
-  const total = sessions + tokens + counters;
-  await finishRun(runId, "ok", total, { sessions, tokens, counters });
+  const total = sessions + tokens + counters + phoneCodes;
+  await finishRun(runId, "ok", total, { sessions, tokens, counters, phoneCodes });
 
   return {
     job,

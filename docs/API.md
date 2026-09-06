@@ -45,13 +45,25 @@ Auth — `role: —` means no session required.
 | PATCH | `/api/auth` | any | Own profile. Role and verification status are not writable |
 | DELETE | `/api/auth` | any | Revokes the session server-side |
 | POST | `/api/auth/login` | — | Rate limited by IP and email |
-| POST | `/api/auth/register` | — | Doctors may include `bmdcNumber` for a shape check |
+| POST | `/api/auth/signup-otp` | — | Texts a six-digit code to a mobile number. 3/hour per number, 15/hour per IP. Creates no account |
+| PATCH | `/api/auth/signup-otp` | — | Confirms the code, returns a single-use `ticket` for that number |
+| POST | `/api/auth/register` | — | Patients and doctors must send `phone` + `verificationTicket`. Doctors may include `bmdcNumber` for a shape check |
 | PATCH | `/api/auth/password` | any | Requires the current password; revokes other sessions |
 | POST | `/api/auth/password-reset` | — | Identical response whether or not the account exists |
 | PATCH | `/api/auth/password-reset` | — | Consumes the token, signs in on a fresh session |
 | POST | `/api/auth/verify-email` | — | Consumes a verification token |
 | POST | `/api/auth/verify-phone` | any | Sends a six-digit SMS code. Body may carry a corrected `phone`. 3/hour per account |
 | PATCH | `/api/auth/verify-phone` | any | Confirms the code. Five wrong guesses burn it; the account is never locked |
+
+Sign-up is two steps: `signup-otp` proves the number, then `register` spends the
+ticket and creates the account with `phone_verified_at` already set. The code has
+a five-minute life and five guesses; the ticket is good for thirty minutes, one
+number and one account. Staff accounts skip the step — an invite code already
+establishes who they are.
+
+`signup-otp` answers identically whether or not the number already has an
+account. Whether somebody is a patient here is not a question an anonymous
+caller may ask.
 
 The phone responses carry `phoneVerification: { phone, verified, delivered,
 expiresInMinutes, attemptsAllowed }`. `phone` is masked (`01712••••78`) and the
