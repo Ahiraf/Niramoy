@@ -18,5 +18,9 @@ process.env.APP_URL ??= "http://localhost:3000";
 delete process.env.AI_API_KEY;
 delete process.env.AI_BASE_URL;
 delete process.env.BMDC_API_URL;
+// A developer's own gateway key must never send a real SMS from a test run.
+delete process.env.SMS_PROVIDER;
+delete process.env.TEXTBEE_API_KEY;
+delete process.env.TEXTBEE_DEVICE_ID;
 
 jest.setTimeout(30_000);

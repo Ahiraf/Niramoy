@@ -50,6 +50,14 @@ Auth — `role: —` means no session required.
 | POST | `/api/auth/password-reset` | — | Identical response whether or not the account exists |
 | PATCH | `/api/auth/password-reset` | — | Consumes the token, signs in on a fresh session |
 | POST | `/api/auth/verify-email` | — | Consumes a verification token |
+| POST | `/api/auth/verify-phone` | any | Sends a six-digit SMS code. Body may carry a corrected `phone`. 3/hour per account |
+| PATCH | `/api/auth/verify-phone` | any | Confirms the code. Five wrong guesses burn it; the account is never locked |
+
+The phone responses carry `phoneVerification: { phone, verified, delivered,
+expiresInMinutes, attemptsAllowed }`. `phone` is masked (`01712••••78`) and the
+code is never echoed. `delivered: false` means no gateway is configured and the
+code went to the server log — clients must say so rather than imply an SMS is on
+its way.
 
 Directory — public.
 
