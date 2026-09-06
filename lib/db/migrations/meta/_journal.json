@@ -36,6 +36,13 @@
       "when": 1788700000000,
       "tag": "0004_phone_verification",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788705000000,
+      "tag": "0005_signup_phone_otp",
+      "breakpoints": true
     }
   ]
 }

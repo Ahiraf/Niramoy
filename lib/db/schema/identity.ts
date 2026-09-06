@@ -180,6 +180,54 @@ export const authTokens = pgTable(
 );
 
 /**
+ * Codes sent to a number that does not yet have an account.
+ *
+ * Separate from `auth_tokens` for one structural reason: that table's `user_id`
+ * is NOT NULL, and the whole point of this flow is that the person proves the
+ * number BEFORE there is a user to hang it off. Sign-up asks for a number,
+ * texts a code, and only opens the rest of the form once the code is right.
+ *
+ * The row outlives the code it carries. After a correct code it holds a ticket
+ * — a second random secret, handed only to the browser that got the code right
+ * — which registration then spends. Without that, "this number was verified a
+ * minute ago" would be a fact anyone could ride: a second visitor could claim a
+ * number somebody else had just proved.
+ *
+ * Nothing here is a credential for an existing account, and nothing in it may
+ * be used to answer "does this number have one?".
+ */
+export const phoneVerifications = pgTable(
+  "phone_verifications",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+
+    /** E.164, normalised before it gets here. */
+    phone: text("phone").notNull(),
+
+    /** SHA-256 of the six digits, keyed with the session secret and the phone. */
+    codeHash: text("code_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+
+    /** Wrong guesses. The code burns at the cap; the number is never locked. */
+    attemptCount: integer("attempt_count").notNull().default(0),
+
+    /** Set when the right code came back. */
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    /** SHA-256 of the ticket handed to the browser that verified. */
+    ticketHash: text("ticket_hash"),
+    /** Set when registration spends the ticket. One account per verification. */
+    consumedAt: timestamp("consumed_at", { withTimezone: true }),
+
+    requestedIpHash: text("requested_ip_hash"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_phone_verifications_phone").on(t.phone),
+    index("idx_phone_verifications_expires").on(t.expiresAt),
+  ],
+);
+
+/**
  * A household. The owner books on behalf of the members listed in
  * `family_members`, subject to the per-member access level recorded there —
  * being family is not by itself permission to read a medical record (brief §26).
