@@ -26,10 +26,16 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 
 const LANG_KEY = "niramoy:language";
 
-/** Bangla first, because it is the default and the first language here. */
+/**
+ * Bangla first, because it is the default and the first language here.
+ *
+ * Written out in full — বাংলা, not বাং. An abbreviation of a language name is
+ * one more thing to decode for the reader least able to decode it, and the two
+ * words cost a few pixels in a header that has room for them.
+ */
 export const LANGUAGES = [
-  { id: "bn", label: "বাংলা", short: "বাং" },
-  { id: "en", label: "English", short: "EN" },
+  { id: "bn", label: "বাংলা" },
+  { id: "en", label: "English" },
 ];
 
 const STRINGS = {

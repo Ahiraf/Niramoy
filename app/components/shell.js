@@ -144,7 +144,7 @@ export function LanguageSwitch() {
           lang={option.id}
           onClick={() => setLang(option.id)}
         >
-          {option.short}
+          {option.label}
         </button>
       ))}
     </div>

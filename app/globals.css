@@ -1268,7 +1268,7 @@ html[data-text-size="larger"] { --text-scale: 1.32; }
 /* --- Language switch -------------------------------------------------------- */
 .lang-switch { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: #fff; }
 .lang-switch button {
-  border: 0; background: none; padding: 0 11px; height: 35px;
+  border: 0; background: none; padding: 0 12px; height: 35px; white-space: nowrap;
   font-size: calc(11px * var(--text-scale)); font-weight: 650; color: var(--muted); cursor: pointer;
 }
 .lang-switch button.active { background: var(--teal-soft); color: var(--teal-dark); }
