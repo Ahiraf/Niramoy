@@ -10,7 +10,7 @@
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { getDb, type Database } from "../db/client";
-import { sendNotificationCopy } from "../notifications";
+import { getSmsProvider, sendNotificationCopy, sendNotificationSms } from "../notifications";
 import { logger } from "../observability/logger";
 import * as t from "../db/schema";
 
@@ -530,14 +530,16 @@ export async function markNotificationsRead(
 }
 
 /**
- * Channels a copy can actually be delivered on today.
+ * Channels a copy can actually be delivered on.
  *
- * SMS and WhatsApp are storable preferences with no provider behind them. They
- * are not in here, and nothing pretends to send them — a reminder that appears
- * to send and does not is a missed consultation (lib/notifications/providers.ts
- * makes the same argument about SMS).
+ * Email always; SMS only where a gateway is configured, because the console
+ * provider does not send. WhatsApp remains a storable preference with nothing
+ * behind it, and nothing here pretends otherwise — a reminder that appears to
+ * send and does not is a missed consultation.
  */
-const DELIVERABLE_CHANNELS = new Set(["email"]);
+function deliverableChannels(): Set<string> {
+  return new Set(["email", ...(getSmsProvider().canDeliver ? ["sms"] : [])]);
+}
 
 export async function notify(
   input: {
@@ -593,6 +595,8 @@ async function deliverCopies(
       .select({
         email: t.users.email,
         name: t.users.name,
+        phone: t.users.phone,
+        phoneVerifiedAt: t.users.phoneVerifiedAt,
         channels: t.users.notificationChannels,
       })
       .from(t.users)
@@ -602,30 +606,53 @@ async function deliverCopies(
     const user = rows[0];
     if (!user) return;
 
-    const wanted = (user.channels ?? []).filter((c) => DELIVERABLE_CHANNELS.has(c));
-    if (!wanted.includes("email") || !user.email) return;
+    const wanted = new Set(
+      (user.channels ?? []).filter((c) => deliverableChannels().has(c)),
+    );
 
-    const { delivered } = await sendNotificationCopy({
-      to: user.email,
-      name: user.name,
-      title: input.title,
-      body: input.body,
-    });
+    /** One row per attempt, so "we told you" is a fact with a status. */
+    const record = async (channel: "email" | "sms", delivered: boolean): Promise<void> => {
+      await db
+        .insert(t.notifications)
+        .values({
+          userId: input.userId,
+          channel,
+          type: input.type,
+          title: input.title,
+          body: input.body,
+          payload: {},
+          dedupeKey: input.dedupeKey ? `${input.dedupeKey}:${channel}` : null,
+          status: delivered ? "sent" : "failed",
+          sentAt: delivered ? new Date() : null,
+        })
+        .onConflictDoNothing({ target: t.notifications.dedupeKey });
+    };
 
-    await db
-      .insert(t.notifications)
-      .values({
-        userId: input.userId,
-        channel: "email",
-        type: input.type,
+    if (wanted.has("email") && user.email) {
+      const { delivered } = await sendNotificationCopy({
+        to: user.email,
+        name: user.name,
         title: input.title,
         body: input.body,
-        payload: {},
-        dedupeKey: input.dedupeKey ? `${input.dedupeKey}:email` : null,
-        status: delivered ? "sent" : "failed",
-        sentAt: delivered ? new Date() : null,
-      })
-      .onConflictDoNothing({ target: t.notifications.dedupeKey });
+      });
+      await record("email", delivered);
+    }
+
+    /**
+     * SMS goes only to a number somebody proved they hold.
+     *
+     * Without that check the one channel a patient in Bangladesh actually reads
+     * would be the one most likely to carry their appointment to a stranger who
+     * happens to own the number they mistyped at sign-up.
+     */
+    if (wanted.has("sms") && user.phone && user.phoneVerifiedAt) {
+      const { delivered } = await sendNotificationSms({
+        to: user.phone,
+        title: input.title,
+        body: input.body,
+      });
+      await record("sms", delivered);
+    }
   } catch (err) {
     logger.warn("notification copy failed", { type: input.type, err });
   }
