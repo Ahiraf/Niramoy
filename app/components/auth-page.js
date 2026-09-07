@@ -77,6 +77,14 @@ const EMPTY = {
   inviteCode: "",
 };
 
+/** Fields this form actually renders, and so can show a problem against. */
+const FORM_FIELDS = new Set([
+  "name", "email", "password", "phone",
+  "division", "district",
+  "bmdcNumber", "registrationType", "specialty",
+  "inviteCode",
+]);
+
 /**
  * The first step of signing up: prove the number before filling in anything
  * else.
@@ -471,9 +479,31 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
         return;
       }
       const message = explain(result);
-      const phoneProblem = result.error?.details?.phone?.[0];
-      if (phoneProblem) setFieldErrors({ phone: phoneProblem });
-      else if (result.reason?.startsWith("password_")) setFieldErrors({ password: message });
+
+      /**
+       * Put each problem on the field it belongs to.
+       *
+       * The server answers a failed sign-up with `details` keyed by field —
+       * a short password, a name left blank. Branching on `reason` alone
+       * misses all of them, because they share the one reason
+       * `validation_failed`, and the user is left reading "some of the
+       * details aren't valid" with no way to tell which. Anything we have no
+       * field for still goes to the banner, so nothing is silently dropped.
+       */
+      const details = result.error?.details ?? {};
+      const perField = {};
+      let unplaced = false;
+      for (const [field, problems] of Object.entries(details)) {
+        const problem = Array.isArray(problems) ? problems[0] : problems;
+        if (!problem) continue;
+        if (FORM_FIELDS.has(field)) perField[field] = problem;
+        else unplaced = true;
+      }
+
+      if (Object.keys(perField).length) {
+        setFieldErrors(perField);
+        if (unplaced) setError(message);
+      } else if (result.reason?.startsWith("password_")) setFieldErrors({ password: message });
       else if (result.reason?.startsWith("bmdc_")) setFieldErrors({ bmdcNumber: message });
       else if (result.reason === "invite_invalid") setFieldErrors({ inviteCode: message });
       else if (result.reason === "email_taken" || result.reason === "email_invalid") setFieldErrors({ email: message });
@@ -591,7 +621,10 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
 
           <form onSubmit={submit} noValidate>
             {signUp && (
-              <Field label={role === "doctor" ? "Full name (as registered with BM&DC)" : "Full name"}>
+              <Field
+                label={role === "doctor" ? "Full name (as registered with BM&DC)" : "Full name"}
+                error={fieldErrors.name}
+              >
                 <input
                   className="field" value={form.name} autoComplete="name" required
                   onChange={(e) => set("name", e.target.value)}
