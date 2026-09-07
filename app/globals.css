@@ -762,13 +762,6 @@ textarea.field, .textarea { height: auto; padding: 10px 12px; line-height: 1.55;
 .auth-aside-body ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 13px; }
 .auth-aside-body li { display: flex; gap: 10px; align-items: flex-start; font-size: calc(12px * var(--text-scale)); line-height: 1.5; color: #d7ede8; }
 .auth-aside-body li svg { flex: 0 0 auto; margin-top: 2px; color: var(--mint); }
-.auth-demo { position: relative; z-index: 1; margin-top: auto; background: rgba(255,255,255,.11); border: 1px solid rgba(255,255,255,.18); border-radius: 14px; padding: 15px 16px; }
-.auth-demo strong { font-size: calc(12px * var(--text-scale)); }
-.auth-demo p { color: #cde8e2; font-size: calc(11px * var(--text-scale)); line-height: 1.55; margin: 5px 0 11px; }
-.auth-demo code { background: rgba(255,255,255,.17); border-radius: 5px; padding: 1px 5px; font-size: calc(10.5px * var(--text-scale)); }
-.auth-demo-row { display: flex; gap: 7px; }
-.auth-demo-row button { flex: 1; border: 1px solid rgba(255,255,255,.26); background: transparent; color: #fff; border-radius: 8px; height: 30px; font-size: calc(10.5px * var(--text-scale)); font-weight: 750; text-transform: capitalize; }
-.auth-demo-row button:hover { background: rgba(255,255,255,.16); }
 
 .auth-main { display: grid; place-items: center; padding: 44px 30px; background: var(--cream); }
 .auth-card { width: min(460px, 100%); background: #fff; border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); padding: 28px 30px 26px; }
@@ -817,7 +810,6 @@ textarea.field, .textarea { height: auto; padding: 10px 12px; line-height: 1.55;
   .auth-page { grid-template-columns: 1fr; }
   .auth-aside { padding: 22px 28px 26px; }
   .auth-aside-body { display: none; }
-  .auth-demo { margin-top: 18px; }
 }
 @media (max-width: 760px) {
   .landing-nav { padding: 13px 20px; gap: 12px; }

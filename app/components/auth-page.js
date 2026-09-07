@@ -63,13 +63,6 @@ const MESSAGES = {
   http_500: "Something went wrong on our side. Please try again.",
 };
 
-const DEMO = [
-  { role: "patient", email: "nabila@example.com", name: "Nabila Begum" },
-  { role: "doctor", email: "ayesha@example.com", name: "Dr. Ayesha Khan" },
-  { role: "admin", email: "sakib@example.com", name: "Sakib Rahman" },
-];
-const DEMO_PASSWORD = "niramoy123";
-
 const EMPTY = {
   name: "", email: "", password: "", phone: "",
   division: "Dhaka", district: "Dhaka",
@@ -526,20 +519,15 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
     onAuthenticated(result.user, result.draft ?? null);
   };
 
-  const applyDemoAccount = (account) => {
-    setRole(account.role);
-    setMode("signin");
-    setForm({ ...EMPTY, email: account.email, password: DEMO_PASSWORD });
-    setError(null);
-  };
-
   return (
     <div className="auth-page">
       {/* ------------------------------------------------------------------ */}
       <aside className="auth-aside">
-        <button className="auth-back" onClick={onBack}>
-          <Icon name="back" size={14} /> Back to home
-        </button>
+        {onBack && (
+          <button className="auth-back" onClick={onBack}>
+            <Icon name="back" size={14} /> Back to home
+          </button>
+        )}
 
         <div className="brand light">
           <div className="brand-mark"><Icon name="heart" size={20} strokeWidth={2.2} /></div>
@@ -555,17 +543,6 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
           </ul>
         </div>
 
-        <div className="auth-demo">
-          <strong>Reviewing the project?</strong>
-          <p>Use a ready-made account — password <code>{DEMO_PASSWORD}</code>.</p>
-          <div className="auth-demo-row">
-            {DEMO.map((account) => (
-              <button key={account.role} onClick={() => applyDemoAccount(account)}>
-                {account.role}
-              </button>
-            ))}
-          </div>
-        </div>
       </aside>
 
       {/* ------------------------------------------------------------------ */}
