@@ -11,7 +11,7 @@ import { created, json, withRoute } from "../../../../lib/api/respond";
 import { csrfCookie, sessionCookie, withCookies } from "../../../../lib/auth/cookies";
 import { AppError } from "../../../../lib/errors";
 import { clientIp } from "../../../../lib/security/authz";
-import { enforceRateLimit } from "../../../../lib/security/rate-limit";
+import { consumeRateLimit, enforceRateLimitPeek } from "../../../../lib/security/rate-limit";
 import { register } from "../../../../lib/services/auth";
 import { sendEmailVerification } from "../../../../lib/notifications";
 import { startPhoneVerification } from "../../../../lib/services/phone-verification";
@@ -23,7 +23,20 @@ export const POST = withRoute("POST /api/auth/register", async (request, { reque
   const body = await json<Record<string, unknown>>(request, 8192);
   const ip = clientIp(request);
 
-  await enforceRateLimit("register:ip", ip ?? "unknown");
+  /**
+   * The bucket is charged for accounts made, not for forms submitted.
+   *
+   * Checked here so somebody already over the limit is turned away before any
+   * work happens, but spent only once an account actually exists (below). A
+   * mistyped password creates nothing and costs nothing, and it should not
+   * burn an attempt — five typos used to lock a household out of signing up
+   * for the rest of the hour. What the limit is for is bulk account creation,
+   * and that still counts. Probing which emails are taken is not a way around
+   * it either: every patient and doctor sign-up has to spend a phone
+   * verification ticket before the address is ever looked at, and those are
+   * limited far more tightly than this.
+   */
+  await enforceRateLimitPeek("register:ip", ip ?? "unknown");
 
   // Reject a malformed registration number before creating anything.
   let bmdc: { normalised: string; type: string } | null = null;
@@ -45,6 +58,8 @@ export const POST = withRoute("POST /api/auth/register", async (request, { reque
     userAgent: request.headers.get("user-agent"),
     requestId,
   });
+
+  await consumeRateLimit("register:ip", ip ?? "unknown");
 
   // Delivery failure must not fail the sign-up — the user can request another.
   await sendEmailVerification({ to: user.email, name: user.name, token: verificationToken }).catch(
