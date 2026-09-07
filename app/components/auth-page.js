@@ -392,9 +392,20 @@ function PhoneStep({ api, pending, onVerified, onSkip }) {
   );
 }
 
-export function AuthPage({ mode: initialMode, role: initialRole, reference, api, onBack, onAuthenticated }) {
+export function AuthPage({
+  mode: initialMode,
+  role: initialRole,
+  // The roles this portal offers. The tab strip is drawn from it, so a portal
+  // that handles one role shows no tabs at all rather than a strip of one.
+  roles = ["patient", "doctor", "admin"],
+  reference,
+  api,
+  onBack,
+  onAuthenticated,
+}) {
   const [mode, setMode] = useState(initialMode ?? "signin");
-  const [role, setRole] = useState(initialRole ?? "patient");
+  const [role, setRole] = useState(initialRole ?? roles[0] ?? "patient");
+  const tabs = ROLE_TABS.filter((tab) => roles.includes(tab.id));
   const [form, setForm] = useState(EMPTY);
   const [error, setError] = useState(null);
   const [fieldErrors, setFieldErrors] = useState({});
@@ -565,8 +576,9 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
           />
         ) : (
         <div className="auth-card">
+          {tabs.length > 1 && (
           <div className="auth-role-tabs" role="tablist" aria-label="Account type">
-            {ROLE_TABS.map((tab) => (
+            {tabs.map((tab) => (
               <button
                 key={tab.id}
                 role="tab"
@@ -578,16 +590,19 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
               </button>
             ))}
           </div>
+          )}
 
           <h1>{signUp ? `Create your ${role} account` : `Sign in as ${role === "admin" ? "an admin" : `a ${role}`}`}</h1>
           <p className="auth-sub">
             {signUp
               ? role === "doctor"
-                ? "We'll check your BM&DC number's format now; an admin confirms it against the register before your profile goes live."
+                ? "Your registration number and mobile must already be approved by a Niramoy admin. Enter them exactly as approved."
                 : role === "admin"
                   ? "Admin accounts are staff accounts — you'll need the invite code from your team."
                   : "One account for appointments, records and your family's care."
-              : "Welcome back. Pick the tab that matches your account."}
+              : tabs.length > 1
+                ? "Welcome back. Pick the tab that matches your account."
+                : "Welcome back."}
           </p>
 
           {error && (

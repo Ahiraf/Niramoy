@@ -17,10 +17,13 @@ import { banglaDigits, useT } from "../lib/i18n.js";
  * it will not stay to find out that the booking flow would have been in Bangla.
  */
 
+/**
+ * Who this page is for. Administration is deliberately absent: it is staff
+ * tooling on its own URL (/admin), not something to advertise to visitors.
+ */
 const ROLE_CARDS = [
   { role: "patient", icon: "heart" },
   { role: "doctor", icon: "badge" },
-  { role: "admin", icon: "shield" },
 ];
 
 const STEP_ICONS = ["bot", "search", "calendar", "video"];
@@ -148,7 +151,7 @@ export function Landing({ stats, onSignIn, onSignUp }) {
               </ul>
               <button
                 className={`button ${card.role === "patient" ? "primary" : "secondary"}`}
-                onClick={() => (card.role === "admin" ? onSignIn("admin") : onSignUp(card.role))}
+                onClick={() => onSignUp(card.role)}
               >
                 {t(`landing.role.${card.role}.cta`)} <Icon name="arrow" size={13} />
               </button>

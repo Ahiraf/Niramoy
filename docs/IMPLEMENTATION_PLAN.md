@@ -25,9 +25,13 @@ full-stack application. Written after a full read of the repository at commit
 
 ### 1.2 Routing and UI structure
 
-There is **exactly one Next.js page**: `app/page.js`. It is a `"use client"`
-component that holds all application state in `useState` and routes between views
-by a string (`active`) rather than by URL. `app/layout.js` is a 14-line shell.
+There are **two Next.js pages**, and both are thin wrappers: `app/page.js` (the
+public application) and `app/admin/page.js` (the staff portal). Each renders the
+same `app/components/workspace.js` with a different `portal` prop, which decides
+which roles that entry point offers and whose session it will act on. The
+workspace is a `"use client"` component that holds all application state in
+`useState` and routes between views by a string (`active`) rather than by URL.
+`app/layout.js` is a 14-line shell.
 
 Views are plain components under `app/components/`:
 

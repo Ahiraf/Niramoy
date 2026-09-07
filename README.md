@@ -52,7 +52,13 @@ npm run build
 npm run verify        # all of the above, in order
 ```
 
-Signed out you get the landing page; sign-in and sign-up cover all three roles.
+Signed out you get the landing page, which covers patients and doctors.
+Administration is not advertised there: it is staff tooling on its own URL,
+`/admin`, which opens straight at a staff sign-in. That split keeps the option
+out of a patient's way — it is not a security boundary, and is not doing the
+work of one. What protects administration is server-side: the staff invite code
+at sign-up and the role check every admin API runs against the session.
+
 Three demo accounts are seeded so the app can be reviewed without signing up —
 password `niramoy123` for each:
 

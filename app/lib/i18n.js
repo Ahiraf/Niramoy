@@ -229,19 +229,6 @@ const STRINGS = {
   },
   "landing.role.doctor.cta": { en: "Continue as a doctor", bn: "ডাক্তার হিসেবে এগিয়ে যান" },
 
-  "landing.role.admin.title": { en: "I run the platform", bn: "আমি প্ল্যাটফর্ম চালাই" },
-  "landing.role.admin.blurb": {
-    en: "Work the verification queue, confirm registration numbers against the BM&DC register, and watch directory coverage.",
-    bn: "যাচাইয়ের সারি সামলান, বিএমডিসি রেজিস্টারের সঙ্গে নিবন্ধন নম্বর মিলিয়ে দেখুন, আর ডিরেক্টরির কভারেজ নজরে রাখুন।",
-  },
-  "landing.role.admin.p1": { en: "Doctor verification queue", bn: "ডাক্তার যাচাইয়ের সারি" },
-  "landing.role.admin.p2": {
-    en: "Directory and specialty oversight",
-    bn: "ডিরেক্টরি ও বিশেষত্ব তদারকি",
-  },
-  "landing.role.admin.p3": { en: "Staff invite code required", bn: "স্টাফ ইনভাইট কোড লাগবে" },
-  "landing.role.admin.cta": { en: "Staff sign in", bn: "স্টাফ সাইন ইন" },
-
   "landing.steps.eyebrow": { en: "How it works", bn: "কীভাবে কাজ করে" },
   "landing.steps.title": {
     en: "From symptom to prescription in four steps",
