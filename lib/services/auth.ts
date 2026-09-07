@@ -221,8 +221,9 @@ export async function register(
 
   // A patient owns their clinical identity from the first second.
   let patientId: string | null = null;
+  let patient: users.PatientRow | null = null;
   if (role === "patient") {
-    const patient = await users.createPatient({
+    patient = await users.createPatient({
       userId: user.id,
       displayName,
       divisionId: input.division ? String(input.division) : null,
@@ -252,7 +253,7 @@ export async function register(
     resourceId: user.id,
   });
 
-  return { user: toPublicUser(user, { patientId }), session, verificationToken };
+  return { user: toPublicUser(user, { patientId, ...locationOf(patient) }), session, verificationToken };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -343,7 +344,7 @@ export async function login(
     requestId: context.requestId,
   });
 
-  return { user: toPublicUser(user, { patientId: patient?.id ?? null }), session };
+  return { user: toPublicUser(user, { patientId: patient?.id ?? null, ...locationOf(patient) }), session };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -508,7 +509,7 @@ export async function completePasswordReset(
     requestId: context.requestId,
   });
 
-  return { session, user: toPublicUser(user, { patientId: patient?.id ?? null }) };
+  return { session, user: toPublicUser(user, { patientId: patient?.id ?? null, ...locationOf(patient) }) };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -542,6 +543,20 @@ export async function verifyEmail(
 /* -------------------------------------------------------------------------- */
 /* Shaping                                                                     */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * Where a patient said they are.
+ *
+ * Division and district live on the patient row, not the user row, so every
+ * caller that shapes a public user has to carry them across or the profile
+ * screen reads them back empty and offers whichever division happens to sort
+ * first — someone else's district, presented as the patient's own.
+ */
+export function locationOf(
+  patient: users.PatientRow | null | undefined,
+): { division: string; district: string } {
+  return { division: patient?.divisionId ?? "", district: patient?.districtId ?? "" };
+}
 
 /**
  * The only user shape that crosses the wire. No hash, no algorithm, no lockout

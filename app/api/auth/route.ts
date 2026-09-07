@@ -9,7 +9,7 @@ import { json, ok, withRoute } from "../../../lib/api/respond";
 import { clearAuthCookies, readCookie, SESSION_COOKIE, withCookies } from "../../../lib/auth/cookies";
 import { normalisePhone } from "../../../lib/auth/phone";
 import { getPrincipal, requireUser } from "../../../lib/security/authz";
-import { logout, toPublicUser } from "../../../lib/services/auth";
+import { locationOf, logout, toPublicUser } from "../../../lib/services/auth";
 import * as users from "../../../lib/repositories/users";
 import { AppError } from "../../../lib/errors";
 import { audit } from "../../../lib/audit";
@@ -23,7 +23,9 @@ export const GET = withRoute("GET /api/auth", async (request) => {
   const user = await users.findById(principal.userId);
   if (!user) return withCookies(ok({ user: null }), clearAuthCookies());
 
-  return ok({ user: toPublicUser(user, { patientId: principal.patientId }) });
+  const patient = principal.patientId ? await users.findPatientByUserId(principal.userId) : null;
+
+  return ok({ user: toPublicUser(user, { patientId: principal.patientId, ...locationOf(patient) }) });
 });
 
 /**
@@ -100,12 +102,16 @@ export const PATCH = withRoute("PATCH /api/auth", async (request, { requestId })
   }
 
   // Keep the clinical identity's display name in step with the account's.
+  let patient: users.PatientRow | null = null;
   if (principal.patientId) {
     await users.updatePatient(principal.patientId, {
       ...(name !== undefined ? { displayName: name } : {}),
       ...(body.division !== undefined ? { divisionId: String(body.division) || null } : {}),
       ...(body.district !== undefined ? { districtId: String(body.district) || null } : {}),
     });
+    // Read back rather than echo the request: the response is what the form
+    // re-renders from, and it should show what was stored.
+    patient = await users.findPatientByUserId(principal.userId);
   }
 
   await audit({
@@ -118,7 +124,7 @@ export const PATCH = withRoute("PATCH /api/auth", async (request, { requestId })
     metadata: { fields: Object.keys(body) },
   });
 
-  return ok({ user: toPublicUser(updated, { patientId: principal.patientId }) });
+  return ok({ user: toPublicUser(updated, { patientId: principal.patientId, ...locationOf(patient) }) });
 });
 
 /** DELETE — sign out. Revokes the session server-side, not just the cookie. */
