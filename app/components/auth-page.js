@@ -677,7 +677,7 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
             <Field
               label="Password"
               error={fieldErrors.password}
-              hint={signUp ? "At least 8 characters, with a number." : undefined}
+              hint={signUp ? "At least 8 characters, including a letter and a number." : undefined}
             >
               <div className="auth-password">
                 <input
