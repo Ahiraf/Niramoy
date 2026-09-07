@@ -22,7 +22,7 @@ const ROLE_PITCH = {
   patient: {
     title: "Your care, in one place",
     points: [
-      "Search verified doctors across all 64 districts",
+      "Search doctors across all 64 districts",
       "AI triage points you to the right specialty",
       "Prescriptions and visit history kept together",
       "Book for family members from your own account",
@@ -63,13 +63,6 @@ const MESSAGES = {
   http_500: "Something went wrong on our side. Please try again.",
 };
 
-const DEMO = [
-  { role: "patient", email: "nabila@example.com", name: "Nabila Begum" },
-  { role: "doctor", email: "ayesha@example.com", name: "Dr. Ayesha Khan" },
-  { role: "admin", email: "sakib@example.com", name: "Sakib Rahman" },
-];
-const DEMO_PASSWORD = "niramoy123";
-
 const EMPTY = {
   name: "", email: "", password: "", phone: "",
   division: "Dhaka", district: "Dhaka",
@@ -77,20 +70,364 @@ const EMPTY = {
   inviteCode: "",
 };
 
-export function AuthPage({ mode: initialMode, role: initialRole, reference, api, onBack, onAuthenticated }) {
+/** Fields this form actually renders, and so can show a problem against. */
+const FORM_FIELDS = new Set([
+  "name", "email", "password", "phone",
+  "division", "district",
+  "bmdcNumber", "registrationType", "specialty",
+  "inviteCode",
+]);
+
+/**
+ * The first step of signing up: prove the number before filling in anything
+ * else.
+ *
+ * Patients and doctors pass through here; staff accounts do not, because an
+ * invite code already establishes who they are. Nothing is created until the
+ * code comes back — there is no half-made account to clean up if somebody
+ * mistypes a digit and walks away.
+ *
+ * The five-minute clock is shown counting down rather than left implicit. A
+ * code that has quietly expired looks exactly like a code that is wrong, and
+ * the difference — resend, versus check what you typed — is the one thing the
+ * person needs to know.
+ */
+function SignupOtpStep({ api, role, onVerified, onBack }) {
+  const [phone, setPhone] = useState("");
+  const [code, setCode] = useState("");
+  const [sent, setSent] = useState(null);
+  const [deadline, setDeadline] = useState(null);
+  const [now, setNow] = useState(() => Date.now());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Computed from wall-clock rather than counted down, so a tab that slept
+  // through the window comes back showing the truth instead of 4:58.
+  useEffect(() => {
+    if (!deadline) return undefined;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [deadline]);
+
+  const secondsLeft = deadline ? Math.max(0, Math.ceil((deadline - now) / 1000)) : 0;
+  const expired = Boolean(sent) && secondsLeft === 0;
+  const clock = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, "0")}`;
+
+  const send = async () => {
+    setBusy(true);
+    setError(null);
+    const result = await api.sendSignupOtp({ phone });
+    setBusy(false);
+
+    if (!result.ok) {
+      setError(result.error?.details?.phone?.[0] ?? result.message);
+      return;
+    }
+    setSent(result.phoneVerification);
+    setDeadline(Date.now() + result.phoneVerification.expiresInSeconds * 1000);
+    setNow(Date.now());
+    setCode("");
+  };
+
+  const confirm = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    const result = await api.confirmSignupOtp({ phone, code });
+    setBusy(false);
+
+    if (!result.ok) {
+      setError(result.error?.details?.code?.[0] ?? result.message);
+      return;
+    }
+    // The ticket is what registration spends; the raw number goes with it,
+    // because a ticket is only good for the number it was issued against.
+    onVerified({ phone, masked: result.phoneVerification.phone, ticket: result.phoneVerification.ticket });
+  };
+
+  return (
+    <div className="auth-card">
+      <div className="auth-step-line" aria-hidden="true">
+        <span className="on">1</span>
+        <i />
+        <span>2</span>
+      </div>
+
+      <h1>{role === "doctor" ? "Confirm your mobile number" : "Start with your mobile number"}</h1>
+      <p className="auth-sub">
+        {sent
+          ? `We sent a six-digit code to ${sent.phone}.`
+          : "We'll text you a six-digit code. Appointment reminders go to this number too."}
+        <br />
+        <span lang="bn">
+          {sent ? "কোডটি নিচে লিখুন।" : "আপনার মোবাইলে একটি কোড পাঠানো হবে।"}
+        </span>
+      </p>
+
+      {error && (
+        <div className="auth-error" role="alert">
+          <Icon name="alert" size={14} /> {error}
+        </div>
+      )}
+
+      {sent && !sent.delivered && (
+        <p className="auth-note">
+          <Icon name="alert" size={13} />
+          No SMS gateway is connected to this deployment, so the code was written to the server
+          log instead of sent.
+        </p>
+      )}
+
+      {!sent ? (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            send();
+          }}
+          noValidate
+        >
+          <Field label="Mobile number" hint="Bangladeshi mobile numbers only.">
+            <input
+              className="field" value={phone} autoComplete="tel" inputMode="tel" required
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="01712 345678"
+            />
+          </Field>
+          <button className="button primary auth-submit" type="submit" disabled={busy || !phone.trim()}>
+            {busy ? "Sending…" : "Send OTP"}
+            {!busy && <Icon name="arrow" size={13} />}
+          </button>
+        </form>
+      ) : (
+        <form onSubmit={confirm} noValidate>
+          <Field label="Six-digit code">
+            <input
+              className="field auth-otp" value={code} required autoFocus
+              inputMode="numeric" autoComplete="one-time-code" maxLength={6} pattern="[0-9]*"
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="123456"
+              disabled={expired}
+            />
+          </Field>
+
+          <p className={`auth-countdown ${expired ? "out" : ""}`} role="timer" aria-live="off">
+            <Icon name="clock" size={13} />
+            {expired ? "This code has expired. Send a new one." : `Expires in ${clock}`}
+          </p>
+
+          <button
+            className="button primary auth-submit"
+            type="submit"
+            disabled={busy || expired || code.length !== 6}
+          >
+            {busy ? "Checking…" : "Verify and continue"}
+            {!busy && <Icon name="arrow" size={13} />}
+          </button>
+        </form>
+      )}
+
+      <p className="auth-swap">
+        {sent && (
+          <>
+            <button className="text-link" onClick={send} disabled={busy}>
+              {expired ? "Send a new code" : "Send it again"}
+            </button>
+            {" · "}
+            <button
+              className="text-link"
+              onClick={() => { setSent(null); setDeadline(null); setError(null); }}
+              disabled={busy}
+            >
+              Change number
+            </button>
+          </>
+        )}
+      </p>
+
+      <p className="auth-legal">
+        <button className="text-link" onClick={onBack}>Back to sign in</button>
+      </p>
+    </div>
+  );
+}
+
+/**
+ * The step between "account created" and "you're in": read the six digits we
+ * just sent to the number on the account, and type them back.
+ *
+ * Skippable, deliberately. The account already exists and the session is
+ * already issued, so blocking here would strand somebody whose handset is out
+ * of signal on a screen they cannot leave. What skipping costs is stated on the
+ * screen rather than discovered later: no SMS reminders until it is done.
+ *
+ * `delivered: false` means no gateway is configured and the code was printed to
+ * the server log instead of sent. That is said plainly — a screen that asks for
+ * a code nobody could receive, without explaining why, is the worst version of
+ * this flow.
+ */
+function PhoneStep({ api, pending, onVerified, onSkip }) {
+  const [state, setState] = useState(pending.state);
+  const [code, setCode] = useState("");
+  const [phone, setPhone] = useState("");
+  const [editing, setEditing] = useState(!pending.state);
+  const [error, setError] = useState(null);
+  const [note, setNote] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const resend = async (nextPhone) => {
+    setBusy(true);
+    setError(null);
+    setNote(null);
+    const result = await api.sendPhoneCode(nextPhone ? { phone: nextPhone } : {});
+    setBusy(false);
+
+    if (!result.ok) {
+      setError(result.error?.details?.phone?.[0] ?? result.message);
+      return;
+    }
+    setState(result.phoneVerification);
+    setEditing(false);
+    setCode("");
+    setNote(
+      result.phoneVerification.delivered
+        ? "A new code is on its way."
+        : "No SMS gateway is configured here, so the code was printed to the server log."
+    );
+  };
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    setNote(null);
+    const result = await api.confirmPhoneCode({ code });
+    setBusy(false);
+
+    if (!result.ok) {
+      setError(result.error?.details?.code?.[0] ?? result.message);
+      return;
+    }
+    onVerified();
+  };
+
+  return (
+    <div className="auth-card">
+      <h1>Confirm your mobile number</h1>
+      <p className="auth-sub">
+        {state
+          ? `We sent a six-digit code to ${state.phone}. It expires in ${state.expiresInMinutes} minutes.`
+          : "We couldn't send a code just now. Check the number and try again."}
+        <br />
+        <span lang="bn">আপনার মোবাইলে পাঠানো ছয় সংখ্যার কোডটি লিখুন।</span>
+      </p>
+
+      {error && (
+        <div className="auth-error" role="alert">
+          <Icon name="alert" size={14} /> {error}
+        </div>
+      )}
+      {note && <p className="auth-note" role="status">{note}</p>}
+
+      {state && !state.delivered && (
+        <p className="auth-note">
+          <Icon name="alert" size={13} />
+          No SMS gateway is connected to this deployment, so the code was written to the server
+          log instead of sent.
+        </p>
+      )}
+
+      {editing ? (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            resend(phone);
+          }}
+          noValidate
+        >
+          <Field label="Mobile number" hint="Bangladeshi mobile numbers only — that's where the code goes.">
+            <input
+              className="field" value={phone} autoComplete="tel" inputMode="tel" required
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="01712 345678"
+            />
+          </Field>
+          <button className="button primary auth-submit" type="submit" disabled={busy}>
+            {busy ? "Sending…" : "Send the code"}
+          </button>
+        </form>
+      ) : (
+        <form onSubmit={submit} noValidate>
+          <Field label="Six-digit code">
+            <input
+              className="field" value={code} required
+              inputMode="numeric" autoComplete="one-time-code" maxLength={6} pattern="[0-9]*"
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="123456"
+              aria-describedby="phone-step-help"
+            />
+          </Field>
+          <button className="button primary auth-submit" type="submit" disabled={busy || code.length !== 6}>
+            {busy ? "Checking…" : "Confirm number"}
+            {!busy && <Icon name="arrow" size={13} />}
+          </button>
+        </form>
+      )}
+
+      <p className="auth-swap" id="phone-step-help">
+        <button className="text-link" onClick={() => resend()} disabled={busy}>
+          Send it again
+        </button>
+        {" · "}
+        <button className="text-link" onClick={() => { setEditing(true); setNote(null); }} disabled={busy}>
+          Use a different number
+        </button>
+      </p>
+
+      <p className="auth-legal">
+        You can do this later from Settings. Until then we can email you, but appointment
+        reminders won&rsquo;t reach you by SMS.
+      </p>
+      <button className="text-link" onClick={onSkip}>Skip for now</button>
+    </div>
+  );
+}
+
+export function AuthPage({
+  mode: initialMode,
+  role: initialRole,
+  // The roles this portal offers. The tab strip is drawn from it, so a portal
+  // that handles one role shows no tabs at all rather than a strip of one.
+  roles = ["patient", "doctor", "admin"],
+  reference,
+  api,
+  onBack,
+  onAuthenticated,
+}) {
   const [mode, setMode] = useState(initialMode ?? "signin");
-  const [role, setRole] = useState(initialRole ?? "patient");
+  const [role, setRole] = useState(initialRole ?? roles[0] ?? "patient");
+  const tabs = ROLE_TABS.filter((tab) => roles.includes(tab.id));
   const [form, setForm] = useState(EMPTY);
   const [error, setError] = useState(null);
   const [fieldErrors, setFieldErrors] = useState({});
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  /** Set once an account exists but its number is still unproved. */
+  const [pending, setPending] = useState(null);
+  /** Set once the number is proved and before the account exists. */
+  const [verified, setVerified] = useState(null);
 
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
   useEffect(() => { setMode(initialMode ?? "signin"); }, [initialMode]);
   useEffect(() => { setRole(initialRole ?? "patient"); }, [initialRole]);
-  useEffect(() => { setError(null); setFieldErrors({}); }, [mode, role]);
+  // A proved number belongs to the tab it was proved on. Switching role or
+  // going to sign-in drops it: the ticket is for one number and one account,
+  // and carrying it around would be a claim nobody made.
+  useEffect(() => {
+    setError(null);
+    setFieldErrors({});
+    setVerified(null);
+  }, [mode, role]);
 
   const specialties = reference?.specialties ?? [];
   const divisions = reference?.divisions ?? [];
@@ -120,7 +457,10 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
           name: form.name,
           email: form.email,
           password: form.password,
-          phone: form.phone,
+          // The proved number and the ticket that proves it, together: the
+          // server will only accept the ticket for the number it was issued to.
+          phone: verified?.phone ?? form.phone,
+          ...(verified ? { verificationTicket: verified.ticket } : {}),
           role,
           ...(role === "patient" ? { division: form.division, district: form.district } : {}),
           ...(role === "doctor"
@@ -143,7 +483,31 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
         return;
       }
       const message = explain(result);
-      if (result.reason?.startsWith("password_")) setFieldErrors({ password: message });
+
+      /**
+       * Put each problem on the field it belongs to.
+       *
+       * The server answers a failed sign-up with `details` keyed by field —
+       * a short password, a name left blank. Branching on `reason` alone
+       * misses all of them, because they share the one reason
+       * `validation_failed`, and the user is left reading "some of the
+       * details aren't valid" with no way to tell which. Anything we have no
+       * field for still goes to the banner, so nothing is silently dropped.
+       */
+      const details = result.error?.details ?? {};
+      const perField = {};
+      let unplaced = false;
+      for (const [field, problems] of Object.entries(details)) {
+        const problem = Array.isArray(problems) ? problems[0] : problems;
+        if (!problem) continue;
+        if (FORM_FIELDS.has(field)) perField[field] = problem;
+        else unplaced = true;
+      }
+
+      if (Object.keys(perField).length) {
+        setFieldErrors(perField);
+        if (unplaced) setError(message);
+      } else if (result.reason?.startsWith("password_")) setFieldErrors({ password: message });
       else if (result.reason?.startsWith("bmdc_")) setFieldErrors({ bmdcNumber: message });
       else if (result.reason === "invite_invalid") setFieldErrors({ inviteCode: message });
       else if (result.reason === "email_taken" || result.reason === "email_invalid") setFieldErrors({ email: message });
@@ -151,23 +515,30 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
       return;
     }
 
-    onAuthenticated(result.user, result.draft ?? null);
-  };
+    // A new account with an unproved number stops here first. Signing in does
+    // not: the number was proved once, or it was skipped once, and re-asking on
+    // every sign-in would be a nag rather than a check.
+    if (signUp && result.user?.phone && !result.user.phoneVerified) {
+      setPending({
+        user: result.user,
+        draft: result.draft ?? null,
+        state: result.phoneVerification ?? null,
+      });
+      return;
+    }
 
-  const useDemo = (account) => {
-    setRole(account.role);
-    setMode("signin");
-    setForm({ ...EMPTY, email: account.email, password: DEMO_PASSWORD });
-    setError(null);
+    onAuthenticated(result.user, result.draft ?? null);
   };
 
   return (
     <div className="auth-page">
       {/* ------------------------------------------------------------------ */}
       <aside className="auth-aside">
-        <button className="auth-back" onClick={onBack}>
-          <Icon name="back" size={14} /> Back to home
-        </button>
+        {onBack && (
+          <button className="auth-back" onClick={onBack}>
+            <Icon name="back" size={14} /> Back to home
+          </button>
+        )}
 
         <div className="brand light">
           <div className="brand-mark"><Icon name="heart" size={20} strokeWidth={2.2} /></div>
@@ -183,24 +554,31 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
           </ul>
         </div>
 
-        <div className="auth-demo">
-          <strong>Reviewing the project?</strong>
-          <p>Use a ready-made account — password <code>{DEMO_PASSWORD}</code>.</p>
-          <div className="auth-demo-row">
-            {DEMO.map((account) => (
-              <button key={account.role} onClick={() => useDemo(account)}>
-                {account.role}
-              </button>
-            ))}
-          </div>
-        </div>
       </aside>
 
       {/* ------------------------------------------------------------------ */}
       <main className="auth-main">
+        {signUp && role !== "admin" && !verified && !pending ? (
+          <SignupOtpStep
+            api={api}
+            role={role}
+            onVerified={setVerified}
+            onBack={() => setMode("signin")}
+          />
+        ) : pending ? (
+          <PhoneStep
+            api={api}
+            pending={pending}
+            onVerified={() =>
+              onAuthenticated({ ...pending.user, phoneVerified: true }, pending.draft)
+            }
+            onSkip={() => onAuthenticated(pending.user, pending.draft)}
+          />
+        ) : (
         <div className="auth-card">
+          {tabs.length > 1 && (
           <div className="auth-role-tabs" role="tablist" aria-label="Account type">
-            {ROLE_TABS.map((tab) => (
+            {tabs.map((tab) => (
               <button
                 key={tab.id}
                 role="tab"
@@ -212,16 +590,19 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
               </button>
             ))}
           </div>
+          )}
 
           <h1>{signUp ? `Create your ${role} account` : `Sign in as ${role === "admin" ? "an admin" : `a ${role}`}`}</h1>
           <p className="auth-sub">
             {signUp
               ? role === "doctor"
-                ? "We'll check your BM&DC number's format now; an admin confirms it against the register before your profile goes live."
+                ? "Your registration number and mobile must already be approved by a Niramoy admin. Enter them exactly as approved."
                 : role === "admin"
                   ? "Admin accounts are staff accounts — you'll need the invite code from your team."
                   : "One account for appointments, records and your family's care."
-              : "Welcome back. Pick the tab that matches your account."}
+              : tabs.length > 1
+                ? "Welcome back. Pick the tab that matches your account."
+                : "Welcome back."}
           </p>
 
           {error && (
@@ -232,7 +613,10 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
 
           <form onSubmit={submit} noValidate>
             {signUp && (
-              <Field label={role === "doctor" ? "Full name (as registered with BM&DC)" : "Full name"}>
+              <Field
+                label={role === "doctor" ? "Full name (as registered with BM&DC)" : "Full name"}
+                error={fieldErrors.name}
+              >
                 <input
                   className="field" value={form.name} autoComplete="name" required
                   onChange={(e) => set("name", e.target.value)}
@@ -249,12 +633,35 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
               />
             </Field>
 
-            {signUp && (
-              <Field label="Mobile number" hint="Used for appointment reminders.">
+            {/* Already proved, one step ago. Shown rather than asked for again,
+                and not editable here: the ticket the server will check was
+                issued against this exact number. */}
+            {signUp && verified && (
+              <Field label="Mobile number" hint="Confirmed. Appointment reminders go here.">
+                <div className="auth-verified-phone">
+                  <Icon name="check" size={14} />
+                  <strong>{verified.masked}</strong>
+                  <button
+                    type="button"
+                    className="text-link"
+                    onClick={() => setVerified(null)}
+                  >
+                    Use a different number
+                  </button>
+                </div>
+              </Field>
+            )}
+
+            {signUp && !verified && (
+              <Field
+                label="Mobile number"
+                error={fieldErrors.phone}
+                hint="Optional for staff accounts."
+              >
                 <input
                   className="field" value={form.phone} autoComplete="tel" inputMode="tel"
                   onChange={(e) => set("phone", e.target.value)}
-                  placeholder="+880 1XXX XXXXXX"
+                  placeholder="01712 345678"
                 />
               </Field>
             )}
@@ -262,7 +669,7 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
             <Field
               label="Password"
               error={fieldErrors.password}
-              hint={signUp ? "At least 8 characters, with a number." : undefined}
+              hint={signUp ? "At least 8 characters, including a letter and a number." : undefined}
             >
               <div className="auth-password">
                 <input
@@ -352,9 +759,10 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
             {signUp && role === "doctor" && (
               <p className="auth-note">
                 <Icon name="shield" size={13} />
-                After sign-up you'll complete a short profile — hours, fee, chamber — and an admin
-                verifies your registration at verify.bmdc.org.bd. Your profile becomes bookable only
-                once that check passes.
+                A Niramoy admin checks your BM&amp;DC registration against the register and approves it
+                together with this mobile number before you can create an account. Both must match
+                what they approved. After sign-up you&rsquo;ll complete a short profile — hours, fee,
+                chamber — and your profile goes live.
               </p>
             )}
 
@@ -376,6 +784,7 @@ export function AuthPage({ mode: initialMode, role: initialRole, reference, api,
             emergencies, call 999.
           </p>
         </div>
+        )}
       </main>
     </div>
   );

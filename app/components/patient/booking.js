@@ -2,19 +2,27 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Icon } from "../icons.js";
+import { useT } from "../../lib/i18n.js";
 import {
   Avatar, PageHeading, Empty, Loading, VerifiedBadge, Field, Select, Banner,
 } from "../ui.js";
 
 const PERIODS = ["Morning", "Afternoon", "Evening"];
 
+const PAYMENT_METHODS = [
+  { value: "bkash", label: "bKash", hint: "Confirm in the wallet you already use." },
+  { value: "cash", label: "Pay at the chamber", hint: "Settle in person on the day." },
+];
+
 export function Booking({ doctor, family, onConfirm, onBack, onJoinWaitlist, api, notify }) {
+  const { t } = useT();
   const [days, setDays] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState(0);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [forMember, setForMember] = useState("");
   const [reason, setReason] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("bkash");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -50,6 +58,7 @@ export function Booking({ doctor, family, onConfirm, onBack, onJoinWaitlist, api
       startUtc: selectedSlot.startUtc,
       forMember: forMember || null,
       reason,
+      paymentMethod,
     });
     setSubmitting(false);
 
@@ -96,7 +105,7 @@ export function Booking({ doctor, family, onConfirm, onBack, onJoinWaitlist, api
           ) : (
             <>
               <div className="booking-section">
-                <h3>Select a date</h3>
+                <h3>{t("booking.pickDay")}</h3>
                 <div className="date-row">
                   {days.map((d, i) => (
                     <button
@@ -118,9 +127,12 @@ export function Booking({ doctor, family, onConfirm, onBack, onJoinWaitlist, api
 
               <div className="booking-section">
                 <h3>
-                  Available times
+                  {t("booking.pickTime")}
                   <span className="section-note">· {day?.day}, {day?.date} {day?.month}</span>
                 </h3>
+                {/* Named once at the point of choosing, not only on the
+                    confirmation — the choice is made here. */}
+                <p className="booking-tz">{t("booking.timezone")}</p>
                 {Object.entries(grouped).map(([period, slots]) => (
                   <div className="slot-group" key={period}>
                     <span className="slot-label">{period}</span>
@@ -152,8 +164,8 @@ export function Booking({ doctor, family, onConfirm, onBack, onJoinWaitlist, api
                   />
                 </Field>
                 <Field
-                  label="What would you like to discuss?"
-                  hint="Optional, but it helps the doctor prepare."
+                  label={t("booking.reason")}
+                  hint={t("booking.reasonHint")}
                 >
                   <textarea
                     className="field textarea"
@@ -192,7 +204,7 @@ export function Booking({ doctor, family, onConfirm, onBack, onJoinWaitlist, api
             <strong>Video · {doctor.consultationMinutes} min</strong>
           </div>
           <div className="summary-total">
-            <span>Total fee</span>
+            <span>{t("booking.fee")}</span>
             <strong>{doctor.feeLabel}</strong>
           </div>
 
@@ -212,8 +224,32 @@ export function Booking({ doctor, family, onConfirm, onBack, onJoinWaitlist, api
             </p>
           )}
 
+          <div className="pay-method">
+            <h4>How would you like to pay?</h4>
+            {PAYMENT_METHODS.map((option) => (
+              <label
+                key={option.value}
+                className={`pay-option ${paymentMethod === option.value ? "selected" : ""}`}
+              >
+                <input
+                  type="radio"
+                  name="payment-method"
+                  value={option.value}
+                  checked={paymentMethod === option.value}
+                  onChange={() => setPaymentMethod(option.value)}
+                />
+                <span className="pay-option-body">
+                  <strong>{option.label}</strong>
+                  <em>{option.hint}</em>
+                </span>
+                {option.value === "bkash" && <span className="bkash-mark small">bKash</span>}
+              </label>
+            ))}
+          </div>
+
           <Banner tone="info" icon="info">
-            Payment is mocked for this MVP — no card details are collected and nothing is charged.
+            Payments run against a sandbox for this MVP — nothing is charged, and
+            Niramoy never asks for your bKash PIN.
           </Banner>
 
           <div className="secure-note">

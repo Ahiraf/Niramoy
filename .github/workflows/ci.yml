@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A newer push supersedes an in-flight run on the same branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Lint, typecheck, test, build
+    runs-on: ubuntu-latest
+
+    services:
+      # A real PostgreSQL, because the concurrency suite cannot run on the
+      # in-process database — PGlite is single-connection and would serialise
+      # everything, passing without proving anything.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: niramoy
+          POSTGRES_PASSWORD: niramoy
+          POSTGRES_DB: niramoy_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U niramoy -d niramoy_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      APP_ENV: test
+      DATABASE_URL_TEST: postgresql://niramoy:niramoy@localhost:5432/niramoy_test
+      SESSION_SECRET: ci-session-secret-at-least-32-characters-long
+      NIRAMOY_ADMIN_CODE: CI-ADMIN-CODE
+      CRON_SECRET: ci-cron-secret-at-least-32-characters-long
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit and integration tests
+        run: npm test
+
+      # Kept as its own step so a concurrency regression is visible as itself
+      # rather than buried in the main suite's output.
+      - name: Concurrency tests
+        run: npm run test:concurrency
+
+      - name: Build
+        run: npm run build
+
+      - name: Check for committed secrets
+        run: |
+          if git grep -nE '(SESSION_SECRET|AI_API_KEY|PAYMENT_API_SECRET|CRON_SECRET)=[A-Za-z0-9_-]{8,}' \
+               -- ':!.env.example' ':!.github/workflows'; then
+            echo "::error::A value that looks like a secret is committed."
+            exit 1
+          fi

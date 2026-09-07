@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Icon } from "./icons.js";
 import { Avatar, PageHeading, SectionHead, Field, Select, Banner, VerifiedBadge } from "./ui.js";
+import { TEXT_SIZES, readTextSize, setTextSize } from "../lib/preferences.js";
 
 /**
  * Settings for whoever is signed in.
@@ -20,16 +21,128 @@ const ROLE_LABEL = {
 };
 
 /** A preference row. Toggles are local to this build — nothing is sent yet. */
-function ToggleRow({ icon, title, hint, on, onToggle }) {
+/**
+ * `locked` is for a channel that cannot be switched off. `pending` marks one
+ * the patient can choose but that nothing delivers yet — it is stored against
+ * the account, and starts sending when a provider is configured. Saying that
+ * out loud beats a toggle that appears to arrange a reminder and does not.
+ */
+function ToggleRow({ icon, title, hint, on, onToggle, locked = false, pending = false, busy = false }) {
   return (
-    <button className="appointment-row as-button" onClick={onToggle} aria-pressed={on}>
+    <button
+      className="appointment-row as-button"
+      onClick={locked ? undefined : onToggle}
+      aria-pressed={on}
+      disabled={locked || busy}
+    >
       <div className="triage-option-icon"><Icon name={icon} size={15} /></div>
       <div className="appt-main">
-        <strong>{title}</strong>
+        <strong>
+          {title}
+          {pending && <span className="channel-pending">not connected</span>}
+        </strong>
         <span>{hint}</span>
       </div>
-      <span className={`toggle ${on ? "on" : ""}`} aria-hidden="true"><i /></span>
+      <span className={`toggle ${on ? "on" : ""} ${locked ? "locked" : ""}`} aria-hidden="true"><i /></span>
     </button>
+  );
+}
+
+/**
+ * Confirming the number from Settings — the other half of the promise the
+ * sign-up screen makes when it offers "you can do this later".
+ *
+ * It verifies the SAVED number, not what is currently typed in the field above,
+ * and says so when those differ: sending a code to a number the account does
+ * not hold yet would prove something about nothing.
+ */
+function PhoneVerification({ api, user, typedPhone, onUserChange, notify }) {
+  const [sent, setSent] = useState(null);
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  if (!user?.phone) return null;
+
+  if (user.phoneVerified) {
+    return (
+      <p className="auth-note" role="status">
+        <Icon name="check" size={13} /> This number is confirmed.
+      </p>
+    );
+  }
+
+  const unsaved = (typedPhone ?? "") !== (user.phone ?? "");
+
+  const send = async () => {
+    setBusy(true);
+    setError(null);
+    const result = await api.sendPhoneCode();
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error?.details?.phone?.[0] ?? result.message);
+      return;
+    }
+    setSent(result.phoneVerification);
+    notify?.(
+      result.phoneVerification.delivered
+        ? "Code sent."
+        : "No SMS gateway is connected — the code went to the server log."
+    );
+  };
+
+  const confirm = async () => {
+    setBusy(true);
+    setError(null);
+    const result = await api.confirmPhoneCode({ code });
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error?.details?.code?.[0] ?? result.message);
+      return;
+    }
+    onUserChange?.({ ...user, phoneVerified: true });
+    notify?.("Mobile number confirmed");
+  };
+
+  return (
+    <div className="settings-phone-verify">
+      <p className="auth-note">
+        <Icon name="alert" size={13} />
+        This number isn&rsquo;t confirmed yet, so appointment reminders can&rsquo;t be sent to it
+        by SMS. <span lang="bn">নম্বরটি যাচাই করুন।</span>
+      </p>
+
+      {error && <p className="field-error" role="alert">{error}</p>}
+
+      {sent ? (
+        <>
+          <Field label={`Code sent to ${sent.phone}`}>
+            <input
+              className="field" value={code} inputMode="numeric" autoComplete="one-time-code"
+              maxLength={6} placeholder="123456"
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            />
+          </Field>
+          <button
+            className="button primary" type="button"
+            disabled={busy || code.length !== 6} onClick={confirm}
+          >
+            {busy ? "Checking…" : "Confirm number"}
+          </button>
+          <button className="text-link" type="button" onClick={send} disabled={busy}>
+            Send it again
+          </button>
+        </>
+      ) : (
+        <button className="button" type="button" onClick={send} disabled={busy || unsaved}>
+          {busy ? "Sending…" : "Send a confirmation code"}
+        </button>
+      )}
+
+      {unsaved && !sent && (
+        <p className="auth-note">Save your new number first, then confirm it.</p>
+      )}
+    </div>
   );
 }
 
@@ -56,8 +169,45 @@ export function Settings({ user, role, doctor, reference, api, onNavigate, onUse
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
-  const [reminders, setReminders] = useState(true);
-  const [emails, setEmails] = useState(true);
+  /**
+   * Where notifications are copied to, as stored on the account.
+   *
+   * These used to be local component state that persisted nothing: the toggles
+   * moved, the server never heard, and every notification went to the in-app
+   * bell regardless. They now write to the account and gate real delivery.
+   */
+  const [channels, setChannels] = useState(user?.notificationChannels ?? []);
+  const [textSize, setTextSizePref] = useState("default");
+
+  // Read on mount: localStorage is not available during the server render.
+  useEffect(() => {
+    setTextSizePref(readTextSize());
+  }, []);
+  const [savingChannels, setSavingChannels] = useState(null);
+
+  useEffect(() => {
+    setChannels(user?.notificationChannels ?? []);
+  }, [user]);
+
+  const toggleChannel = async (channel) => {
+    const next = channels.includes(channel)
+      ? channels.filter((c) => c !== channel)
+      : [...channels, channel];
+
+    // Optimistic, then reconciled: a toggle that silently failed to save is
+    // exactly the bug this replaces.
+    setChannels(next);
+    setSavingChannels(channel);
+    const result = await api.updateProfile({ notificationChannels: next });
+    setSavingChannels(null);
+
+    if (!result.ok) {
+      setChannels(channels);
+      notify?.(result.message ?? "Could not save that preference.", "error");
+      return;
+    }
+    onUserChange?.(result.user);
+  };
 
   // Keep the form in step with the session (e.g. after a doctor is verified).
   useEffect(() => {
@@ -139,13 +289,21 @@ export function Settings({ user, role, doctor, reference, api, onNavigate, onUse
               <input className="field" type="email" value={user?.email ?? ""} readOnly disabled />
             </Field>
 
-            <Field label="Phone number">
+            <Field label="Phone number" hint="Bangladeshi mobile number — where SMS reminders go.">
               <input
                 className="field" value={form.phone} inputMode="tel"
                 onChange={(e) => set("phone", e.target.value)}
-                placeholder="+880 1XXX XXXXXX"
+                placeholder="01712 345678"
               />
             </Field>
+
+            <PhoneVerification
+              api={api}
+              user={user}
+              typedPhone={form.phone}
+              onUserChange={onUserChange}
+              notify={notify}
+            />
 
             {role !== "admin" && (
               <div className="field-row">
@@ -184,17 +342,68 @@ export function Settings({ user, role, doctor, reference, api, onNavigate, onUse
           <SectionHead title="Preferences" />
 
           {/* ---------------------------------------------------------- */}
+          {/*
+            * Display preferences sit above the notification ones for every
+            * role: someone who cannot comfortably read the page needs this
+            * before anything else on the screen is useful to them.
+            */}
+          <div className="text-size-row">
+            <div className="triage-option-icon"><Icon name="settings" size={15} /></div>
+            <div className="appt-main">
+              <strong>Text size</strong>
+              <span>Applies on this device, signed in or not</span>
+            </div>
+            <div className="text-size-choices" role="group" aria-label="Text size">
+              {TEXT_SIZES.map((size) => (
+                <button
+                  key={size.id}
+                  type="button"
+                  className={`chip ${textSize === size.id ? "active" : ""}`}
+                  aria-pressed={textSize === size.id}
+                  onClick={() => {
+                    setTextSizePref(size.id);
+                    setTextSize(size.id);
+                  }}
+                >
+                  {size.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {role === "patient" && (
             <>
               <ToggleRow
-                icon="bell" title="Appointment reminders"
-                hint="An in-app reminder one hour before your visit"
-                on={reminders} onToggle={() => setReminders((v) => !v)}
+                icon="bell" title="In-app reminders"
+                hint="Always on. The notification is also the record that we told you."
+                on locked
               />
               <ToggleRow
-                icon="send" title="Email notifications"
-                hint="Booking confirmations and prescription updates"
-                on={emails} onToggle={() => setEmails((v) => !v)}
+                icon="send" title="Email"
+                hint="A copy of each reminder and confirmation, with no clinical detail"
+                on={channels.includes("email")}
+                busy={savingChannels === "email"}
+                onToggle={() => toggleChannel("email")}
+              />
+              <ToggleRow
+                icon="bell" title="SMS"
+                hint={
+                  user?.phoneVerified
+                    ? "A short text for each reminder, sent to your confirmed number"
+                    : "Confirm your mobile number above and reminders start arriving by SMS"
+                }
+                on={channels.includes("sms")}
+                busy={savingChannels === "sms"}
+                pending={!user?.phoneVerified}
+                onToggle={() => toggleChannel("sms")}
+              />
+              <ToggleRow
+                icon="send" title="WhatsApp"
+                hint="Saved, but not delivered yet — no WhatsApp provider is connected"
+                on={channels.includes("whatsapp")}
+                busy={savingChannels === "whatsapp"}
+                pending
+                onToggle={() => toggleChannel("whatsapp")}
               />
               <LinkRow
                 icon="users" title="Family account access"

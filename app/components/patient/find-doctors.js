@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Icon } from "../icons.js";
 import {
-  Avatar, PageHeading, Empty, Loading, Rating, VerifiedBadge, DemoBadge,
+  Avatar, PageHeading, Empty, ErrorState, Loading, Rating, VerifiedBadge, DemoBadge,
+  useSlowLoad,
   Field, Select, Banner, SectionHead,
 } from "../ui.js";
 
@@ -68,6 +69,11 @@ export function FindDoctors({ reference, initialSearch = "", onOpenDoctor, onNav
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [result, setResult] = useState({ doctors: [], total: 0 });
   const [loading, setLoading] = useState(true);
+  const [searchError, setSearchError] = useState(null);
+  /** Bumping this re-runs the debounced search without touching the filters. */
+  const [attempt, setAttempt] = useState(0);
+  const slowSearch = useSlowLoad(loading);
+  const stats = reference?.stats ?? null;
 
   useEffect(() => {
     setFilters((f) => ({ ...f, search: initialSearch }));
@@ -79,13 +85,23 @@ export function FindDoctors({ reference, initialSearch = "", onOpenDoctor, onNav
     setLoading(true);
     const t = setTimeout(async () => {
       const data = await api.doctors({ ...filters, perPage: 48 });
-      if (!cancelled) {
-        setResult({ doctors: data.doctors ?? [], total: data.total ?? 0 });
+      if (cancelled) return;
+
+      if (data.ok === false) {
+        // Keep the filters and the last good result on screen. Clearing them
+        // would make a failed request look like a search with no matches,
+        // which is a different and much more discouraging message.
+        setSearchError({ offline: data.reason === "network", message: data.message });
         setLoading(false);
+        return;
       }
+
+      setSearchError(null);
+      setResult({ doctors: data.doctors ?? [], total: data.total ?? 0 });
+      setLoading(false);
     }, 220);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [filters, api]);
+  }, [filters, api, attempt]);
 
   const districts = useMemo(() => {
     const division = reference?.divisions?.find((d) => d.name === filters.division);
@@ -222,12 +238,48 @@ export function FindDoctors({ reference, initialSearch = "", onOpenDoctor, onNav
       </Banner>
 
       <SectionHead
-        title={loading ? "Searching…" : `${result.total} doctor${result.total === 1 ? "" : "s"}`}
+        title={
+          loading
+            ? "Searching…"
+            : `${result.total} doctor profile${result.total === 1 ? "" : "s"}`
+        }
         note={SORTS.find((s) => s.value === filters.sort)?.label}
       />
 
+      {/*
+        * How many of the profiles below are real practitioners.
+        *
+        * The directory is mostly seeded sample data, and a patient cannot tell
+        * that from a card alone — every card looks equally official. Saying it
+        * once, above the grid, is what makes the per-card Demo badge legible
+        * as a warning rather than decoration.
+        */}
+      {!loading && stats && (
+        <p className="directory-provenance">
+          <Icon name="shield" size={12} />
+          {stats.realDoctors} BM&amp;DC-verified {stats.realDoctors === 1 ? "doctor" : "doctors"} in
+          the directory · {stats.demoDoctors} demo {stats.demoDoctors === 1 ? "profile" : "profiles"},
+          which are sample data and not bookable care.
+        </p>
+      )}
+
+      {searchError && (
+        <ErrorState
+          compact
+          offline={searchError.offline}
+          title={searchError.offline ? "You appear to be offline" : "The search didn't run"}
+          message={
+            searchError.offline
+              ? "Your filters are still here. Reconnect and try again."
+              : (searchError.message ?? "We couldn't reach the directory just now. Your filters are unchanged.")
+          }
+          onRetry={() => setAttempt((n) => n + 1)}
+          retrying={loading}
+        />
+      )}
+
       {loading ? (
-        <Loading rows={4} />
+        <Loading rows={4} slow={slowSearch} onRetry={() => setAttempt((n) => n + 1)} />
       ) : result.doctors.length ? (
         <div className="doctor-grid">
           {result.doctors.map((d) => (

@@ -196,6 +196,7 @@ function Schedule({ self, appointments, loading, onJoinCall, onIssuePrescription
         appointment={writing}
         self={self}
         api={api}
+        notify={notify}
         onClose={() => setWriting(null)}
         onSubmit={async (payload) => {
           await onIssuePrescription(payload);
@@ -211,18 +212,21 @@ function Schedule({ self, appointments, loading, onJoinCall, onIssuePrescription
  * Prescription form with an AI-drafted visit summary. The draft is always
  * marked for review — the doctor edits and confirms before anything is saved.
  */
-function PrescriptionWriter({ appointment, self, api, onClose, onSubmit }) {
+function PrescriptionWriter({ appointment, self, api, onClose, onSubmit, notify }) {
   const [diagnosis, setDiagnosis] = useState("");
   const [notes, setNotes] = useState("");
   const [transcript, setTranscript] = useState("");
   const [aiSummary, setAiSummary] = useState("");
   const [drafting, setDrafting] = useState(false);
+  /** The AI draft awaiting this doctor's confirmation, if one was generated. */
+  const [summaryId, setSummaryId] = useState(null);
   const [items, setItems] = useState([{ drug: "", dose: "", frequency: "", duration: "" }]);
 
   useEffect(() => {
     if (appointment) {
       setDiagnosis(""); setNotes(""); setAiSummary("");
       setTranscript(appointment.reason ?? "");
+      setSummaryId(null);
       setItems([{ drug: "", dose: "", frequency: "", duration: "" }]);
     }
   }, [appointment]);
@@ -231,17 +235,19 @@ function PrescriptionWriter({ appointment, self, api, onClose, onSubmit }) {
 
   const draft = async () => {
     setDrafting(true);
-    const data = await api.summary({
-      transcript,
-      patientName: "Nabila Begum",
-      doctorName: self?.name,
-      specialty: self?.specialty,
-    });
+    // The patient is derived from the appointment server-side; sending a name
+    // from here would just be a second, less reliable source of truth.
+    const data = await api.summary({ appointmentId: appointment.id, transcript });
     setDrafting(false);
     if (data.ok) {
+      // Held so the doctor's confirmation can be attributed to this exact
+      // draft — which model and prompt produced it, and what they changed.
+      setSummaryId(data.id);
       setAiSummary(data.draft.summary ?? "");
       if (data.draft.diagnosis) setDiagnosis(data.draft.diagnosis);
       if (data.draft.advice) setNotes(data.draft.advice);
+    } else {
+      notify?.(data.message ?? "Couldn't draft a summary.", "error");
     }
   };
 
@@ -262,6 +268,9 @@ function PrescriptionWriter({ appointment, self, api, onClose, onSubmit }) {
                 appointmentId: appointment.id,
                 doctorId: appointment.doctorId,
                 diagnosis, notes, aiSummary,
+                // Present only when a draft was generated. Confirming the
+                // prescription is what publishes the reviewed summary.
+                summaryId,
                 items: items.filter((i) => i.drug.trim()),
               })
             }

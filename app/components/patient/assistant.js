@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "../icons.js";
-import { Avatar, PageHeading, Rating, Banner, Loading } from "../ui.js";
+import { Avatar, ErrorState, PageHeading, Rating, Banner, Loading } from "../ui.js";
+import { EMPTY_INTAKE, IntakePanel } from "./intake.js";
+import { useT } from "../../lib/i18n.js";
 
 const PROMPTS = [
   "I've had a headache every day for two weeks",
@@ -19,6 +21,74 @@ const URGENCY_TONE = {
   self_care: "good",
 };
 
+/**
+ * Dictation, where the browser offers it.
+ *
+ * Typing a symptom description is the highest-effort thing this app asks
+ * anyone to do, and it asks it of people who are unwell, possibly one-handed,
+ * possibly more fluent speaking Bangla than typing it. Where the browser has
+ * speech recognition, they can say it instead.
+ *
+ * Progressive enhancement in the strict sense: SpeechRecognition is a Chrome
+ * and Safari feature, so the button simply does not render elsewhere and the
+ * textarea is unaffected. Recognition happens through the browser's own
+ * service; Niramoy never receives audio.
+ */
+const DICTATION_LANGS = [
+  { code: "bn-BD", label: "বাংলা" },
+  { code: "en-US", label: "English" },
+];
+
+function useDictation({ lang, onText }) {
+  const [listening, setListening] = useState(false);
+  const [supported, setSupported] = useState(false);
+  const recognitionRef = useRef(null);
+
+  useEffect(() => {
+    const Recognition =
+      typeof window !== "undefined" &&
+      (window.SpeechRecognition || window.webkitSpeechRecognition);
+    setSupported(Boolean(Recognition));
+  }, []);
+
+  const stop = useCallback(() => {
+    recognitionRef.current?.stop();
+    setListening(false);
+  }, []);
+
+  const start = useCallback(() => {
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) return;
+
+    const recognition = new Recognition();
+    recognition.lang = lang;
+    recognition.interimResults = true;
+    recognition.continuous = false;
+
+    recognition.onresult = (event) => {
+      // Only final results are committed; interim text flickers as the
+      // recogniser changes its mind, and watching your symptoms rewrite
+      // themselves is unsettling.
+      const text = [...event.results]
+        .filter((r) => r.isFinal)
+        .map((r) => r[0].transcript)
+        .join(" ")
+        .trim();
+      if (text) onText(text);
+    };
+    recognition.onerror = () => setListening(false);
+    recognition.onend = () => setListening(false);
+
+    recognitionRef.current = recognition;
+    setListening(true);
+    recognition.start();
+  }, [lang, onText]);
+
+  useEffect(() => () => recognitionRef.current?.abort?.(), []);
+
+  return { supported, listening, start, stop };
+}
+
 export function Assistant({ api, onOpenDoctor, onNavigate }) {
   const [messages, setMessages] = useState([
     {
@@ -29,6 +99,20 @@ export function Assistant({ api, onOpenDoctor, onNavigate }) {
   ]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
+  /** The description that did not get through, kept so it can be re-sent. */
+  const [failed, setFailed] = useState(null);
+  const [dictationLang, setDictationLang] = useState("bn-BD");
+  const [intake, setIntake] = useState(EMPTY_INTAKE);
+  /** Collapsed once triage has run — the answers stay, the form gets out of the way. */
+  const [intakeOpen, setIntakeOpen] = useState(true);
+
+  const { t } = useT();
+  const dictation = useDictation({
+    lang: dictationLang,
+    // Append rather than replace: dictation is often a second thought added to
+    // something already typed.
+    onText: (text) => setInput((current) => (current ? `${current} ${text}` : text)),
+  });
   const [result, setResult] = useState(null);
   const scrollRef = useRef(null);
 
@@ -41,25 +125,39 @@ export function Assistant({ api, onOpenDoctor, onNavigate }) {
     if (!message || thinking) return;
 
     setInput("");
+    setFailed(null);
     setMessages((m) => [...m, { id: `u-${Date.now()}`, from: "user", text: message }]);
     setThinking(true);
 
-    const data = await api.triage({ message });
+    const data = await api.triage({ message, intake });
     setThinking(false);
 
     if (!data.ok) {
-      setMessages((m) => [...m, {
-        id: `e-${Date.now()}`, from: "ai",
-        text: "Sorry — I couldn't process that just now. Please try again.",
-      }]);
+      /*
+       * Give the words back.
+       *
+       * Someone describing their symptoms has just done the hardest part of
+       * using this app, often in a second language and often while unwell.
+       * Clearing the box on a failed request makes them type it all again, so
+       * the text goes back where they left it and the retry re-sends exactly
+       * what they wrote.
+       */
+      setInput((current) => (current.trim() ? current : message));
+      setFailed({
+        message,
+        offline: data.reason === "network",
+        detail: data.message,
+      });
       return;
     }
 
     setMessages((m) => [...m, { id: `a-${Date.now()}`, from: "ai", text: data.reply }]);
     setResult(data);
+    setIntakeOpen(false);
   };
 
   const triage = result?.triage;
+  const emergencyNumber = result?.emergencyNumber ?? "999";
 
   return (
     <>
@@ -98,6 +196,21 @@ export function Assistant({ api, onOpenDoctor, onNavigate }) {
               </div>
             )}
 
+            {failed && (
+              <ErrorState
+                compact
+                offline={failed.offline}
+                title={failed.offline ? "You're offline" : "That didn't get through"}
+                message={
+                  failed.offline
+                    ? "Your description is still in the box below. Reconnect and send it again."
+                    : (failed.detail ?? "We couldn't reach the assistant. Your description is still in the box below.")
+                }
+                onRetry={() => send(failed.message)}
+                retrying={thinking}
+              />
+            )}
+
             {triage && (
               <div className={`triage-result ${URGENCY_TONE[triage.urgency]}`}>
                 <div className="result-head">
@@ -111,9 +224,30 @@ export function Assistant({ api, onOpenDoctor, onNavigate }) {
                   </p>
                 )}
                 {triage.redFlag && (
-                  <a className="button emergency-button" href="tel:999">
-                    <Icon name="alert" size={14} /> Call 999 now
-                  </a>
+                  /*
+                   * The one block that is always shown in both languages at
+                   * once, whatever the switch says. Someone reading this is
+                   * frightened and may not be the person who set the language
+                   * — a relative who grabbed the phone, a bystander. The cost
+                   * of two extra lines is nothing against the cost of the
+                   * warning being in a language the reader cannot use.
+                   */
+                  <div className="emergency-block" role="alert">
+                    <strong lang="en">{t("emergency.title", {}, "en")}</strong>
+                    <p lang="en">
+                      {t("emergency.call", { number: emergencyNumber }, "en")}{" "}
+                      {t("emergency.dontWait", {}, "en")}
+                    </p>
+                    <strong lang="bn">{t("emergency.title", {}, "bn")}</strong>
+                    <p lang="bn">
+                      {t("emergency.call", { number: emergencyNumber }, "bn")}{" "}
+                      {t("emergency.dontWait", {}, "bn")}
+                    </p>
+                    <a className="button emergency-button" href={`tel:${emergencyNumber}`}>
+                      <Icon name="alert" size={14} />
+                      {t("emergency.button", { number: emergencyNumber })}
+                    </a>
+                  </div>
                 )}
               </div>
             )}
@@ -127,6 +261,14 @@ export function Assistant({ api, onOpenDoctor, onNavigate }) {
             </div>
           )}
 
+          <IntakePanel
+            intake={intake}
+            onChange={setIntake}
+            collapsed={!intakeOpen}
+            onExpand={() => setIntakeOpen(true)}
+            onSkip={() => setIntakeOpen(false)}
+          />
+
           <form
             className="chat-compose"
             onSubmit={(e) => { e.preventDefault(); send(); }}
@@ -138,10 +280,43 @@ export function Assistant({ api, onOpenDoctor, onNavigate }) {
               aria-label="Describe your symptoms"
               disabled={thinking}
             />
+            {dictation.supported && (
+              <button
+                type="button"
+                className={`button ghost mic-button ${dictation.listening ? "listening" : ""}`}
+                aria-label={dictation.listening ? "Stop dictating" : "Dictate your symptoms"}
+                aria-pressed={dictation.listening}
+                onClick={() => (dictation.listening ? dictation.stop() : dictation.start())}
+                disabled={thinking}
+              >
+                <Icon name="mic" size={15} />
+              </button>
+            )}
             <button className="button primary" type="submit" aria-label="Send" disabled={thinking || !input.trim()}>
               <Icon name="send" size={15} />
             </button>
           </form>
+
+          {dictation.supported && (
+            <div className="dictation-row">
+              <span aria-live="polite">
+                {dictation.listening ? "Listening — speak now" : "You can dictate instead of typing"}
+              </span>
+              <div role="group" aria-label="Dictation language">
+                {DICTATION_LANGS.map((l) => (
+                  <button
+                    key={l.code}
+                    type="button"
+                    className={`chip ${dictationLang === l.code ? "active" : ""}`}
+                    aria-pressed={dictationLang === l.code}
+                    onClick={() => setDictationLang(l.code)}
+                  >
+                    {l.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <p className="ai-disclaimer">
             Niramoy AI offers general guidance, not a diagnosis. In an emergency, call 999.

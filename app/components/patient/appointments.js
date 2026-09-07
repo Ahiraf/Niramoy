@@ -3,8 +3,11 @@
 import { useEffect, useState } from "react";
 import { Icon } from "../icons.js";
 import {
-  Avatar, PageHeading, Empty, Loading, Modal, Field, StatusPill, Rating, Banner,
+  ActionMenu, Avatar, PageHeading, Empty, Loading, Modal, Field,
+  StatusPill, Rating, Banner, Tabs, TabPanel,
 } from "../ui.js";
+import { downloadAppointmentIcs } from "../../lib/calendar.js";
+import { CancellationPolicy } from "./policy.js";
 
 const TABS = [
   { id: "upcoming", label: "Upcoming", match: (a) => ["confirmed", "pending"].includes(a.status) },
@@ -12,13 +15,117 @@ const TABS = [
   { id: "cancelled", label: "Cancelled", match: (a) => a.status === "cancelled" },
 ];
 
+/**
+ * What has happened to the money, in the patient's terms. Says "sandbox" when
+ * it is one — a payment badge that reads as real when nothing was charged is
+ * worse than no badge.
+ */
+function PaymentNote({ payment }) {
+  if (!payment) return null;
+  if (payment.method === "cash") {
+    return <span className="pay-note">Paying at the chamber</span>;
+  }
+  if (payment.status === "succeeded") {
+    return (
+      <span className="pay-note paid">
+        Paid with bKash{payment.isMock ? " · sandbox" : ""}
+      </span>
+    );
+  }
+  if (payment.status === "pending") return <span className="pay-note due">bKash payment due</span>;
+  return <span className="pay-note failed">bKash payment {payment.status}</span>;
+}
+
+/**
+ * The one action this appointment needs next.
+ *
+ * Ordered by what is blocking: an unpaid consultation needs paying, a
+ * confirmed one needs joining, a finished one needs a review. Everything else
+ * on the card is available, just not competing.
+ */
+function primaryAction(a, { onPay, onJoinCall, setReviewing, onNavigate }) {
+  if (a.status === "confirmed") {
+    if (a.payment?.method === "bkash" && a.payment.status === "pending") {
+      return { label: "Pay with bKash", tone: "primary", onClick: () => onPay?.(a) };
+    }
+    return {
+      label: "Join call",
+      icon: "video",
+      tone: "primary",
+      onClick: () => onJoinCall(a),
+    };
+  }
+  if (a.status === "completed") {
+    return {
+      label: "Leave review",
+      icon: "star",
+      tone: "secondary",
+      onClick: () => setReviewing(a),
+    };
+  }
+  if (a.status === "cancelled" || a.status === "no_show") {
+    return { label: "Book again", tone: "secondary", onClick: () => onNavigate("doctors") };
+  }
+  return null;
+}
+
+/** Everything else, in the menu. */
+function secondaryActions(a, {
+  onPay, onJoinCall, onReschedule, onNavigate, setCancelling, setReviewing, setPolicyFor,
+}) {
+  const calendar = {
+    label: "Add to calendar",
+    icon: "calendar",
+    onClick: () => downloadAppointmentIcs(a, { appUrl: window.location.origin }),
+  };
+  const policy = {
+    label: "Cancellation policy",
+    icon: "shield",
+    onClick: () => setPolicyFor(a),
+  };
+
+  if (a.status === "confirmed") {
+    const unpaid = a.payment?.method === "bkash" && a.payment.status === "pending";
+    return [
+      // Whichever of pay/join is not the primary action stays reachable here.
+      unpaid
+        ? { label: "Join call", icon: "video", onClick: () => onJoinCall(a) }
+        : a.payment?.status === "pending"
+          ? { label: "Pay now", icon: "send", onClick: () => onPay?.(a) }
+          : null,
+      calendar,
+      { label: "Reschedule", icon: "clock", onClick: () => onReschedule(a) },
+      policy,
+      {
+        label: "Cancel appointment",
+        icon: "x",
+        danger: true,
+        disabled: !a.canCancel,
+        disabledHint: "within the last hour",
+        onClick: () => setCancelling(a),
+      },
+    ];
+  }
+
+  if (a.status === "completed") {
+    return [
+      { label: "View notes", icon: "file", onClick: () => onNavigate("records") },
+      { label: "Leave review", icon: "star", onClick: () => setReviewing(a) },
+      { label: "Book again", icon: "calendar", onClick: () => onNavigate("doctors") },
+    ];
+  }
+
+  return [policy];
+}
+
 export function Appointments({
   loading, appointments, waitlist, onNavigate, onCancel, onReschedule,
-  onJoinCall, onReview, onLeaveWaitlist,
+  onJoinCall, onReview, onLeaveWaitlist, onPay,
 }) {
   const [tab, setTab] = useState("upcoming");
   const [reviewing, setReviewing] = useState(null);
   const [cancelling, setCancelling] = useState(null);
+  const [policyFor, setPolicyFor] = useState(null);
 
   const shown = appointments.filter(TABS.find((t) => t.id === tab).match);
 
@@ -56,23 +163,18 @@ export function Appointments({
       )}
 
       <div className="card tabs-card">
-        <div className="appointment-tabs" role="tablist">
-          {TABS.map((t) => {
-            const count = appointments.filter(t.match).length;
-            return (
-              <button
-                key={t.id}
-                role="tab"
-                aria-selected={tab === t.id}
-                className={`tab ${tab === t.id ? "active" : ""}`}
-                onClick={() => setTab(t.id)}
-              >
-                {t.label} {count > 0 && <em>({count})</em>}
-              </button>
-            );
-          })}
-        </div>
+        <Tabs
+          idPrefix="appointments"
+          value={tab}
+          onChange={setTab}
+          tabs={TABS.map((t) => ({
+            id: t.id,
+            label: t.label,
+            count: appointments.filter(t.match).length,
+          }))}
+        />
 
+        <TabPanel idPrefix="appointments" id={tab}>
         {loading ? (
           <Loading rows={3} />
         ) : shown.length ? (
@@ -90,44 +192,45 @@ export function Appointments({
                 <strong>{a.doctor?.name}</strong>
                 <span>{a.doctor?.specialty} · {a.type}</span>
                 {a.reason && <span className="appt-reason">“{a.reason}”</span>}
-                <div style={{ marginTop: 8 }}><StatusPill status={a.status} /></div>
+                <div style={{ marginTop: 8 }}>
+                  <StatusPill status={a.status} />
+                  <PaymentNote payment={a.payment} />
+                </div>
               </div>
 
               <div className="appt-time">
                 <strong>{a.time}</strong>
                 <span>{a.day}, {a.date} {a.month}</span>
+                {/* Which clock. Obvious to a patient in Dhaka, not at all
+                    obvious to a son booking from Jeddah for his mother. */}
+                <span className="appt-tz">{a.timezoneLabel ?? "Bangladesh time"}</span>
                 <em>{a.doctor?.feeLabel}</em>
               </div>
 
               <div className="appt-actions">
-                {a.status === "confirmed" && (
-                  <>
-                    <button className="button secondary small" onClick={() => onJoinCall(a)}>
-                      <Icon name="video" size={12} />Join call
+                {/*
+                  * One primary action, chosen by what this appointment needs
+                  * next; everything else behind the menu. Six equal buttons
+                  * made the patient read all six to find the one they came
+                  * for, and put Cancel as close to the thumb as Join.
+                  */}
+                {(() => {
+                  const primary = primaryAction(a, { onPay, onJoinCall, setReviewing, onNavigate });
+                  return primary ? (
+                    <button className={`button ${primary.tone} small`} onClick={primary.onClick}>
+                      {primary.icon && <Icon name={primary.icon} size={12} />}
+                      {primary.label}
                     </button>
-                    <button className="button ghost small" onClick={() => onReschedule(a)}>
-                      Reschedule
-                    </button>
-                    <button
-                      className="button ghost small danger"
-                      disabled={!a.canCancel}
-                      title={a.canCancel ? "" : "Too close to the appointment to cancel"}
-                      onClick={() => setCancelling(a)}
-                    >
-                      Cancel
-                    </button>
-                  </>
-                )}
-                {a.status === "completed" && (
-                  <>
-                    <button className="button ghost small" onClick={() => onNavigate("records")}>
-                      <Icon name="file" size={12} />View notes
-                    </button>
-                    <button className="button secondary small" onClick={() => setReviewing(a)}>
-                      <Icon name="star" size={12} />Leave review
-                    </button>
-                  </>
-                )}
+                  ) : null;
+                })()}
+
+                <ActionMenu
+                  label={`More actions for ${a.doctor?.name ?? "this appointment"}`}
+                  items={secondaryActions(a, {
+                    onPay, onJoinCall, onReschedule, onNavigate,
+                    setCancelling, setReviewing, setPolicyFor,
+                  })}
+                />
                 {a.status === "cancelled" && (
                   <button className="button ghost small" onClick={() => onNavigate("doctors")}>
                     Book again
@@ -150,6 +253,7 @@ export function Appointments({
             }
           />
         )}
+        </TabPanel>
       </div>
 
       <ReviewModal
@@ -160,6 +264,14 @@ export function Appointments({
           setReviewing(null);
         }}
       />
+
+      <Modal
+        open={Boolean(policyFor)}
+        title="Cancelling, missing and refunds"
+        onClose={() => setPolicyFor(null)}
+      >
+        <CancellationPolicy appointment={policyFor} compact />
+      </Modal>
 
       <Modal
         open={Boolean(cancelling)}
@@ -255,7 +367,16 @@ function ReviewModal({ appointment, onClose, onSubmit }) {
   );
 }
 
+/** "Nabila Begum" -> "NB". Falls back to a neutral placeholder. */
+function initialsOf(name) {
+  const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "PT";
+  return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
+}
+
 export function Consultation({ appointment, onNavigate, onComplete }) {
+  /** The server-issued join grant. Present once the room has been opened. */
+  const call = appointment?.call;
   const [elapsed, setElapsed] = useState(0);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
@@ -266,13 +387,26 @@ export function Consultation({ appointment, onNavigate, onComplete }) {
   }, []);
 
   const mmss = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
+
+  /**
+   * Whichever of the two people on the appointment is not you. The doctor sees
+   * the patient here and the patient sees the doctor, so this one screen serves
+   * both sides of the consultation.
+   */
+  const viewerIsDoctor = call?.role === "doctor";
   const doctor = appointment?.doctor;
+  const peer = viewerIsDoctor
+    ? { name: appointment?.patientName || "Your patient", initials: initialsOf(appointment?.patientName), avatar: "sand", subtitle: appointment?.reason || "Patient" }
+    : { name: doctor?.name || "Your doctor", initials: doctor?.initials || "DR", avatar: doctor?.avatar || "teal", subtitle: doctor?.specialty };
+
+  /** A provider that carries media gives us a URL we can frame. */
+  const embedUrl = call?.embedUrl || null;
 
   return (
     <>
       <PageHeading
         title="Video consultation"
-        subtitle="Your secure consultation room."
+        subtitle={viewerIsDoctor ? `Consultation with ${peer.name}.` : "Your secure consultation room."}
         actions={
           <button className="button ghost" onClick={() => onNavigate("appointments")}>
             Leave room
@@ -281,40 +415,61 @@ export function Consultation({ appointment, onNavigate, onComplete }) {
       />
 
       <div className="card consult-shell">
-        <div className="consult-stage">
+        <div className={`consult-stage${embedUrl ? " embedded" : ""}`}>
           <div className="consult-status">
             <span className="live-dot" /> Secure room · {mmss}
           </div>
 
-          <div className="consult-peer">
-            <div className={`avatar ${doctor?.avatar || "teal"}`} style={{ width: 76, height: 76, fontSize: 21, margin: "0 auto 14px" }}>
-              {doctor?.initials || "DR"}
+          {embedUrl ? (
+            /*
+             * The call itself. Camera and microphone are granted to this frame
+             * only, and the URL carries the short-lived join grant — it is not
+             * a bookmarkable room. The provider draws its own controls, so we
+             * do not draw a second, fake set beside them.
+             */
+            <iframe
+              className="consult-frame"
+              title={`Video consultation with ${peer.name}`}
+              src={embedUrl}
+              allow="camera; microphone; fullscreen; display-capture; autoplay; speaker-selection"
+              allowFullScreen
+            />
+          ) : (
+            <div className="consult-peer">
+              <div className={`avatar ${peer.avatar}`} style={{ width: 76, height: 76, fontSize: 21, margin: "0 auto 14px" }}>
+                {peer.initials}
+              </div>
+              <strong>{peer.name}</strong>
+              <span>{peer.subtitle}</span>
+              <p className="consult-hint">
+                No video provider is configured, so this is a demo room — the
+                access token is real and scoped to you, but no media is carried.
+                Set VIDEO_PROVIDER=jitsi to hold a real two-way call.
+              </p>
             </div>
-            <strong>{doctor?.name || "Your doctor"}</strong>
-            <span>{doctor?.specialty}</span>
-            <p className="consult-hint">
-              This is a placeholder for the embedded Jitsi/Daily room
-              {appointment?.videoRoomId ? ` (${appointment.videoRoomId})` : ""}.
-            </p>
-          </div>
+          )}
 
-          <div className="consult-self">You</div>
+          {!embedUrl && <div className="consult-self">You</div>}
 
           <div className="consult-controls">
-            <button
-              className={`consult-button ${micOn ? "" : "off"}`}
-              onClick={() => setMicOn((v) => !v)}
-              aria-label={micOn ? "Mute microphone" : "Unmute microphone"}
-            >
-              <Icon name="mic" size={17} />
-            </button>
-            <button
-              className={`consult-button ${camOn ? "" : "off"}`}
-              onClick={() => setCamOn((v) => !v)}
-              aria-label={camOn ? "Turn camera off" : "Turn camera on"}
-            >
-              <Icon name="video" size={17} />
-            </button>
+            {!embedUrl && (
+              <>
+                <button
+                  className={`consult-button ${micOn ? "" : "off"}`}
+                  onClick={() => setMicOn((v) => !v)}
+                  aria-label={micOn ? "Mute microphone" : "Unmute microphone"}
+                >
+                  <Icon name="mic" size={17} />
+                </button>
+                <button
+                  className={`consult-button ${camOn ? "" : "off"}`}
+                  onClick={() => setCamOn((v) => !v)}
+                  aria-label={camOn ? "Turn camera off" : "Turn camera on"}
+                >
+                  <Icon name="video" size={17} />
+                </button>
+              </>
+            )}
             <button
               className="button leave-button"
               onClick={async () => {
@@ -328,7 +483,11 @@ export function Consultation({ appointment, onNavigate, onComplete }) {
         </div>
 
         <div className="consult-footer">
-          <span>Recording is off · This conversation is private and encrypted.</span>
+          <span>
+            {embedUrl
+              ? `Connected via ${call.provider} · not recorded${call.provider === "jitsi-public" ? " · public room, unlisted" : ""}`
+              : "Recording is off · This conversation is private and encrypted."}
+          </span>
           <button className="button secondary small" onClick={() => onNavigate("records")}>
             <Icon name="file" size={12} />View medical history
           </button>
