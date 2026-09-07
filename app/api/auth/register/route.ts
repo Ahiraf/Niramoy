@@ -38,9 +38,16 @@ export const POST = withRoute("POST /api/auth/register", async (request, { reque
    */
   await enforceRateLimitPeek("register:ip", ip ?? "unknown");
 
-  // Reject a malformed registration number before creating anything.
+  // Reject a malformed registration number before creating anything. A doctor
+  // must give one: it is half of what the admin approved, and without it there
+  // is nothing to match their approval against.
   let bmdc: { normalised: string; type: string } | null = null;
-  if (body.role === "doctor" && body.bmdcNumber) {
+  if (body.role === "doctor") {
+    if (!body.bmdcNumber) {
+      throw new AppError("VALIDATION_FAILED", {
+        details: { bmdcNumber: ["Enter the BM&DC number an admin approved for you."] },
+      });
+    }
     const shape = validateRegistrationNumber(body.bmdcNumber, body.registrationType) as {
       ok: boolean;
       normalised?: string;

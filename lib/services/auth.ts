@@ -32,6 +32,9 @@ import { SESSION_TTL_SECONDS } from "../auth/cookies";
 import { checkAdminInviteCode } from "../security/authz";
 import * as sessions from "../repositories/sessions";
 import * as users from "../repositories/users";
+import * as approvals from "../repositories/doctor-approvals";
+import { validateRegistrationNumber } from "../bmdc.js";
+import { getDb } from "../db/client";
 import type { UserRole } from "../repositories/users";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -124,6 +127,9 @@ export interface RegisterInput {
   district?: unknown;
   /** Proof from /api/auth/signup-otp that this number was confirmed. */
   verificationTicket?: unknown;
+  /** Doctors only: the registration number an admin has already approved. */
+  bmdcNumber?: unknown;
+  registrationType?: unknown;
 }
 
 const ROLES: UserRole[] = ["patient", "doctor", "admin"];
@@ -208,15 +214,67 @@ export async function register(
   const displayName =
     role === "doctor" && !/^dr\.?\s/i.test(name) ? `Dr. ${name}` : name;
 
-  const user = await users.createUser({
-    role: role!,
-    name: displayName,
-    email,
-    // Stored in E.164, which is what the SMS gateway is handed later.
-    phone: phone?.e164 ?? null,
-    phoneVerified,
-    passwordHash: hashed.hash,
-    passwordAlgo: hashed.algo,
+  /**
+   * A doctor may only register against an approval an admin has already issued.
+   *
+   * The admin checks the registration number against the BM&DC register by
+   * hand and records it with the mobile number that doctor will use. Both must
+   * match here: the number is public information printed on a nameplate, and
+   * the phone identifies a handset rather than a clinician, so either alone
+   * would be weak. The phone compared is the proved one — the ticket above has
+   * already established that this browser holds that handset — so quoting
+   * somebody else's approval does not get you past this.
+   *
+   * The claim and the account are one transaction. Two people racing on one
+   * approval must not both end up with an account, and an account must not
+   * survive a claim that lost the race.
+   */
+  const approvalNumber = (
+    role === "doctor"
+      ? validateRegistrationNumber(input.bmdcNumber, input.registrationType)
+      : null
+  ) as { ok: boolean; normalised?: string } | null;
+
+  const user = await getDb().transaction(async (tx) => {
+    const created = await users.createUser(
+      {
+        role: role!,
+        name: displayName,
+        email,
+        // Stored in E.164, which is what the SMS gateway is handed later.
+        phone: phone?.e164 ?? null,
+        phoneVerified,
+        passwordHash: hashed.hash,
+        passwordAlgo: hashed.algo,
+      },
+      tx,
+    );
+
+    if (role === "doctor") {
+      // The account is made first only because the approval records which
+      // account claimed it. Losing the race throws, and the account goes with
+      // the transaction — nothing half-registered is left behind.
+      const claimed = approvalNumber?.ok && approvalNumber.normalised
+        ? await approvals.claimApproval(
+            {
+              registrationNumber: approvalNumber.normalised,
+              phone: phone!.e164,
+              userId: created.id,
+            },
+            tx,
+          )
+        : null;
+
+      if (!claimed) {
+        throw new AppError("NOT_ELIGIBLE", {
+          message:
+            "That registration number and mobile number haven't been approved yet. Ask a Niramoy admin to approve them before signing up.",
+          meta: { reason: "doctor_not_approved" },
+        });
+      }
+    }
+
+    return created;
   });
 
   // A patient owns their clinical identity from the first second.

@@ -43,6 +43,13 @@
       "when": 1788705000000,
       "tag": "0005_signup_phone_otp",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788710000000,
+      "tag": "0006_doctor_preapproval",
+      "breakpoints": true
     }
   ]
 }

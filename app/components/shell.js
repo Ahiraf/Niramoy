@@ -21,6 +21,7 @@ export const NAV = {
   ],
   admin: [
     { id: "admin-home", label: "Overview", icon: "grid" },
+    { id: "approvals", label: "Sign-up approvals", icon: "check" },
     { id: "verification", label: "Doctor verification", icon: "shield", badge: "pending" },
     { id: "directory", label: "Directory", icon: "users" },
     { id: "specialties", label: "Specialties", icon: "heart" },
@@ -50,6 +51,7 @@ const TITLES = {
   availability: ["Availability", "Recurring hours and exceptions"],
   earnings: ["Earnings", "Completed consultations"],
   "admin-home": ["Admin overview", "Platform health"],
+  approvals: ["Sign-up approvals", "Who may register as a doctor"],
   verification: ["Doctor verification", "BM&DC application queue"],
   directory: ["Directory", "Every profile on Niramoy"],
   specialties: ["Specialties", "Care categories"],

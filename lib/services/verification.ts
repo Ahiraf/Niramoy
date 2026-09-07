@@ -28,6 +28,7 @@
 import { and, desc, eq } from "drizzle-orm";
 
 import { audit } from "../audit";
+import * as approvals from "../repositories/doctor-approvals";
 import { getDb } from "../db/client";
 import { isUniqueViolation } from "../db/errors";
 import * as t from "../db/schema";
@@ -134,6 +135,26 @@ export async function apply(
    */
   const lookup = await bmdc.verifyRegistration(shape.normalised!, shape.type!);
 
+  /**
+   * The admin approval this account was created from, if it still matches.
+   *
+   * A doctor account only exists because an admin checked this registration
+   * number against the register by hand and approved it. Asking them to check
+   * the same number a second time here would add no information, so an
+   * application quoting the approved number publishes on submission.
+   *
+   * Re-read rather than trusted from the account, and compared against the
+   * number actually being applied for: an approval for A-45312 says nothing
+   * about A-99999, and a doctor who types a different number here has not
+   * been approved for it. That case falls through to the admin queue, which is
+   * where an unchecked number belongs.
+   */
+  const approval = await approvals.approvalClaimedBy(principal.userId);
+  const preApproved = Boolean(approval && approval.registrationNumber === shape.normalised);
+  const approvedBy = preApproved ? await approvals.approverOf(principal.userId) : null;
+
+  const autoVerified = lookup.status === "verified" || preApproved;
+
   const db = getDb();
   let rows;
   try {
@@ -152,13 +173,16 @@ export async function apply(
         claimedExperienceYears: input.experienceYears ? Number(input.experienceYears) : null,
         contactEmail: principal.email,
         contactPhone: principal.phone,
-        // A registry that answered `verified` is recorded as such; anything
-        // else stays pending. There is no third outcome.
-        status: lookup.status === "verified" ? "verified" : "pending",
-        method: lookup.status === "verified" ? "bmdc_api" : null,
+        // Verified if a registry said so, or if an admin already approved
+        // this exact number before the account existed. Anything else stays
+        // pending. There is no third outcome.
+        status: autoVerified ? "verified" : "pending",
+        method: autoVerified ? (preApproved ? "manual_admin" : "bmdc_api") : null,
+        decidedByUserId: preApproved ? approvedBy : null,
         lookupSource: lookup.source,
         lookupPayload: (lookup.record ?? null) as never,
-        ...(lookup.status === "verified" ? { decidedAt: new Date() } : {}),
+        registerSaysName: preApproved ? approval!.registerName : null,
+        ...(autoVerified ? { decidedAt: new Date() } : {}),
       })
       .returning({ id: t.doctorVerifications.id });
   } catch (err) {
@@ -168,10 +192,15 @@ export async function apply(
 
   const applicationId = rows[0]!.id;
 
-  // A registry-confirmed application publishes immediately; everything else
-  // waits for an admin.
-  if (lookup.status === "verified") {
-    await publishProfile(applicationId, { verifiedByUserId: null, method: "bmdc_api" });
+  // Confirmed by the registry, or already approved by an admin: either way the
+  // number has been checked and the profile publishes. Everything else waits.
+  if (autoVerified) {
+    await publishProfile(
+      applicationId,
+      preApproved
+        ? { verifiedByUserId: approvedBy, method: "manual_admin" }
+        : { verifiedByUserId: null, method: "bmdc_api" },
+    );
   }
 
   await audit({
@@ -181,7 +210,7 @@ export async function apply(
     requestId: context.requestId,
     resourceType: "doctor_verification",
     resourceId: applicationId,
-    metadata: { lookupSource: lookup.source, autoVerified: lookup.status === "verified" },
+    metadata: { lookupSource: lookup.source, autoVerified, preApproved },
   });
 
   const queue = await listQueue();

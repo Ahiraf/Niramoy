@@ -759,9 +759,10 @@ export function AuthPage({
             {signUp && role === "doctor" && (
               <p className="auth-note">
                 <Icon name="shield" size={13} />
-                After sign-up you&rsquo;ll complete a short profile — hours, fee, chamber — and an admin
-                verifies your registration at verify.bmdc.org.bd. Your profile becomes bookable only
-                once that check passes.
+                A Niramoy admin checks your BM&amp;DC registration against the register and approves it
+                together with this mobile number before you can create an account. Both must match
+                what they approved. After sign-up you&rsquo;ll complete a short profile — hours, fee,
+                chamber — and your profile goes live.
               </p>
             )}
 

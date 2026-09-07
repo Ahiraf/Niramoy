@@ -119,11 +119,17 @@ Both sides use the same screen: the doctor presses **Open room** from Schedule,
 the patient presses **Join call** from Appointments, and each sees the other
 named in the call.
 
-Signing up as a doctor is the real path: the BM&DC number is format-checked at
-sign-up, you complete the profile form, and the account stays on a "being
-verified" screen until an admin approves it — only then is a bookable profile
-published and linked to the account. Admin sign-up needs the staff invite code
-(`NIRAMOY_ADMIN_CODE`, default `NIRAMOY-ADMIN`).
+Signing up as a doctor is the real path, and it begins with an admin. Nobody can
+create a doctor account unsolicited: an admin checks the registration number
+against the BM&DC register by hand, records it on **Sign-up approvals** together
+with the mobile number that doctor will use, and only that pair completes a
+sign-up. The doctor then fills in the profile form and goes live — the number
+was already checked by a person, so it is not put in a queue to be checked
+again. A doctor who applies with some *other* number still lands in the
+**Doctor verification** queue, because nobody has checked that one.
+
+Admin sign-up needs the staff invite code (`NIRAMOY_ADMIN_CODE`, default
+`NIRAMOY-ADMIN`), and the admin portal is at `/admin`.
 
 No environment variables are required to run the app. Everything works from the
 seeded in-memory store; `.env.local` only adds the LLM and BM&DC integrations.
@@ -146,15 +152,24 @@ than around a pretend import. What actually exists:
 So Niramoy does what every real platform does, and what the proposal specifies:
 
 ```
-doctor registers  →  submits BM&DC registration number
-                  →  status: pending
-                  →  admin confirms it at verify.bmdc.org.bd
+admin confirms the number at verify.bmdc.org.bd
+                  →  records number + mobile on Sign-up approvals
+doctor registers  →  must match BOTH, or no account is created
+                  →  fills in the profile form
                   →  status: verified  →  profile is live and bookable
+
+doctor applies with a number nobody approved
+                  →  status: pending  →  admin Doctor verification queue
 ```
 
-This is implemented end-to-end — see `lib/bmdc.js`, the **Join as a doctor** form,
-and the admin **Doctor verification** queue. Approving an application publishes a
-real, non-demo profile into the same directory.
+This is implemented end-to-end — see `lib/bmdc.js`, `lib/repositories/doctor-approvals.ts`,
+the **Sign-up approvals** and **Doctor verification** screens, and the **Join as a
+doctor** form. A published profile is a real, non-demo entry in the same directory.
+
+Two columns rather than one, because either alone is weak: a registration number
+is public information printed on a nameplate, and a mobile number identifies a
+handset rather than a clinician. Requiring both means whoever signs up holds the
+phone the admin was told about *and* quotes the number the admin already checked.
 
 ### What is seeded, and how it is labelled
 
@@ -178,8 +193,9 @@ triples only. **Names, personal mobile numbers and home addresses were stripped.
 
 ### Going live with real data
 
-1. Doctors self-register (already built).
-2. An admin verifies each BM&DC number by hand (already built).
+1. An admin verifies each BM&DC number by hand and approves it with the doctor's
+   mobile number (already built).
+2. The approved doctor registers against that pair (already built).
 3. *Optional:* if you obtain a real data-sharing endpoint, set `BMDC_API_URL` and
    `verifyRegistration()` will call it automatically, falling back to manual
    review if it is unreachable. It never fails open.
@@ -206,7 +222,7 @@ Niramoy/
 │  │  │                          # appointments, assistant, records
 │  │  ├─ doctor-workspace.js     # overview, schedule, availability, earnings,
 │  │  │                          # prescription writer w/ AI draft
-│  │  ├─ admin-workspace.js      # overview, verification queue, directory
+│  │  ├─ admin-workspace.js      # overview, sign-up approvals, verification queue, directory
 │  │  └─ join-as-doctor.js       # BM&DC onboarding form
 │  └─ api/                       # 20 route handlers (see below)
 ├─ lib/

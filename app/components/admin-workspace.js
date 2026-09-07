@@ -4,10 +4,11 @@ import { useEffect, useState } from "react";
 import { Icon } from "./icons.js";
 import {
   Avatar, PageHeading, SectionHead, Empty, Loading, Modal, Field, Banner,
-  StatusPill, DemoBadge, Rating,
+  StatusPill, DemoBadge, Rating, Select,
 } from "./ui.js";
 
 export function AdminWorkspace({ active, reference, api, notify, onRefresh }) {
+  if (active === "approvals") return <Approvals api={api} notify={notify} />;
   if (active === "verification") return <Verification api={api} notify={notify} onRefresh={onRefresh} />;
   if (active === "directory") return <Directory api={api} reference={reference} />;
   if (active === "specialties") return <Specialties reference={reference} />;
@@ -102,6 +103,227 @@ function AdminHome({ reference, api }) {
           </div>
         </section>
       </div>
+    </>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Who may register as a doctor                                                */
+/* -------------------------------------------------------------------------- */
+
+const REGISTRATION_TYPES = [
+  { value: "mbbs", label: "MBBS (Medical) — prefix A" },
+  { value: "bds", label: "BDS (Dental) — prefix D" },
+  { value: "mat", label: "Medical Assistant — prefix M" },
+];
+
+const EMPTY_APPROVAL = {
+  registrationNumber: "",
+  registrationType: "mbbs",
+  phone: "",
+  registerName: "",
+  note: "",
+};
+
+/**
+ * The gate in front of doctor sign-up.
+ *
+ * Nothing on this screen contacts the BM&DC register — there is no bulk feed
+ * to query, and the public lookup is not something to scrape. The admin checks
+ * the number themselves and records that they did. The form says so, because a
+ * screen that implied the number had been checked automatically would be
+ * claiming a check nobody performed.
+ */
+function Approvals({ api, notify }) {
+  const [approvals, setApprovals] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState(EMPTY_APPROVAL);
+  const [error, setError] = useState(null);
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [bmdcUrl, setBmdcUrl] = useState("https://verify.bmdc.org.bd/");
+
+  const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
+
+  const load = async () => {
+    setLoading(true);
+    const data = await api.doctorApprovals();
+    setApprovals(data.approvals ?? []);
+    setLoading(false);
+  };
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    load();
+    api.verificationQueue().then((d) => d.bmdcVerifyUrl && setBmdcUrl(d.bmdcVerifyUrl));
+  }, []);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError(null);
+    setFieldErrors({});
+    setBusy(true);
+
+    const result = await api.approveDoctorNumber(form);
+    setBusy(false);
+
+    if (!result.ok) {
+      const details = result.error?.details ?? {};
+      const perField = {};
+      for (const [field, problems] of Object.entries(details)) {
+        const problem = Array.isArray(problems) ? problems[0] : problems;
+        if (problem) perField[field] = problem;
+      }
+      if (Object.keys(perField).length) setFieldErrors(perField);
+      else setError(result.message ?? "That approval could not be recorded.");
+      return;
+    }
+
+    setForm(EMPTY_APPROVAL);
+    await load();
+    notify?.("Approved — this doctor can now sign up");
+  };
+
+  const revoke = async (approval) => {
+    const result = await api.revokeDoctorApproval(approval.id);
+    if (!result.ok) {
+      notify?.(result.message ?? "That approval could not be withdrawn");
+      return;
+    }
+    await load();
+    notify?.("Approval withdrawn");
+  };
+
+  const open = approvals.filter((a) => a.status === "open");
+  const settled = approvals.filter((a) => a.status !== "open");
+
+  return (
+    <>
+      <PageHeading
+        title="Doctor sign-up approvals"
+        subtitle="A doctor can only create an account against a registration number and mobile you have approved here."
+      />
+
+      <Banner tone="info" icon="shield" title="Check the register first">
+        Niramoy does not look these numbers up for you. Open the BM&amp;DC verification service,
+        confirm the number belongs to the person you are approving, then record it here with the
+        mobile number they will sign up on. Both must match at sign-up.
+        <br />
+        <a className="text-link" href={bmdcUrl} target="_blank" rel="noreferrer noopener">
+          <Icon name="arrow" size={12} /> Open verify.bmdc.org.bd
+        </a>
+      </Banner>
+
+      <div className="section-card card">
+        <SectionHead title="Approve a registration" />
+        <form onSubmit={submit} noValidate>
+          {error && (
+            <div className="auth-error" role="alert">
+              <Icon name="alert" size={14} /> {error}
+            </div>
+          )}
+
+          <div className="field-row">
+            <Field label="Registration type">
+              <Select
+                value={form.registrationType}
+                onChange={(v) => set("registrationType", v)}
+                options={REGISTRATION_TYPES}
+              />
+            </Field>
+            <Field
+              label="BM&DC registration number"
+              hint="e.g. A-45312"
+              error={fieldErrors.registrationNumber}
+            >
+              <input
+                className="field"
+                value={form.registrationNumber}
+                onChange={(e) => set("registrationNumber", e.target.value)}
+                placeholder="A-45312"
+              />
+            </Field>
+          </div>
+
+          <div className="field-row">
+            <Field
+              label="Mobile number"
+              hint="The number this doctor will sign up with."
+              error={fieldErrors.phone}
+            >
+              <input
+                className="field"
+                value={form.phone}
+                onChange={(e) => set("phone", e.target.value)}
+                inputMode="tel"
+                placeholder="01712 345678"
+              />
+            </Field>
+            <Field label="Name on the register" hint="Optional — your own record of what you saw.">
+              <input
+                className="field"
+                value={form.registerName}
+                onChange={(e) => set("registerName", e.target.value)}
+                placeholder="Dr. Ayesha Khan"
+              />
+            </Field>
+          </div>
+
+          <Field label="Note" hint="Optional.">
+            <input
+              className="field"
+              value={form.note}
+              onChange={(e) => set("note", e.target.value)}
+              placeholder="Checked against the register on 7 Sep"
+            />
+          </Field>
+
+          <button className="button primary" type="submit" disabled={busy}>
+            {busy ? "Recording…" : "Approve this registration"} <Icon name="arrow" size={13} />
+          </button>
+        </form>
+      </div>
+
+      <div className="section-card card">
+        <SectionHead title="Waiting to be used" note={`${open.length} open`} />
+        {loading ? <Loading /> : open.length ? open.map((a) => (
+          <div className="verification-row" key={a.id}>
+            <div className="avatar md blue"><Icon name="shield" size={16} /></div>
+            <main>
+              <strong>{a.registerName || "Name not recorded"}</strong>
+              <span className="mono-note">
+                BM&amp;DC {a.registrationNumber} · {a.registrationType?.toUpperCase()} · {a.phone}
+              </span>
+              {a.note && <span>{a.note}</span>}
+            </main>
+            <button className="button ghost small" onClick={() => revoke(a)}>Withdraw</button>
+          </div>
+        )) : (
+          <Empty
+            icon="shield"
+            title="No approvals waiting"
+            hint="Nobody can sign up as a doctor until you approve a registration number here."
+          />
+        )}
+      </div>
+
+      {settled.length > 0 && (
+        <div className="section-card card">
+          <SectionHead title="Used and withdrawn" note={`${settled.length}`} />
+          {settled.map((a) => (
+            <div className="verification-row" key={a.id}>
+              <div className="avatar md"><Icon name="shield" size={16} /></div>
+              <main>
+                <strong>{a.registerName || a.registrationNumber}</strong>
+                <span className="mono-note">
+                  BM&amp;DC {a.registrationNumber} · {a.phone}
+                </span>
+              </main>
+              <StatusPill status={a.status === "claimed" ? "verified" : "rejected"} />
+            </div>
+          ))}
+        </div>
+      )}
     </>
   );
 }

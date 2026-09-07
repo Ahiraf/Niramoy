@@ -148,6 +148,10 @@ export const api = {
     request(`/api/payments/${id}/execute`, { method: "POST", body }),
 
   verificationQueue: () => request("/api/verification"),
+  doctorApprovals: () => request("/api/admin/doctor-approvals"),
+  approveDoctorNumber: (body) => request("/api/admin/doctor-approvals", { method: "POST", body }),
+  revokeDoctorApproval: (id) =>
+    request("/api/admin/doctor-approvals", { method: "PATCH", body: { id } }),
   applyAsDoctor: (body) => request("/api/verification", { method: "POST", body }),
   decideApplication: (body) => request("/api/verification", { method: "PATCH", body }),
 

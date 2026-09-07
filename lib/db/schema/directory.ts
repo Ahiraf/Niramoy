@@ -264,3 +264,49 @@ export const doctorDocuments = pgTable(
   },
   (t) => [index("idx_doctor_documents_verification").on(t.verificationId)],
 );
+
+/**
+ * Who an admin has cleared to register as a doctor.
+ *
+ * The gate in front of doctor sign-up. An admin checks a registration number
+ * against the BM&DC register by hand — there is no bulk feed to check it
+ * against — and records it here with the mobile number that doctor will sign
+ * up on. Sign-up matches both, and spends the row.
+ *
+ * This is the evidence behind a verified profile, so rows are spent rather
+ * than deleted: `claimedByUserId` ties an approval to the account it produced.
+ */
+export const doctorApprovals = pgTable(
+  "doctor_approvals",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+
+    /** Normalised, so the sign-up lookup cannot miss on spacing or case. */
+    registrationNumber: text("registration_number").notNull(),
+    registrationType: text("registration_type").notNull(),
+    /** E.164 — the shape sign-up proves by SMS. */
+    phone: text("phone").notNull(),
+
+    /** What the register said. The admin's own note, never shown to the applicant. */
+    registerName: text("register_name"),
+    note: text("note"),
+
+    /** open → claimed once used, or revoked if the admin withdraws it. */
+    status: text("status").notNull().default("open"),
+
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+
+    claimedByUserId: uuid("claimed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
+
+    revokedByUserId: uuid("revoked_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("uq_doctor_approvals_open_number")
+      .on(t.registrationNumber)
+      .where(sql`status = 'open'`),
+    index("idx_doctor_approvals_lookup").on(t.registrationNumber, t.phone),
+  ],
+);
