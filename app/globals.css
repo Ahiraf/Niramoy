@@ -44,9 +44,6 @@ a { color: inherit; text-decoration: none; }
 .nav-item.active { color: var(--teal-dark); background: var(--teal-soft); font-weight: 750; }
 .nav-item .nav-count { margin-left: auto; display: grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; background: #f9eee2; color: #b56e34; border-radius: 99px; font-size: calc(10px * var(--text-scale)); }
 .sidebar-bottom { margin-top: auto; border-top: 1px solid var(--line); padding: 15px 8px 0; }
-.sidebar-tip { background: #f2f8f6; border-radius: 14px; padding: 14px; margin-bottom: 14px; }
-.sidebar-tip p { margin: 4px 0 12px; color: var(--muted); font-size: calc(11px * var(--text-scale)); line-height: 1.5; }
-.sidebar-tip strong { font-size: calc(12px * var(--text-scale)); }
 .user-mini { display: flex; gap: 9px; align-items: center; padding: 8px 6px; }
 .user-mini-text { min-width: 0; flex: 1; }
 .user-mini-text strong, .user-mini-text span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

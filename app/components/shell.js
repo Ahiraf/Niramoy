@@ -99,16 +99,6 @@ export function Sidebar({ active, onNavigate, role, user, onSignOut, counts, ope
         </nav>
 
         <div className="sidebar-bottom">
-          {role === "patient" && (
-            <div className="sidebar-tip">
-              <strong>Are you a doctor?</strong>
-              <p>Join Niramoy with your BM&amp;DC registration number. Admin verification usually takes under two days.</p>
-              <button className="button secondary small" onClick={() => { onNavigate("join-as-doctor"); onClose?.(); }}>
-                Apply to join <Icon name="arrow" size={13} />
-              </button>
-            </div>
-          )}
-
           <div className="user-mini">
             <Avatar person={user} />
             <div className="user-mini-text">
