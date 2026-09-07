@@ -3,15 +3,18 @@
 import { Icon } from "../icons.js";
 import { Avatar, PageHeading, SectionHead, Stat, Empty, Loading, Rating, VerifiedBadge } from "../ui.js";
 
-export function Dashboard({ loading, appointments, doctors, records, stats, onNavigate, onOpenDoctor, onJoinCall }) {
+export function Dashboard({ loading, user, appointments, doctors, records, stats, onNavigate, onOpenDoctor, onJoinCall }) {
   const upcoming = appointments.filter((a) => ["confirmed", "pending"].includes(a.status));
   const next = upcoming[0];
   const completed = appointments.filter((a) => a.status === "completed");
+  // Greet the person who is actually signed in. Until the account loads there
+  // is no name to use, and a placeholder one would be someone else's.
+  const firstName = user?.name?.trim().split(/\s+/)[0] ?? "";
 
   return (
     <>
       <PageHeading
-        title="Good to see you, Nabila"
+        title={firstName ? `Good to see you, ${firstName}` : "Good to see you"}
         subtitle="Here's what's happening with your care today."
         actions={
           <>

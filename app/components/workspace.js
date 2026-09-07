@@ -732,6 +732,7 @@ export function Workspace({ portal = "public" }) {
         view = (
           <Dashboard
             loading={loading}
+            user={user}
             appointments={appointments}
             doctors={topDoctors}
             records={[...records, ...prescriptions]}
