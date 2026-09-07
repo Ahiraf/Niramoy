@@ -7,7 +7,39 @@
    `POSTGRES_URL_NON_POOLING`.
 3. Set the required variables (below).
 4. `npm run db:migrate` against the non-pooled URL.
-5. Deploy. `vercel.json` registers the cron schedules.
+5. Deploy. `vercel.json` registers the cron schedules — read the section below
+   before assuming they all run.
+
+## Scheduled jobs, and what the Hobby plan costs
+
+Vercel's Hobby plan allows **2 cron jobs per project, running once a day**.
+`vercel.json` is cut to fit that, which means three jobs no longer run on a
+schedule:
+
+| Job | Scheduled | Consequence when unscheduled |
+|---|---|---|
+| `appointment-reminders` | 03:00 daily | — |
+| `no-show-sweep` | 03:30 daily | — |
+| `waitlist-offers` | **not scheduled** | A cancelled slot is not offered to the waitlist automatically. Nothing is lost; the offer simply waits |
+| `notification-retry` | **not scheduled** | A notification that failed to send is not retried |
+| `expiry-sweep` | **not scheduled** | Expired verification rows and rate-limit counters are never purged. Harmless at demo scale; unbounded growth eventually |
+
+`REMINDER_WINDOW_MINUTES=1440` is **required** when reminders run daily, and is
+the setting most likely to be missed. Each run looks at appointments starting
+`REMINDER_LEAD_HOURS` (24) from now, for exactly one window. Left at the hourly
+default of 60, a daily run reminds one hour's worth of patients and skips the
+other twenty-three — without erroring, and with nothing on screen to show for
+it.
+
+The endpoints all still work. Two ways to get the unscheduled jobs running:
+
+- **Upgrade to Pro** and restore the schedules from git history, or
+- **Point an external scheduler** (cron-job.org and similar are free) at
+  `https://<your-app>/api/cron/<job>` with the `CRON_SECRET` as a bearer token.
+  This keeps the code exactly as designed and costs nothing.
+
+Either way, set `REMINDER_WINDOW_MINUTES` back to `60` if reminders return to
+an hourly schedule.
 
 ## Required in production
 
@@ -20,6 +52,15 @@ without them:
 | `SESSION_SECRET` | ≥32 chars. `openssl rand -base64 48` |
 | `NIRAMOY_ADMIN_CODE` | Otherwise the default gates admin sign-up |
 | `CRON_SECRET` | ≥32 chars. Cron endpoints mutate appointment status |
+
+Also set, though the app boots without them:
+
+| Variable | Why |
+|---|---|
+| `APP_URL` | Your production URL. The CSRF origin check enforces it strictly once named, so a preview deployment's hostname will be rejected |
+| `REMINDER_WINDOW_MINUTES` | `1440` when reminders run daily. See the cron section |
+| `ALLOW_PUBLIC_VIDEO_ROOM` | `true` to permit credential-free `meet.jit.si` rooms. Production refuses them by default: the room is unlisted, not access-controlled |
+| `ALLOW_DEMO_PROFILES` | `true` to seed the demo directory. Defaults to false in production so synthetic profiles cannot reach a real one |
 
 `ALLOW_DEMO_PROFILES` defaults to **false** in production. The seed refuses to
 run, so synthetic profiles cannot reach a production directory.

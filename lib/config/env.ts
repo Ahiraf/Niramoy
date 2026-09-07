@@ -87,6 +87,16 @@ const schema = z
     TEXTBEE_DEVICE_ID: z.string().optional(),
     TEXTBEE_BASE_URL: z.string().url().optional(),
 
+    /**
+     * How wide a net one reminder run casts, in minutes. Must match how often
+     * the job is actually scheduled: the run looks at appointments starting
+     * REMINDER_LEAD_HOURS from now for exactly this long, so a job scheduled
+     * daily with the hourly default would remind one hour's worth of patients
+     * and silently skip the other twenty-three. Hourly cron → 60. Daily cron
+     * (Vercel Hobby caps crons at once a day) → 1440.
+     */
+    REMINDER_WINDOW_MINUTES: z.coerce.number().int().min(15).max(10_080).optional(),
+
     VIDEO_PROVIDER: z.enum(["demo", "daily", "jitsi"]).optional(),
     VIDEO_API_KEY: z.string().optional(),
     VIDEO_API_SECRET: z.string().optional(),

@@ -8,6 +8,7 @@
  * promise.
  */
 import { seedAppointment, type World } from "../fixtures";
+import { resetEnvCache } from "../../lib/config/env";
 import { setupWorld, teardownWorld } from "../harness";
 import {
   NO_SHOW_GRACE_MINUTES, REMINDER_LEAD_HOURS, sendReminders, sweepExpired, sweepNoShows,
@@ -21,6 +22,79 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await teardownWorld(world);
+});
+
+/**
+ * The reminder window has to match how often the job is scheduled.
+ *
+ * A run covers appointments starting REMINDER_LEAD_HOURS from now, for one
+ * window. Scheduling the job daily while the window stays at the hourly
+ * default is the kind of misconfiguration that reports success: the run
+ * completes, says it processed some appointments, and the rest of the day's
+ * patients are never told. Vercel's Hobby plan forces exactly that schedule,
+ * so this is a live configuration, not a hypothetical one.
+ */
+describe("the reminder window follows the schedule", () => {
+  /** Twenty hours past the lead time — inside a daily window, outside an hourly one. */
+  const wellIntoTomorrow = (now: Date) =>
+    new Date(now.getTime() + REMINDER_LEAD_HOURS * 3_600_000 + 20 * 3_600_000);
+
+  afterEach(() => {
+    delete process.env.REMINDER_WINDOW_MINUTES;
+    resetEnvCache();
+  });
+
+  it("misses the rest of the day when left hourly", async () => {
+    const now = new Date();
+    await seedAppointment(world, {
+      doctor: world.doctor,
+      patient: world.patientA,
+      startUtc: wellIntoTomorrow(now).toISOString(),
+      status: "confirmed",
+    });
+
+    // The default. Correct for an hourly cron, and the trap for a daily one.
+    const result = await sendReminders(now);
+
+    expect(result.processed).toBe(0);
+  });
+
+  it("covers a full day when told the run is daily", async () => {
+    const now = new Date();
+    await seedAppointment(world, {
+      doctor: world.doctor,
+      patient: world.patientA,
+      startUtc: wellIntoTomorrow(now).toISOString(),
+      status: "confirmed",
+    });
+
+    process.env.REMINDER_WINDOW_MINUTES = "1440";
+    resetEnvCache();
+
+    const result = await sendReminders(now);
+
+    expect(result.processed).toBe(1);
+  });
+
+  it("does not tell a patient two days out that it is tomorrow", async () => {
+    const now = new Date();
+    await seedAppointment(world, {
+      doctor: world.doctor,
+      patient: world.patientA,
+      startUtc: wellIntoTomorrow(now).toISOString(),
+      status: "confirmed",
+    });
+
+    process.env.REMINDER_WINDOW_MINUTES = "1440";
+    resetEnvCache();
+    await sendReminders(now);
+
+    const { rows } = await world.h.client.query<{ title: string }>(
+      `SELECT title FROM notifications
+         WHERE type = 'appointment_reminder' AND channel = 'in_app'`,
+    );
+    expect(rows[0]!.title).toBe("Your upcoming consultation");
+  });
 });
 
 describe("appointment reminders", () => {

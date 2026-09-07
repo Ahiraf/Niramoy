@@ -88,17 +88,31 @@ async function finishRun(
 /* -------------------------------------------------------------------------- */
 
 export const REMINDER_LEAD_HOURS = 24;
-const REMINDER_WINDOW_MINUTES = 60;
+const DEFAULT_REMINDER_WINDOW_MINUTES = 60;
+
+/**
+ * How much of the schedule one run covers.
+ *
+ * This has to match how often the job is actually scheduled, and getting it
+ * wrong is invisible: the run looks at appointments starting
+ * REMINDER_LEAD_HOURS from now for exactly this long, so a job that runs daily
+ * with the hourly default reminds one hour's worth of patients and skips the
+ * other twenty-three without erroring. Hourly cron → 60 (the default). Daily
+ * cron → 1440.
+ */
+const reminderWindowMinutes = (): number =>
+  getEnv().REMINDER_WINDOW_MINUTES ?? DEFAULT_REMINDER_WINDOW_MINUTES;
 
 /**
  * Remind patients about appointments roughly 24 hours out.
  *
- * The window is an hour wide and the run key is hourly, so the job is safe to
- * schedule hourly and safe to run twice within the hour.
+ * The run key is derived from the same window, so the job is safe to schedule
+ * at that interval and safe to run twice within one.
  */
 export async function sendReminders(now = new Date()): Promise<JobResult> {
   const job = "appointment-reminders";
-  const runKey = runKeyFor(job, REMINDER_WINDOW_MINUTES, now);
+  const windowMinutes = reminderWindowMinutes();
+  const runKey = runKeyFor(job, windowMinutes, now);
 
   const runId = await claimRun(job, runKey);
   if (!runId) {
@@ -107,7 +121,7 @@ export async function sendReminders(now = new Date()): Promise<JobResult> {
   }
 
   const from = new Date(now.getTime() + REMINDER_LEAD_HOURS * 3_600_000);
-  const to = new Date(from.getTime() + REMINDER_WINDOW_MINUTES * 60_000);
+  const to = new Date(from.getTime() + windowMinutes * 60_000);
 
   const due = await appointments.findForReminder(from, to);
   const zone = getEnv().DISPLAY_TIMEZONE;
@@ -124,10 +138,20 @@ export async function sendReminders(now = new Date()): Promise<JobResult> {
 
     // The dedupe key is the real guarantee: even a double run cannot deliver a
     // second reminder for the same appointment and lead time.
+    /*
+     * "Tomorrow" is only true for a narrow window. Once the window widens to
+     * cover a daily run, the far end of it is two days out, and a reminder
+     * that says tomorrow about a Thursday appointment is worse than no
+     * reminder — the body carries the real date either way.
+     */
+    const hoursAway = (appointment.startUtc.getTime() - now.getTime()) / 3_600_000;
+    const title =
+      hoursAway <= 36 ? "Your consultation is tomorrow" : "Your upcoming consultation";
+
     await clinical.notify({
       userId: appointment.patientUserId,
       type: "appointment_reminder",
-      title: "Your consultation is tomorrow",
+      title,
       body: `Your consultation with ${appointment.doctorName ?? "your doctor"} is ${whenLabel}.`,
       payload: { appointmentId: appointment.id },
       dedupeKey: `reminder:${appointment.id}:${REMINDER_LEAD_HOURS}h`,
