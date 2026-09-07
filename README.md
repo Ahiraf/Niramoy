@@ -332,12 +332,13 @@ rules together — see `docs/IMPLEMENTATION_PLAN.md`.
 
 ## AI layer
 `lib/ai/` works **without an API key**, using a transparent rule engine, and
-upgrades to an LLM when `AI_API_KEY` / `AI_BASE_URL` are set. Safety properties:
+upgrades to an LLM when any model credential is set. Safety properties:
 
 - Red-flag symptoms (chest pain, stroke signs, self-harm, …) short-circuit to
   emergency advice **before** any model is consulted, and are never passed to one.
 - No code path can downgrade an emergency result.
-- LLM failures fall back to the rule engine — fail safe, never fail open.
+- LLM failures fall back to the rule engine — fail safe, never fail open. That
+  includes every credential in the chain failing at once.
 - Visit summaries are always returned `requiresReview: true`; the doctor edits and
   confirms before anything reaches a patient record.
 
@@ -345,19 +346,39 @@ upgrades to an LLM when `AI_API_KEY` / `AI_BASE_URL` are set. Safety properties:
 
 Any provider speaking the OpenAI `/chat/completions` protocol works — there is
 no vendor SDK. Google AI Studio issues a free key with no card and publishes an
-OpenAI-compatible endpoint, which makes it the least friction:
+OpenAI-compatible endpoint, which makes it the least friction.
+
+Credentials are tried in order, and the first that answers serves the request:
 
 ```
-AI_API_KEY=<AI Studio key>
-AI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
-AI_MODEL=gemini-2.5-flash
+GEMINI_API_KEY_1=<AI Studio key>      ─┐
+GEMINI_API_KEY_2=<second key>          ├─ free tier, per-key daily quota
+GEMINI_API_KEY_3=<third key>          ─┘
+OPENAI_API_KEY=<OpenAI key>            └─ last resort; this one costs money
 ```
+
+Three Gemini keys because a free quota is per key and per day, so one running
+out mid-afternoon would otherwise take the assistant with it. A credential is
+passed over when it reports a limit (429), is rejected, or cannot be reached,
+and a key that reported a limit is rested rather than retried on every request.
+Configure as many or as few as you like — unset ones are skipped, and one key
+alone behaves exactly as before.
+
+When *every* credential fails, triage keeps its rule-based answer and the visit
+summary stays undrafted. There is no path from "no model answered" to a
+clinical claim. See `lib/ai/providers.ts`.
+
+The single-endpoint form (`AI_API_KEY` / `AI_BASE_URL` / `AI_MODEL`) still works
+and is tried last, so an existing configuration is unaffected.
 
 ```bash
 npm run ai:check
 ```
 
-Run that after setting the key. Triage falls back to the rule engine whenever
+Run that after setting the keys. It probes **every** credential separately,
+which matters more with a chain than without one: if key 1 is dead the
+assistant still works on key 2, and nothing on screen says so until the last
+key goes too. Triage falls back to the rule engine whenever
 the model is unreachable — correct clinically, but it means a wrong key is
 indistinguishable from a working system until you look. `ai:check` calls the
 provider with a benign non-clinical prompt and reports the status, the model

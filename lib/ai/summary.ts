@@ -19,6 +19,7 @@
 import { createHash } from "node:crypto";
 
 import { getEnv } from "../config/env";
+import { chatJson } from "./providers";
 import { logger } from "../observability/logger";
 import { parseModelJson, visitSummarySchema, type VisitSummaryOutput } from "./schema";
 import { RULE_SET_VERSION } from "./rules";
@@ -37,6 +38,8 @@ export interface SummaryDraft {
   source: "rules" | "llm";
   meta: {
     provider: string | null;
+    /** Which credential in the chain answered — never the key itself. */
+    credential?: string;
     model: string | null;
     promptVersion: string;
     ruleSetVersion: string;
@@ -111,38 +114,26 @@ export async function draftVisitSummary(input: {
   const transcript = (input.transcript ?? "").slice(0, MAX_TRANSCRIPT_CHARS);
 
   const env = getEnv();
-  if (env.aiProvider !== "openai-compatible" || !env.AI_API_KEY || !env.AI_BASE_URL || !transcript) {
+  if (env.aiProvider !== "openai-compatible" || !transcript) {
     return fallback;
   }
 
   try {
-    const response = await fetch(`${env.AI_BASE_URL.replace(/\/$/, "")}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${env.AI_API_KEY}`,
-      },
-      signal: AbortSignal.timeout(20_000),
-      body: JSON.stringify({
-        model: env.AI_MODEL ?? "gpt-4o-mini",
-        temperature: 0.2,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: `<clinical_notes>\n${transcript}\n</clinical_notes>` },
-        ],
-      }),
-    });
-
-    if (!response.ok) throw new Error(`upstream ${response.status}`);
-
-    const body = (await response.json()) as {
-      choices?: Array<{ message?: { content?: unknown } }>;
-    };
-    const parsed = parseModelJson<VisitSummaryOutput>(
-      body.choices?.[0]?.message?.content,
-      visitSummarySchema,
+    const answer = await chatJson(
+      [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: `<clinical_notes>\n${transcript}\n</clinical_notes>` },
+      ],
+      { timeoutMs: 20_000 },
     );
+
+    // No credential answered. The doctor writes the summary themselves, which
+    // is the same thing that happens when no model is configured at all.
+    if (!answer) {
+      return { ...fallback, meta: { ...fallback.meta, llmInvoked: true, llmFailed: true } };
+    }
+
+    const parsed = parseModelJson<VisitSummaryOutput>(answer.content, visitSummarySchema);
 
     if (!parsed.ok || !parsed.data) {
       logger.warn("summary model output rejected", { reason: parsed.reason });
@@ -163,8 +154,9 @@ export async function draftVisitSummary(input: {
       source: "llm",
       meta: {
         ...fallback.meta,
-        provider: "openai-compatible",
-        model: env.AI_MODEL ?? "gpt-4o-mini",
+        provider: answer.provider,
+        credential: answer.credentialId,
+        model: answer.model,
         inputProvenance: "doctor_notes",
         llmInvoked: true,
       },

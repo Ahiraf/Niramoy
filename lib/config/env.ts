@@ -51,6 +51,27 @@ const schema = z
     AI_BASE_URL: z.string().url().optional(),
     AI_MODEL: z.string().optional(),
 
+    /*
+     * The failover chain, tried in this order: three Gemini keys, then OpenAI.
+     *
+     * Several keys because a free-tier quota is per key, and the daily one runs
+     * out mid-afternoon rather than at a convenient moment. Nothing here is a
+     * capacity strategy — it is what keeps the assistant answering when one
+     * key stops. When every credential is exhausted the AI layer reports that
+     * it has nothing, and each caller falls back to its deterministic result:
+     * the triage rules, or the un-drafted summary. It never fails open.
+     */
+    GEMINI_API_KEY_1: z.string().optional(),
+    GEMINI_API_KEY_2: z.string().optional(),
+    GEMINI_API_KEY_3: z.string().optional(),
+    GEMINI_MODEL: z.string().optional(),
+    /** Google's OpenAI-compatible endpoint, so one request shape serves both. */
+    GEMINI_BASE_URL: z.string().url().optional(),
+
+    OPENAI_API_KEY: z.string().optional(),
+    OPENAI_MODEL: z.string().optional(),
+    OPENAI_BASE_URL: z.string().url().optional(),
+
     EMAIL_PROVIDER: z.enum(["console", "resend"]).optional(),
     EMAIL_API_KEY: z.string().optional(),
     EMAIL_FROM: z.string().optional(),
@@ -136,8 +157,20 @@ const schema = z
       /** Demo profiles are on everywhere except production, unless overridden. */
       allowDemoProfiles:
         raw.ALLOW_DEMO_PROFILES === undefined ? !isProd : raw.ALLOW_DEMO_PROFILES === "true",
-      /** No key means the rule engine. This is a safety property, not a default. */
-      aiProvider: raw.AI_PROVIDER ?? (raw.AI_API_KEY && raw.AI_BASE_URL ? "openai-compatible" : "rules"),
+      /**
+       * No key means the rule engine. This is a safety property, not a default:
+       * the triage rules and the fallback summary are what runs when there is
+       * no model, and they must be reachable without one.
+       */
+      aiProvider:
+        raw.AI_PROVIDER ??
+        (raw.GEMINI_API_KEY_1 ||
+        raw.GEMINI_API_KEY_2 ||
+        raw.GEMINI_API_KEY_3 ||
+        raw.OPENAI_API_KEY ||
+        (raw.AI_API_KEY && raw.AI_BASE_URL)
+          ? "openai-compatible"
+          : "rules"),
       emailProvider: raw.EMAIL_PROVIDER ?? (raw.EMAIL_API_KEY ? "resend" : "console"),
       /** A key means a gateway; no key means the code is printed, never sent. */
       smsProvider: raw.SMS_PROVIDER ?? (raw.TEXTBEE_API_KEY ? "textbee" : "console"),

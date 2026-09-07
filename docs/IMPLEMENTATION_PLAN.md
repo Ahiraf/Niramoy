@@ -184,9 +184,10 @@ transliterated term (`buke betha`). Brief §16 requires Bangla and Banglish.
 
 `.env.example` declares `POSTGRES_URL`, `POSTGRES_PRISMA_URL`,
 `POSTGRES_URL_NON_POOLING`, `NIRAMOY_ADMIN_CODE`, `AI_API_KEY`, `AI_BASE_URL`,
-`AI_MODEL`, `DAILY_API_KEY`, `RESEND_API_KEY`, `BMDC_API_URL`. Only
-`NIRAMOY_ADMIN_CODE`, `AI_API_KEY`, `AI_BASE_URL`, `AI_MODEL` and `BMDC_API_URL` are
-actually read by code. The app runs with none set — a property worth keeping for the
+`AI_MODEL`, `GEMINI_API_KEY_1..3`, `OPENAI_API_KEY`, `DAILY_API_KEY`,
+`RESEND_API_KEY`, `BMDC_API_URL`. Only `NIRAMOY_ADMIN_CODE`, the model
+credentials (`GEMINI_API_KEY_1..3`, `OPENAI_API_KEY`, `AI_API_KEY` /
+`AI_BASE_URL` / `AI_MODEL`) and `BMDC_API_URL` are actually read by code. The app runs with none set — a property worth keeping for the
 academic demo.
 
 ---

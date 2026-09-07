@@ -90,11 +90,27 @@ they confirmed it.
 
 ## Privacy
 
-With no `AI_API_KEY` configured — the default — **no patient text leaves the
-system.** The rule engine is local.
+With no model credentials configured — the default — **no patient text leaves
+the system.** The rule engine is local.
 
 When an LLM is enabled, what leaves is: the symptom text or clinical notes, and
 nothing else. No name, no patient id, no appointment id, no contact details.
+
+### More than one credential
+
+Credentials are tried in order — three Gemini keys, then OpenAI — and the first
+that answers serves the request (`lib/ai/providers.ts`). This changes *which*
+provider sees the text, so it is a privacy fact as much as an availability one:
+enabling the OpenAI key means that on a day when the Gemini quota is spent, the
+symptom text goes to OpenAI instead of Google. Configure only the providers you
+are willing to send text to.
+
+It does not change *what* is sent, or what comes back into a clinical answer.
+Every credential is called with the same prompt, and whichever one answers, the
+reply goes through the same schema validation and the same urgency floor. When
+all of them fail the layer reports that nothing answered, and triage keeps its
+deterministic result — the chain cannot fail open, because there is no path
+from "no model answered" to a clinical claim.
 
 What is **retained**: a SHA-256 hash, a character count, and a detected language.
 Not the description itself. That is enough to reproduce a safety investigation

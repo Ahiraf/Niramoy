@@ -23,6 +23,7 @@
 import { createHash } from "node:crypto";
 
 import { getEnv } from "../config/env";
+import { chatJson } from "./providers";
 import { logger } from "../observability/logger";
 import {
   INTAKE_FLOORS, RED_FLAGS, RULE_SET_VERSION, SPECIALTY_HINTS, URGENCY_HINTS,
@@ -54,6 +55,10 @@ export interface TriageResult {
     ruleSetVersion: string;
     promptVersion: string | null;
     provider: string | null;
+    /** Which credential in the chain answered — never the key itself. */
+    credential?: string;
+    /** How many credentials were tried before one did. */
+    attempts?: number;
     model: string | null;
     llmInvoked: boolean;
     llmFailed: boolean;
@@ -302,52 +307,48 @@ export async function triage(input: string, intake: Intake = {}): Promise<Triage
   if (rules.redFlag) return rules;
 
   const env = getEnv();
-  if (env.aiProvider !== "openai-compatible" || !env.AI_API_KEY || !env.AI_BASE_URL) {
-    return rules;
-  }
+  if (env.aiProvider !== "openai-compatible") return rules;
 
   const injection = detectInjection(raw);
   const meta = { ...rules.meta, injectionDetected: injection.detected };
 
   try {
-    const response = await fetch(`${env.AI_BASE_URL.replace(/\/$/, "")}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${env.AI_API_KEY}`,
-      },
-      signal: AbortSignal.timeout(12_000),
-      body: JSON.stringify({
-        model: env.AI_MODEL ?? "gpt-4o-mini",
-        temperature: 0.2,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          // Patient text goes in the USER role, delimited, and is never
-          // interpolated into the system message. That structural separation is
-          // the real injection defence.
-          {
-            role: "user",
-            content:
-              `<patient_symptoms>\n${raw}\n</patient_symptoms>` +
-              // The intake answers are a closed vocabulary chosen from fixed
-              // buttons, so unlike the description they cannot carry an
-              // injection payload. They are still fenced and still labelled
-              // data, because the rule is structural and not case-by-case.
-              (intakeSummary(intake) ? `\n<patient_context>\n${intakeSummary(intake)}\n</patient_context>` : ""),
-          },
-        ],
-      }),
-    });
+    /*
+     * One key having run out of quota must not silently downgrade triage to
+     * the rules for everybody, so the call walks the credential chain. What it
+     * cannot do is change what comes back: whichever key answers, the output
+     * goes through the same schema check and the same urgency floor below.
+     */
+    const answer = await chatJson(
+      [
+        { role: "system", content: SYSTEM_PROMPT },
+        // Patient text goes in the USER role, delimited, and is never
+        // interpolated into the system message. That structural separation is
+        // the real injection defence.
+        {
+          role: "user",
+          content:
+            `<patient_symptoms>\n${raw}\n</patient_symptoms>` +
+            // The intake answers are a closed vocabulary chosen from fixed
+            // buttons, so unlike the description they cannot carry an
+            // injection payload. They are still fenced and still labelled
+            // data, because the rule is structural and not case-by-case.
+            (intakeSummary(intake) ? `\n<patient_context>\n${intakeSummary(intake)}\n</patient_context>` : ""),
+        },
+      ],
+      { timeoutMs: 12_000 },
+    );
 
-    if (!response.ok) throw new Error(`upstream ${response.status}`);
+    // Nothing answered. The deterministic result stands, as it does for every
+    // other model failure.
+    if (!answer) {
+      return {
+        ...rules,
+        meta: { ...meta, llmInvoked: true, llmFailed: true, latencyMs: Date.now() - started },
+      };
+    }
 
-    const body = (await response.json()) as {
-      choices?: Array<{ message?: { content?: unknown } }>;
-    };
-    const content = body.choices?.[0]?.message?.content;
-
-    const parsed = parseModelJson(content, triageOutputSchema);
+    const parsed = parseModelJson(answer.content, triageOutputSchema);
     if (!parsed.ok || !parsed.data) {
       logger.warn("triage model output rejected", { reason: parsed.reason });
       return {
@@ -383,8 +384,12 @@ export async function triage(input: string, intake: Intake = {}): Promise<Triage
       meta: {
         ...meta,
         promptVersion: PROMPT_VERSION,
-        provider: "openai-compatible",
-        model: env.AI_MODEL ?? "gpt-4o-mini",
+        // Which credential actually answered, so a support question about one
+        // odd result can be traced to the model that produced it.
+        provider: answer.provider,
+        credential: answer.credentialId,
+        model: answer.model,
+        attempts: answer.attempts,
         llmInvoked: true,
         llmDowngradeBlocked: downgradeBlocked,
         latencyMs: Date.now() - started,

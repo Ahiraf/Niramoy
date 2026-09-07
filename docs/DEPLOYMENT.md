@@ -31,7 +31,7 @@ than failing.
 
 | Unset | Behaviour |
 |---|---|
-| `AI_API_KEY` / `AI_BASE_URL` | Deterministic rules only. **No patient text leaves the system** |
+| `GEMINI_API_KEY_1..3` / `OPENAI_API_KEY` / `AI_API_KEY` | Deterministic rules only. **No patient text leaves the system**. Set any one to enable the model layer; they are tried in that order |
 | `EMAIL_API_KEY` | Email logged, not sent. Verification and reset links appear in the log |
 | `VIDEO_API_KEY` | Demo room. Real scoped token, no media. UI says so |
 | `PAYMENT_API_KEY` | Mock provider. Nothing charged, labelled throughout |
