@@ -66,7 +66,7 @@ password `niramoy123` for each:
 |---|---|---|
 | Patient | `nabila@example.com` | A workspace with seeded appointments, records and a prescription |
 | Doctor | `ayesha@example.com` | Schedule, availability, earnings, prescription writer |
-| Admin | `sakib@example.com` | Verification queue, directory, specialties |
+| Admin | `sakib@example.com` | Verification queue, directory, specialties — sign in at `/admin` |
 
 ### Showing the video consultation
 
