@@ -9,7 +9,7 @@ import { json, ok, withRoute } from "../../../lib/api/respond";
 import { clearAuthCookies, readCookie, SESSION_COOKIE, withCookies } from "../../../lib/auth/cookies";
 import { normalisePhone } from "../../../lib/auth/phone";
 import { getPrincipal, requireUser } from "../../../lib/security/authz";
-import { locationOf, logout, toPublicUser } from "../../../lib/services/auth";
+import { doctorContextOf, locationOf, logout, toPublicUser } from "../../../lib/services/auth";
 import * as users from "../../../lib/repositories/users";
 import { AppError } from "../../../lib/errors";
 import { audit } from "../../../lib/audit";
@@ -25,7 +25,16 @@ export const GET = withRoute("GET /api/auth", async (request) => {
 
   const patient = principal.patientId ? await users.findPatientByUserId(principal.userId) : null;
 
-  return ok({ user: toPublicUser(user, { patientId: principal.patientId, ...locationOf(patient) }) });
+  return ok({
+    user: toPublicUser(user, {
+      patientId: principal.patientId,
+      // The doctor's published profile and where their application stands.
+      // Without these the workspace cannot tell a verified doctor from one who
+      // has never applied, and both land on the wrong screen.
+      ...(await doctorContextOf(user)),
+      ...locationOf(patient),
+    }),
+  });
 });
 
 /**

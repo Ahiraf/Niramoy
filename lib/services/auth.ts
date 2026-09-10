@@ -19,6 +19,8 @@
  *   FAIL CLOSED. Every branch that cannot establish who the caller is throws.
  */
 
+import { desc, eq } from "drizzle-orm";
+
 import { AppError } from "../errors";
 import { getEnv } from "../config/env";
 import { audit } from "../audit";
@@ -33,6 +35,8 @@ import { checkAdminInviteCode } from "../security/authz";
 import * as sessions from "../repositories/sessions";
 import * as users from "../repositories/users";
 import * as approvals from "../repositories/doctor-approvals";
+import * as directory from "../repositories/doctors";
+import * as t from "../db/schema";
 import { validateRegistrationNumber } from "../bmdc.js";
 import { getDb } from "../db/client";
 import type { UserRole } from "../repositories/users";
@@ -402,7 +406,14 @@ export async function login(
     requestId: context.requestId,
   });
 
-  return { user: toPublicUser(user, { patientId: patient?.id ?? null, ...locationOf(patient) }), session };
+  return {
+    user: toPublicUser(user, {
+      patientId: patient?.id ?? null,
+      ...(await doctorContextOf(user)),
+      ...locationOf(patient),
+    }),
+    session,
+  };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -567,7 +578,14 @@ export async function completePasswordReset(
     requestId: context.requestId,
   });
 
-  return { session, user: toPublicUser(user, { patientId: patient?.id ?? null, ...locationOf(patient) }) };
+  return {
+    session,
+    user: toPublicUser(user, {
+      patientId: patient?.id ?? null,
+      ...(await doctorContextOf(user)),
+      ...locationOf(patient),
+    }),
+  };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -620,6 +638,46 @@ export function locationOf(
  * The only user shape that crosses the wire. No hash, no algorithm, no lockout
  * counters, no session details.
  */
+/**
+ * The doctor context the workspace routes on.
+ *
+ * Every call site used to leave `doctorId` and `verificationStatus` unset, so
+ * they were null for everyone — including a doctor an admin had verified. Two
+ * things grew out of that hole: the dashboard guessed at a profile by pulling
+ * an arbitrary one from the directory, and the routing gate could not tell a
+ * verified doctor from someone who had never applied.
+ *
+ * Three states, and the UI needs all three distinguished:
+ *
+ *   null        never applied      → show the application form
+ *   "pending"   filed, undecided   → show the waiting screen
+ *   "verified"  published          → show the workspace
+ *
+ * A published profile is the authority when one exists; otherwise the latest
+ * application says where they are. A rejected application reads as "rejected"
+ * rather than null, so they are not silently invited to apply again as though
+ * nothing had happened.
+ */
+export async function doctorContextOf(
+  user: users.UserRow,
+): Promise<{ doctorId: string | null; verificationStatus: string | null }> {
+  if (user.role !== "doctor") return { doctorId: null, verificationStatus: null };
+
+  const profile = await directory.getProfileForUser(user.id);
+  if (profile) {
+    return { doctorId: profile.id, verificationStatus: profile.verificationStatus };
+  }
+
+  const latest = await getDb()
+    .select({ status: t.doctorVerifications.status })
+    .from(t.doctorVerifications)
+    .where(eq(t.doctorVerifications.userId, user.id))
+    .orderBy(desc(t.doctorVerifications.submittedAt))
+    .limit(1);
+
+  return { doctorId: null, verificationStatus: latest[0]?.status ?? null };
+}
+
 export function toPublicUser(
   user: users.UserRow,
   extra: {
