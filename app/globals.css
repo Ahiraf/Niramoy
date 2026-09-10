@@ -353,6 +353,11 @@ a { color: inherit; text-decoration: none; }
 .status.in_progress { color: var(--teal-dark); background: var(--teal-soft); }
 .status.verified { color: #407a5f; background: #edf8f1; }
 .status.rejected { color: var(--red); background: #fff1f1; }
+/* Sign-up approvals. Neutral on purpose: "Signed up" is a step completed, not
+   an endorsement — the green of .verified belongs to a reviewed doctor. */
+.status.claimed { color: #798691; background: #f1f4f5; }
+.status.revoked { color: #926060; background: #fbf0f0; }
+.status.open { color: #926438; background: #fff4e8; }
 
 /* --- Demo / verified badges ----------------------------------------------- */
 .demo-badge { display: inline-flex; align-items: center; gap: 4px; color: #8c682c; background: #fdf4e4; border: 1px solid #f3e3c6; font-size: calc(9px * var(--text-scale)); padding: 3px 7px; border-radius: 50px; font-weight: 750; white-space: nowrap; }

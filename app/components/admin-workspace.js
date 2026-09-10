@@ -319,7 +319,7 @@ function Approvals({ api, notify }) {
                   BM&amp;DC {a.registrationNumber} · {a.phone}
                 </span>
               </main>
-              <StatusPill status={a.status === "claimed" ? "verified" : "rejected"} />
+              <StatusPill status={a.status} />
             </div>
           ))}
         </div>

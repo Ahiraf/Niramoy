@@ -538,6 +538,14 @@ export function StatusPill({ status }) {
     confirmed: "Confirmed", pending: "Pending", completed: "Completed",
     cancelled: "Cancelled", no_show: "No-show", in_progress: "In progress",
     verified: "Verified", rejected: "Rejected",
+    /*
+     * A sign-up approval that has been spent. Deliberately NOT "Verified":
+     * this says the number was used to open an account, and says nothing about
+     * whether that doctor's application has been reviewed. Showing "Verified"
+     * here read as "this doctor is live in the directory", which is a different
+     * decision an admin has not made yet.
+     */
+    claimed: "Signed up", revoked: "Withdrawn", open: "Open",
   }[status] || status;
   return <span className={`status ${status}`}>{label}</span>;
 }
