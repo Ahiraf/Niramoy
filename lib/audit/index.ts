@@ -65,6 +65,8 @@ export type AuditAction =
   | "payment.create"
   | "payment.execute"
   | "payment.webhook"
+  /** The payer returning from a hosted gateway page, validated server-to-server. */
+  | "payment.return"
   | "admin.action"
   | "cron.run";
 
