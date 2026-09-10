@@ -108,6 +108,8 @@ export const api = {
   doctors: (filters) => request(`/api/doctors${qs(filters)}`),
   doctor: (id) => request(`/api/doctors/${id}`),
   slots: (id, days = 14) => request(`/api/doctors/${id}/slots${qs({ days })}`),
+  doctorAvailability: () => request("/api/doctor/availability"),
+  addDoctorAvailability: (body) => request("/api/doctor/availability", { method: "POST", body }),
 
   appointments: (filters) => request(`/api/appointments${qs(filters)}`),
   book: (body) => request("/api/appointments", { method: "POST", body }),

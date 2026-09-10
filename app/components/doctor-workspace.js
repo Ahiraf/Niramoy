@@ -33,8 +33,13 @@ export function useDoctorSelf(user, api) {
         if (!cancelled) setSelf(null);
         return;
       }
-      const data = await api.doctor(user.doctorId);
-      if (!cancelled) setSelf(data.ok ? data.doctor : null);
+      const [data, schedule] = await Promise.all([
+        api.doctor(user.doctorId),
+        api.doctorAvailability(),
+      ]);
+      if (!cancelled) {
+        setSelf(data.ok ? { ...data.doctor, availability: schedule.availability ?? [] } : null);
+      }
     })();
     return () => { cancelled = true; };
   }, [api, user?.doctorId]);
@@ -55,7 +60,7 @@ function initialsOf(name) {
 }
 
 export function DoctorWorkspace({ active, self, appointments, loading, onNavigate, onJoinCall, onIssuePrescription, api, notify }) {
-  if (active === "availability") return <Availability self={self} />;
+  if (active === "availability") return <Availability self={self} api={api} notify={notify} />;
   if (active === "earnings") return <Earnings self={self} appointments={appointments} />;
   if (active === "doctor-schedule") {
     return (
@@ -350,15 +355,41 @@ function PrescriptionWriter({ appointment, self, api, onClose, onSubmit, notify 
   );
 }
 
-function Availability({ self }) {
-  const rules = self?.availability ?? [];
+function Availability({ self, api, notify }) {
+  const [rules, setRules] = useState(self?.availability ?? []);
+  const [adding, setAdding] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+  const [form, setForm] = useState({ weekday: "0", localStart: "09:00", localEnd: "17:00", slotMinutes: "20", bufferMinutes: "0" });
+
+  useEffect(() => setRules(self?.availability ?? []), [self]);
+
+  const addHours = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    const result = await api.addDoctorAvailability(form);
+    setSaving(false);
+    if (!result.ok) {
+      setError(result.message ?? "Could not save those hours.");
+      return;
+    }
+    setRules((current) => [...current, result.availability].sort((a, b) => a.weekday - b.weekday || a.localStart.localeCompare(b.localStart)));
+    setAdding(false);
+    notify?.("Consulting hours added");
+  };
+
+  const openAddHours = () => {
+    setError(null);
+    setAdding(true);
+  };
 
   return (
     <>
       <PageHeading
         title="Availability"
         subtitle="Your recurring hours in Bangladesh Standard Time. Patients only ever see bookable slots."
-        actions={<button className="button primary"><Icon name="plus" size={14} />Add hours</button>}
+        actions={<button type="button" className="button primary" onClick={openAddHours}><Icon name="plus" size={14} />Add hours</button>}
       />
 
       <div className="section-card card">
@@ -368,10 +399,14 @@ function Availability({ self }) {
             <thead>
               <tr><th>Day</th><th>Hours (BST)</th><th>Stored as (UTC)</th><th>Slot</th><th>Bookable</th><th /></tr>
             </thead>
-            <tbody>
+              <tbody>
               {rules.map((r, i) => {
-                const [sh] = r.localStart.split(":").map(Number);
-                const [eh] = r.localEnd.split(":").map(Number);
+                const toMinutes = (value) => {
+                  const [hours, minutes] = value.split(":").map(Number);
+                  return hours * 60 + minutes;
+                };
+                const sh = toMinutes(r.localStart);
+                const eh = toMinutes(r.localEnd);
                 const step = r.slotMinutes + (r.bufferMinutes || 0);
                 return (
                   <tr key={i}>
@@ -379,7 +414,7 @@ function Availability({ self }) {
                     <td>{r.localStart} – {r.localEnd}</td>
                     <td className="muted-cell">{r.start} – {r.end}</td>
                     <td>{r.slotMinutes} min{r.bufferMinutes ? ` +${r.bufferMinutes}` : ""}</td>
-                    <td><span className="availability-chip">{Math.floor(((eh - sh) * 60) / step)} slots</span></td>
+                    <td><span className="availability-chip">{Math.floor((eh - sh) / step)} slots</span></td>
                     <td style={{ textAlign: "right" }}>
                       <button className="icon-button" style={{ width: 28, height: 28 }} aria-label="Edit hours">
                         <Icon name="more" size={14} />
@@ -390,8 +425,62 @@ function Availability({ self }) {
               })}
             </tbody>
           </table>
-        ) : <Loading rows={3} />}
+        ) : (
+          <Empty
+            icon="clock"
+            title="No recurring hours yet"
+            hint="Add the hours you regularly see patients so they can book a consultation."
+            action={<button type="button" className="button primary small" onClick={openAddHours}><Icon name="plus" size={13} />Add hours</button>}
+          />
+        )}
       </div>
+
+      <Modal
+        open={adding}
+        title="Add recurring hours"
+        onClose={() => !saving && setAdding(false)}
+        footer={(
+          <>
+            <button type="button" className="button ghost" onClick={() => setAdding(false)} disabled={saving}>Cancel</button>
+            <button type="submit" form="availability-form" className="button primary" disabled={saving}>{saving ? "Saving…" : "Save hours"}</button>
+          </>
+        )}
+      >
+        <form id="availability-form" onSubmit={addHours}>
+          <Field label="Day">
+            <Select
+              value={form.weekday}
+              onChange={(weekday) => setForm((current) => ({ ...current, weekday }))}
+              options={WEEKDAYS.map((day, weekday) => ({ value: String(weekday), label: day }))}
+            />
+          </Field>
+          <div className="field-row">
+            <Field label="From">
+              <input className="field" type="time" value={form.localStart} onChange={(event) => setForm((current) => ({ ...current, localStart: event.target.value }))} required />
+            </Field>
+            <Field label="Until">
+              <input className="field" type="time" value={form.localEnd} onChange={(event) => setForm((current) => ({ ...current, localEnd: event.target.value }))} required />
+            </Field>
+          </div>
+          <div className="field-row">
+            <Field label="Slot length">
+              <Select
+                value={form.slotMinutes}
+                onChange={(slotMinutes) => setForm((current) => ({ ...current, slotMinutes }))}
+                options={["15", "20", "30", "45", "60"].map((value) => ({ value, label: `${value} minutes` }))}
+              />
+            </Field>
+            <Field label="Buffer between slots" hint="Optional gap after each consultation.">
+              <Select
+                value={form.bufferMinutes}
+                onChange={(bufferMinutes) => setForm((current) => ({ ...current, bufferMinutes }))}
+                options={["0", "5", "10", "15"].map((value) => ({ value, label: `${value} minutes` }))}
+              />
+            </Field>
+          </div>
+          {error && <Banner tone="warn" icon="alert">{error}</Banner>}
+        </form>
+      </Modal>
 
       <Banner tone="info" icon="info" title="How slots are generated">
         Bookable times come from <code>lib/scheduling.js</code>: recurring rules, minus blocked dates,

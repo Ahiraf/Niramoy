@@ -282,6 +282,34 @@ export async function getAvailability(doctorId: string): Promise<AvailabilityRul
     .orderBy(t.doctorAvailability.weekday, t.doctorAvailability.startMinute);
 }
 
+/** Add one recurring availability rule to a doctor's own schedule. */
+export async function addAvailability(
+  doctorId: string,
+  rule: Omit<AvailabilityRule, "timezone"> & { timezone?: string },
+): Promise<AvailabilityRule> {
+  const [row] = await getDb()
+    .insert(t.doctorAvailability)
+    .values({
+      doctorId,
+      weekday: rule.weekday,
+      startMinute: rule.startMinute,
+      endMinute: rule.endMinute,
+      slotMinutes: rule.slotMinutes,
+      bufferMinutes: rule.bufferMinutes,
+      timezone: rule.timezone ?? "Asia/Dhaka",
+    })
+    .returning({
+      weekday: t.doctorAvailability.weekday,
+      startMinute: t.doctorAvailability.startMinute,
+      endMinute: t.doctorAvailability.endMinute,
+      slotMinutes: t.doctorAvailability.slotMinutes,
+      bufferMinutes: t.doctorAvailability.bufferMinutes,
+      timezone: t.doctorAvailability.timezone,
+    });
+
+  return row!;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Scheduling configuration                                                    */
 /* -------------------------------------------------------------------------- */
