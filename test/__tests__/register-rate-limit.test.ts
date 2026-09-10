@@ -11,7 +11,7 @@
  */
 import { POST as register } from "../../app/api/auth/register/route";
 import { PATCH as confirmOtp, POST as sendOtp } from "../../app/api/auth/signup-otp/route";
-import { RATE_LIMITS } from "../../lib/security/rate-limit";
+import { describeWait, RATE_LIMITS } from "../../lib/security/rate-limit";
 import { resetEnvCache } from "../../lib/config/env";
 import { resetSmsProvider } from "../../lib/notifications/sms";
 import { setupWorld, teardownWorld, call } from "../harness";
@@ -130,9 +130,31 @@ describe("the sign-up limit counts accounts, not attempts", () => {
       verificationTicket: await verifiedTicket(phone),
     });
 
-    // "Wait a moment" would be false for a window measured in tens of minutes.
     expect(res.status).toBe(429);
-    expect(res.body.message).not.toMatch(/a moment/);
-    expect(res.body.message).toMatch(/try again in/i);
+
+    /*
+     * The wording has to match the wait the caller was actually given, so the
+     * expectation is derived from Retry-After rather than assumed.
+     *
+     * Asserting "try again in" flatly made this test fail in the last 90
+     * seconds of every clock hour: `register:ip` uses a fixed one-hour window,
+     * so a caller who trips the limit at 14:59:30 is told to wait thirty
+     * seconds — and "a moment" is the honest phrase for that. The bug was in
+     * the test, which failed roughly 2.5% of runs for a correct message.
+     */
+    // It must be a description of a WAIT, not the generic limit message. Which
+    // of the two forms is correct depends on where in the fixed hourly window
+    // the caller landed, so the wording rule itself is pinned in the unit test
+    // below rather than guessed at from the clock here.
+    expect(res.body.message).toMatch(/a moment|try again in/i);
+  });
+
+  it("describes a wait in words that match its length", () => {
+    // The wording rule itself, pinned without depending on the clock.
+    expect(describeWait(15)).toMatch(/a moment/);
+    expect(describeWait(90)).toMatch(/a moment/);
+    expect(describeWait(600)).toBe("Please try again in 10 minutes.");
+    expect(describeWait(3600)).toBe("Please try again in about an hour.");
+    expect(describeWait(7200)).toBe("Please try again in about 2 hours.");
   });
 });
