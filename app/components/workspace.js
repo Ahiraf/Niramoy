@@ -176,17 +176,35 @@ export function Workspace({ portal = "public" }) {
     setLoading(true);
     setLoadError(null);
 
-    const settled = await Promise.allSettled([
-      refreshAppointments(),
+    /*
+     * Only what this role can actually have.
+     *
+     * Appointments, records, family and the waitlist are a PATIENT's, and the
+     * endpoints behind them refuse anyone else — correctly. Asking for them as
+     * an admin produced six requests, four guaranteed rejections, and a
+     * standing "Some of your data didn't load" banner on every admin screen.
+     * Nothing was missing; the app was reporting a permission boundary as an
+     * outage, which trains the reader to ignore the one warning that matters.
+     */
+    const patientOnly = role === "patient";
+
+    const tasks = [
+      // Notifications belong to any signed-in account.
       refreshNotifications(),
-      refreshRecords(),
-      api.doctors({ sort: "rating", perPage: 6 }),
-      api.family(),
-      api.waitlist(),
-    ]);
+      // A doctor has appointments too; an admin has none.
+      role === "admin" ? null : refreshAppointments(),
+      patientOnly ? refreshRecords() : null,
+      patientOnly ? api.doctors({ sort: "rating", perPage: 6 }) : null,
+      patientOnly ? api.family() : null,
+      patientOnly ? api.waitlist() : null,
+    ];
+
+    const settled = await Promise.allSettled(tasks.map((task) => task ?? Promise.resolve(null)));
 
     const valueAt = (i) => (settled[i].status === "fulfilled" ? settled[i].value : null);
     const failedAt = (i) => {
+      // A call this role never made cannot have failed.
+      if (tasks[i] === null) return false;
       const value = valueAt(i);
       return value === null || value === false || value?.ok === false;
     };
@@ -200,7 +218,7 @@ export function Workspace({ portal = "public" }) {
 
     setLoading(false);
     if (settled.some((_, i) => failedAt(i))) setLoadError({ scope: "workspace" });
-  }, [refreshAppointments, refreshNotifications, refreshRecords]);
+  }, [refreshAppointments, refreshNotifications, refreshRecords, role]);
 
   const retryLoad = useCallback(async () => {
     setRetrying(true);

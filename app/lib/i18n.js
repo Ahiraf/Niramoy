@@ -50,6 +50,9 @@ const STRINGS = {
   "nav.availability": { en: "Availability", bn: "সময়সূচি" },
   "nav.earnings": { en: "Earnings", bn: "আয়" },
   "nav.admin-home": { en: "Overview", bn: "সারসংক্ষেপ" },
+  // Was missing entirely, so the admin sidebar rendered the raw key
+  // "nav.approvals" as its own label.
+  "nav.approvals": { en: "Sign-up approvals", bn: "সাইন-আপ অনুমোদন" },
   "nav.verification": { en: "Doctor verification", bn: "ডাক্তার যাচাই" },
   "nav.directory": { en: "Directory", bn: "ডিরেক্টরি" },
   "nav.specialties": { en: "Specialties", bn: "বিশেষত্ব" },
