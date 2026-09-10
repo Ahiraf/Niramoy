@@ -75,6 +75,59 @@ export interface ApplicationView {
   doctorId: string | null;
 }
 
+/** "09:30" -> 570. Local minutes past midnight, for the rule's own timezone. */
+function minutesFromLocalTime(value: unknown): number | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(String(value ?? ""));
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+/**
+ * The consulting hours an applicant claims.
+ *
+ * The client also sends a `start`/`end` pair it derived by subtracting six
+ * hours, but that is discarded here: doctor_availability stores LOCAL minutes
+ * beside the zone they belong to, and the scheduling engine converts. Trusting
+ * a browser's timezone arithmetic would bake today's offset into a stored rule.
+ */
+function readClaimedAvailability(value: unknown): Array<{
+  weekday: number;
+  startMinute: number;
+  endMinute: number;
+  slotMinutes: number;
+  bufferMinutes: number;
+}> {
+  if (!Array.isArray(value)) return [];
+
+  const rules = [];
+  for (const raw of value.slice(0, 21)) {
+    const row = raw as Record<string, unknown>;
+    const weekday = Number(row.weekday);
+    const startMinute = minutesFromLocalTime(row.localStart);
+    const endMinute = minutesFromLocalTime(row.localEnd);
+    const slotMinutes = Number(row.slotMinutes);
+
+    // A window that does not run forwards produces no slots, so it is not a
+    // rule — it is a mistake, and keeping it would be a schedule that silently
+    // shows nothing.
+    if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) continue;
+    if (startMinute === null || endMinute === null || endMinute <= startMinute) continue;
+    if (!Number.isFinite(slotMinutes) || slotMinutes < 5 || slotMinutes > 120) continue;
+
+    rules.push({
+      weekday,
+      startMinute,
+      endMinute,
+      slotMinutes,
+      bufferMinutes: Math.min(60, Math.max(0, Number(row.bufferMinutes) || 0)),
+    });
+  }
+  return rules;
+}
+
 export async function listQueue(): Promise<ApplicationView[]> {
   const rows = await getDb()
     .select({
@@ -171,6 +224,12 @@ export async function apply(
         claimedDistrictId: input.districtId ? String(input.districtId) : null,
         claimedDivisionId: input.divisionId ? String(input.divisionId) : null,
         claimedExperienceYears: input.experienceYears ? Number(input.experienceYears) : null,
+        // The form requires this and nothing used to keep it, so every approved
+        // profile advertised ৳0 — see migration 0007.
+        claimedFee: input.fee === undefined || input.fee === null || input.fee === ""
+          ? null
+          : String(Number(input.fee)),
+        claimedAvailability: readClaimedAvailability(input.availability),
         contactEmail: principal.email,
         contactPhone: principal.phone,
         // Verified if a registry said so, or if an admin already approved
@@ -327,6 +386,12 @@ async function publishProfile(
       experienceYears: application.claimedExperienceYears ?? 1,
       districtId: application.claimedDistrictId,
       divisionId: application.claimedDivisionId,
+      /*
+       * What they asked for. Absent only for an application filed before the
+       * fee was stored at all; those keep the column default and the admin can
+       * see the profile says ৳0 rather than the app inventing a number.
+       */
+      ...(application.claimedFee != null ? { feeAmount: application.claimedFee } : {}),
       bmdcNumber: application.registrationNumber,
       registrationType: application.registrationType,
       verificationStatus: "verified",
@@ -351,6 +416,29 @@ async function publishProfile(
     specialtyId: application.claimedSpecialtyId ?? "general",
     isPrimary: true,
   });
+
+  /*
+   * Publish the hours the applicant gave. Without this a freshly approved
+   * doctor has no availability rules, generateSlots returns nothing, and the
+   * patient-facing profile reports "Fully booked for the next three weeks" —
+   * a confident, specific and entirely false statement about a doctor who has
+   * simply never been given any hours.
+   *
+   * Local minutes with the zone alongside, which is what the engine expects;
+   * the timezone column defaults to Asia/Dhaka.
+   */
+  if (application.claimedAvailability.length) {
+    await db.insert(t.doctorAvailability).values(
+      application.claimedAvailability.map((rule) => ({
+        doctorId,
+        weekday: rule.weekday,
+        startMinute: rule.startMinute,
+        endMinute: rule.endMinute,
+        slotMinutes: rule.slotMinutes,
+        bufferMinutes: rule.bufferMinutes,
+      })),
+    );
+  }
 
   await db
     .update(t.doctorVerifications)

@@ -39,6 +39,12 @@ export const GET = withRoute(
       byDay.get(described.dateKey)!.slots.push({ ...described, localLabel: described.localLabel });
     }
 
-    return ok({ total: slots.length, days: [...byDay.values()] });
+    return ok({
+      total: slots.length,
+      // Lets the client tell "every slot taken" from "no schedule published",
+      // which are the same emptiness and completely different news.
+      hasPublishedHours: (slots as { hasPublishedHours?: boolean }).hasPublishedHours ?? true,
+      days: [...byDay.values()],
+    });
   },
 );

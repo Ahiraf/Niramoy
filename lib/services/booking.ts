@@ -76,7 +76,7 @@ export async function availableSlots(
     appointments.bookedIntervals(doctorId, rangeStart, rangeEnd),
   ]);
 
-  return generateSlots({
+  const slots = generateSlots({
     rules,
     exceptions,
     booked,
@@ -85,6 +85,18 @@ export async function availableSlots(
     now,
     leadMinutes: config.leadMinutes,
   });
+
+  /*
+   * Whether this doctor has published any consulting hours at all.
+   *
+   * Zero slots has two completely different causes and the patient needs to
+   * know which: every slot is taken, or the doctor has never set a schedule.
+   * Without this the UI said "Fully booked for the next three weeks" in both
+   * cases — a confident, specific claim that is simply untrue in the second,
+   * and it sends the patient to a waitlist for slots that will never free up
+   * because they were never created.
+   */
+  return Object.assign(slots, { hasPublishedHours: rules.length > 0 });
 }
 
 export interface BookInput {

@@ -215,6 +215,27 @@ export const doctorVerifications = pgTable(
     claimedDistrictId: text("claimed_district_id").references(() => districts.id),
     claimedDivisionId: text("claimed_division_id").references(() => divisions.id),
     claimedExperienceYears: smallint("claimed_experience_years"),
+    /**
+     * The consultation fee the applicant asked for. The form requires it, and
+     * it used to be dropped on the floor — see migration 0007. Held with the
+     * rest of the claim so an admin sees it before it goes on a public profile.
+     */
+    claimedFee: numeric("claimed_fee", { precision: 10, scale: 2 }),
+    /**
+     * The consulting hours claimed, as local minutes past midnight for the
+     * rule's own timezone — the same shape doctor_availability stores. Also
+     * previously discarded, which left every approved doctor unbookable.
+     */
+    claimedAvailability: jsonb("claimed_availability")
+      .$type<Array<{
+        weekday: number;
+        startMinute: number;
+        endMinute: number;
+        slotMinutes: number;
+        bufferMinutes: number;
+      }>>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     contactEmail: text("contact_email"),
     contactPhone: text("contact_phone"),
 

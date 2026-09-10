@@ -20,6 +20,8 @@ export function Booking({ doctor, family, onConfirm, onBack, onJoinWaitlist, api
   const selfName = String(user?.name ?? "").trim();
   const { t } = useT();
   const [days, setDays] = useState([]);
+  // Null until the first load answers: no schedule, or no room left?
+  const [hasPublishedHours, setHasPublishedHours] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedDay, setSelectedDay] = useState(0);
   const [selectedSlot, setSelectedSlot] = useState(null);
@@ -35,6 +37,7 @@ export function Booking({ doctor, family, onConfirm, onBack, onJoinWaitlist, api
       const data = await api.slots(doctor.id, 21);
       if (cancelled) return;
       setDays(data.days ?? []);
+      setHasPublishedHours(data.hasPublishedHours ?? true);
       setSelectedDay(0);
       setSelectedSlot(data.days?.[0]?.slots?.[0] ?? null);
       setLoading(false);
@@ -69,6 +72,7 @@ export function Booking({ doctor, family, onConfirm, onBack, onJoinWaitlist, api
     if (!result.ok && ["slot_taken", "slot_unavailable"].includes(result.reason)) {
       const data = await api.slots(doctor.id, 21);
       setDays(data.days ?? []);
+      setHasPublishedHours(data.hasPublishedHours ?? true);
       setSelectedSlot(null);
     }
   };
@@ -94,6 +98,22 @@ export function Booking({ doctor, family, onConfirm, onBack, onJoinWaitlist, api
 
           {loading ? (
             <Loading rows={2} label="Loading available times" />
+          ) : days.length === 0 && hasPublishedHours === false ? (
+            /*
+             * No schedule, rather than no room. The waitlist is deliberately
+             * not offered: it notifies you when a booked slot frees up, and a
+             * doctor with no published hours has no slots to free.
+             */
+            <Empty
+              icon="calendar"
+              title="No consulting hours published yet"
+              hint="This doctor hasn't set a schedule. Try another doctor, or check back later."
+              action={
+                <button className="button ghost small" onClick={onBack}>
+                  <Icon name="arrow" size={13} /> Back to doctors
+                </button>
+              }
+            />
           ) : days.length === 0 ? (
             <Empty
               icon="calendar"

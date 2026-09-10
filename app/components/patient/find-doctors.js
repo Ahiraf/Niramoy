@@ -36,7 +36,7 @@ export function DoctorCard({ doctor, onOpen }) {
       </div>
       <div className="doctor-place">
         <Icon name="pin" size={12} />
-        <span>{doctor.district}, {doctor.division}</span>
+        <span>{placeLabel(doctor)}</span>
       </div>
 
       <div className="doctor-meta">
@@ -53,6 +53,20 @@ export function DoctorCard({ doctor, onOpen }) {
       </div>
     </article>
   );
+}
+
+/**
+ * "Chattogram, Chattogram" — or nothing at all.
+ *
+ * A doctor's district and division are optional on the profile, and joining
+ * them blindly rendered the literal string "null, null" beside the specialty of
+ * anyone who had not set them. Absent information should read as absent.
+ */
+function placeLabel(doctor, { withDivisionWord = false } = {}) {
+  const parts = [doctor?.district, doctor?.division].filter(Boolean);
+  if (!parts.length) return "";
+  const text = parts.join(", ");
+  return withDivisionWord && doctor?.division ? `${text} division` : text;
 }
 
 export function FindDoctors({ reference, initialSearch = "", onOpenDoctor, onNavigate, api }) {
@@ -318,7 +332,7 @@ export function DoctorProfile({ doctor, reviews = [], onBook, onBack, onNavigate
     <>
       <PageHeading
         title={doctor.name}
-        subtitle={`${doctor.specialty} · ${doctor.district}, ${doctor.division}`}
+        subtitle={[doctor.specialty, placeLabel(doctor)].filter(Boolean).join(" · ")}
         back={{ label: "Back to doctors", onClick: onBack }}
         actions={
           <button className="button primary" onClick={() => onBook(doctor)}>
@@ -362,7 +376,7 @@ export function DoctorProfile({ doctor, reviews = [], onBook, onBack, onNavigate
             <div className="stat-icon"><Icon name="building" size={17} /></div>
             <div>
               <strong>{doctor.facility}</strong>
-              <span>{doctor.district}, {doctor.division} division</span>
+              <span>{placeLabel(doctor, { withDivisionWord: true })}</span>
             </div>
           </div>
 
