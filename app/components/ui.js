@@ -268,6 +268,24 @@ export function Modal({ open, title, onClose, children, footer, wide = false }) 
   /** Whatever had focus before we opened, so it can be handed back. */
   const restoreTo = useRef(null);
 
+  /*
+   * `onClose` is read through a ref so it can stay OUT of the effect's
+   * dependencies.
+   *
+   * Callers pass it inline — `onClose={() => setAdding(false)}` — which is a
+   * new function on every render. With it in the dependency array, every
+   * keystroke inside the dialog re-ran this effect: the cleanup handed focus
+   * back to whatever opened the modal, then the setup moved it to the first
+   * control. Typing one character therefore threw focus onto the close button,
+   * and the field had to be clicked again for the next one. The modal was
+   * unusable for anything longer than a single letter.
+   *
+   * The effect genuinely only cares about `open`. What it should call on Escape
+   * is a moving target, which is what a ref is for.
+   */
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
     if (!open) return undefined;
 
@@ -275,7 +293,7 @@ export function Modal({ open, title, onClose, children, footer, wide = false }) 
 
     const onKey = (event) => {
       if (event.key === "Escape") {
-        onClose?.();
+        onCloseRef.current?.();
         return;
       }
       if (event.key !== "Tab") return;
@@ -311,7 +329,7 @@ export function Modal({ open, title, onClose, children, footer, wide = false }) 
       document.removeEventListener("keydown", onKey);
       restoreTo.current?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
   return (
