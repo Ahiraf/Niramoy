@@ -584,8 +584,15 @@ export function Workspace({ portal = "public" }) {
    * BM&DC number there is nothing to schedule, so the workspace is replaced by
    * the application form, then by a "waiting on verification" screen.
    */
-  const doctorPending =
-    role === "doctor" && user?.verificationStatus && user.verificationStatus !== "verified";
+  /*
+   * `verificationStatus` is null for a doctor who has signed up but never filed
+   * an application, and the old test — which required a truthy status — let
+   * exactly that account through to the full workspace. It then had no profile
+   * of its own, so the dashboard fell back to somebody else's (see
+   * useDoctorSelf). Not having applied is the FIRST state of this flow, not an
+   * exemption from it.
+   */
+  const doctorPending = role === "doctor" && user.verificationStatus !== "verified";
 
   if (doctorPending && user.verificationStatus === "pending") {
     return (

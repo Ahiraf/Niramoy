@@ -14,20 +14,27 @@ const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Frida
  * The signed-in doctor's own published profile.
  *
  * A verified account carries the id of the profile an admin published for it.
- * The demo doctor account predates any application, so it falls back to a
- * profile from the directory rather than showing an empty workspace.
+ * An account without one has NO profile, and this returns null to say so.
+ *
+ * It used to fall back to `api.doctors({ specialty: "Cardiology", perPage: 1 })`
+ * — the first cardiologist in the directory — so a doctor who had not been
+ * verified opened their dashboard and was shown a stranger's name, facility,
+ * fee and 150 reviews under the heading "Your profile". An empty workspace is
+ * an inconvenience; another person's credentials presented as yours is a
+ * different kind of thing entirely, and on a clinical directory it is the kind
+ * that ends up in front of a patient.
  */
 export function useDoctorSelf(user, api) {
   const [self, setSelf] = useState(null);
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (user?.doctorId) {
-        const data = await api.doctor(user.doctorId);
-        if (!cancelled && data.ok) { setSelf(data.doctor); return; }
+      if (!user?.doctorId) {
+        if (!cancelled) setSelf(null);
+        return;
       }
-      const data = await api.doctors({ specialty: "Cardiology", perPage: 1 });
-      if (!cancelled) setSelf(data.doctors?.[0] ?? null);
+      const data = await api.doctor(user.doctorId);
+      if (!cancelled) setSelf(data.ok ? data.doctor : null);
     })();
     return () => { cancelled = true; };
   }, [api, user?.doctorId]);
