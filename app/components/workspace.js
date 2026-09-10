@@ -697,6 +697,7 @@ export function Workspace({ portal = "public" }) {
             onJoinWaitlist={joinWaitlist}
             api={api}
             notify={showToast}
+            user={user}
           />
         );
         break;
@@ -733,7 +734,7 @@ export function Workspace({ portal = "public" }) {
         );
         break;
       case "assistant":
-        view = <Assistant api={api} onOpenDoctor={openDoctor} onNavigate={navigate} />;
+        view = <Assistant api={api} onOpenDoctor={openDoctor} onNavigate={navigate} user={user} />;
         break;
       case "records":
         view = (

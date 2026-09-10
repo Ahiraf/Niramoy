@@ -14,7 +14,10 @@ const PAYMENT_METHODS = [
   { value: "cash", label: "Pay at the chamber", hint: "Settle in person on the day." },
 ];
 
-export function Booking({ doctor, family, onConfirm, onBack, onJoinWaitlist, api, notify }) {
+export function Booking({ doctor, family, onConfirm, onBack, onJoinWaitlist, api, notify, user }) {
+  // Whose appointment this is by default. Named so the choice between yourself
+  // and a family member reads unambiguously — the list beside it shows names.
+  const selfName = String(user?.name ?? "").trim();
   const { t } = useT();
   const [days, setDays] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -158,7 +161,7 @@ export function Booking({ doctor, family, onConfirm, onBack, onJoinWaitlist, api
                     value={forMember}
                     onChange={setForMember}
                     options={[
-                      { value: "", label: "Myself (Nabila Begum)" },
+                      { value: "", label: `Myself${selfName ? ` (${selfName})` : ""}` },
                       ...family.map((m) => ({ value: m.id, label: `${m.name} · ${m.relation}` })),
                     ]}
                   />

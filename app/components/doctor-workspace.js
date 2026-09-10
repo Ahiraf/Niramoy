@@ -34,6 +34,19 @@ export function useDoctorSelf(user, api) {
   return self;
 }
 
+/**
+ * "Fariha Rayhan Mim" -> "FM".
+ *
+ * The name comes from the appointment row — a doctor's list must show who is
+ * actually booked. It used to render the seed patient for every row, which on
+ * a clinic screen is worse than showing nothing: it looks like real data.
+ */
+function initialsOf(name) {
+  const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "PT";
+  return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
+}
+
 export function DoctorWorkspace({ active, self, appointments, loading, onNavigate, onJoinCall, onIssuePrescription, api, notify }) {
   if (active === "availability") return <Availability self={self} />;
   if (active === "earnings") return <Earnings self={self} appointments={appointments} />;
@@ -97,9 +110,9 @@ function DoctorHome({ self, appointments, loading, onNavigate, onJoinCall }) {
               upcoming.slice(0, 5).map((a) => (
                 <div className="appointment-row" key={a.id}>
                   <div className="date-chip"><strong>{a.time.slice(0, 5)}</strong><span>{a.time.slice(-2)}</span></div>
-                  <div className="avatar md tan">NB</div>
+                  <div className="avatar md tan">{initialsOf(a.patientName)}</div>
                   <div className="appt-main">
-                    <strong>Nabila Begum</strong>
+                    <strong>{a.patientName ?? "Patient"}</strong>
                     <span>{a.day}, {a.date} {a.month} · {a.reason || "Video consultation"}</span>
                   </div>
                   <button className="button primary small" onClick={() => onJoinCall(a)}>
@@ -161,9 +174,9 @@ function Schedule({ self, appointments, loading, onJoinCall, onIssuePrescription
         {loading ? <Loading /> : upcoming.length ? upcoming.map((a) => (
           <div className="appointment-row" key={a.id}>
             <div className="date-chip"><strong>{a.date}</strong><span>{a.month}</span></div>
-            <div className="avatar md tan">NB</div>
+            <div className="avatar md tan">{initialsOf(a.patientName)}</div>
             <div className="appt-main">
-              <strong>Nabila Begum</strong>
+              <strong>{a.patientName ?? "Patient"}</strong>
               <span>{a.day}, {a.date} {a.month} at {a.time}</span>
               {a.reason && <span className="appt-reason">“{a.reason}”</span>}
             </div>
@@ -180,9 +193,9 @@ function Schedule({ self, appointments, loading, onJoinCall, onIssuePrescription
         {past.length ? past.map((a) => (
           <div className="appointment-row" key={a.id}>
             <div className="date-chip"><strong>{a.date}</strong><span>{a.month}</span></div>
-            <div className="avatar md tan">NB</div>
+            <div className="avatar md tan">{initialsOf(a.patientName)}</div>
             <div className="appt-main">
-              <strong>Nabila Begum</strong>
+              <strong>{a.patientName ?? "Patient"}</strong>
               <span>{a.reason || "Video consultation"}</span>
             </div>
             <button className="button secondary small" onClick={() => setWriting(a)}>

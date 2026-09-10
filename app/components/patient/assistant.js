@@ -89,12 +89,33 @@ function useDictation({ lang, onText }) {
   return { supported, listening, start, stop };
 }
 
-export function Assistant({ api, onOpenDoctor, onNavigate }) {
+/** "Fariha Rayhan Mim" -> "FM". Falls back to a neutral placeholder. */
+function initialsOf(name) {
+  const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "PT";
+  return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
+}
+
+export function Assistant({ api, onOpenDoctor, onNavigate, user }) {
+  /*
+   * The signed-in person, not the seed data. Greeting someone by a demo
+   * patient's name is the kind of detail that tells a user the screen in front
+   * of them is not really about them — and on a health assistant, that is the
+   * screen where it matters most.
+   *
+   * First name only: "Hi Fariha" is how this is said, and the greeting drops
+   * the name entirely rather than printing a placeholder when there isn't one.
+   */
+  const firstName = String(user?.name ?? "").trim().split(/\s+/)[0] || "";
+
   const [messages, setMessages] = useState([
     {
       id: "welcome",
       from: "ai",
-      text: "Hi Nabila, I'm here to help you find the right care. Tell me what you're experiencing — in Bangla or English — and I'll suggest a direction and matching doctors.",
+      text:
+        `${firstName ? `Hi ${firstName}, I'm` : "I'm"} here to help you find the right care. ` +
+        "Tell me what you're experiencing — in Bangla or English — and I'll suggest a " +
+        "direction and matching doctors.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -182,7 +203,7 @@ export function Assistant({ api, onOpenDoctor, onNavigate }) {
               <div className={`chat-message ${m.from === "user" ? "user" : ""}`} key={m.id}>
                 {m.from === "ai"
                   ? <div className="avatar sm teal">AI</div>
-                  : <div className="avatar sm tan">NB</div>}
+                  : <div className="avatar sm tan">{initialsOf(user?.name)}</div>}
                 <div className="chat-bubble">{m.text}</div>
               </div>
             ))}
