@@ -73,7 +73,7 @@ than failing.
 | Unset | Behaviour |
 |---|---|
 | `GEMINI_API_KEY_1..3` / `OPENAI_API_KEY` / `AI_API_KEY` | Deterministic rules only. **No patient text leaves the system**. Set any one to enable the model layer; they are tried in that order |
-| `EMAIL_API_KEY` | Email logged, not sent. Verification and reset links appear in the log |
+| `SMTP_HOST` / `SMTP_USER` / `SMTP_PASSWORD` | Email logged, not sent — verification and reset links appear in the log and reach nobody. Gmail works with 2-step verification on and an **App Password**; `npm run email:check -- you@example.com` sends a real test. `EMAIL_API_KEY` selects Resend instead, which needs a domain you control DNS for |
 | `VIDEO_API_KEY` | Demo room. Real scoped token, no media. UI says so |
 | `SSLCOMMERZ_STORE_ID` / `SSLCOMMERZ_STORE_PASSWORD` | Mock provider. Nothing charged, labelled throughout. Set both for real bKash through the SSLCommerz sandbox — see below |
 | `BMDC_API_URL` | Every application goes to the admin queue. Never auto-approves |

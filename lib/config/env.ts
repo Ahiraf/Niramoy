@@ -72,9 +72,23 @@ const schema = z
     OPENAI_MODEL: z.string().optional(),
     OPENAI_BASE_URL: z.string().url().optional(),
 
-    EMAIL_PROVIDER: z.enum(["console", "resend"]).optional(),
+    /**
+     * Email. `console` logs instead of sending, which keeps sign-up reviewable
+     * without a mailbox; `resend` needs a domain you control DNS for; `smtp`
+     * works with an ordinary account and an app password, which is usually the
+     * only one of the three a student project can actually complete.
+     */
+    EMAIL_PROVIDER: z.enum(["console", "resend", "smtp"]).optional(),
     EMAIL_API_KEY: z.string().optional(),
     EMAIL_FROM: z.string().optional(),
+
+    SMTP_HOST: z.string().optional(),
+    SMTP_PORT: z.coerce.number().int().min(1).max(65_535).optional(),
+    SMTP_USER: z.string().optional(),
+    /** For Gmail this is an App Password, never the account password. */
+    SMTP_PASSWORD: z.string().optional(),
+    /** Implicit TLS. Inferred from the port when unset: true only on 465. */
+    SMTP_SECURE: z.enum(["true", "false"]).optional(),
 
     /**
      * SMS. `console` prints the message instead of sending it, which is what
@@ -197,7 +211,18 @@ const schema = z
         (raw.AI_API_KEY && raw.AI_BASE_URL)
           ? "openai-compatible"
           : "rules"),
-      emailProvider: raw.EMAIL_PROVIDER ?? (raw.EMAIL_API_KEY ? "resend" : "console"),
+      /*
+       * SMTP wins over Resend when both are configured: it is the more specific
+       * thing to have set up, and a deployer who filled in a host, a user and a
+       * password meant it.
+       */
+      emailProvider:
+        raw.EMAIL_PROVIDER ??
+        (raw.SMTP_HOST && raw.SMTP_USER && raw.SMTP_PASSWORD
+          ? "smtp"
+          : raw.EMAIL_API_KEY
+            ? "resend"
+            : "console"),
       /** A key means a gateway; no key means the code is printed, never sent. */
       smsProvider: raw.SMS_PROVIDER ?? (raw.TEXTBEE_API_KEY ? "textbee" : "console"),
       videoProvider: raw.VIDEO_PROVIDER ?? (raw.VIDEO_API_KEY ? "daily" : "demo"),
@@ -219,6 +244,32 @@ const schema = z
         code: "custom",
         path: ["TEXTBEE_API_KEY"],
         message: "SMS_PROVIDER=textbee requires TEXTBEE_API_KEY",
+      });
+    }
+
+    /*
+     * A mailer missing a credential falls back to `console`, which logs the
+     * message and reports it delivered. A verification link that goes to a log
+     * file instead of an inbox is an account nobody can finish creating, and
+     * nothing in the response says so.
+     */
+    if (cfg.emailProvider === "smtp") {
+      for (const name of ["SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD"] as const) {
+        if (!cfg[name]) {
+          ctx.addIssue({
+            code: "custom",
+            path: [name],
+            message: `EMAIL_PROVIDER=smtp requires ${name}`,
+          });
+        }
+      }
+    }
+
+    if (cfg.emailProvider === "resend" && !cfg.EMAIL_API_KEY) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["EMAIL_API_KEY"],
+        message: "EMAIL_PROVIDER=resend requires EMAIL_API_KEY",
       });
     }
 

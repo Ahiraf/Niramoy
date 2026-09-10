@@ -72,11 +72,102 @@ function resendProvider(apiKey: string, from: string): EmailProvider {
   };
 }
 
+/**
+ * SMTP, via nodemailer.
+ *
+ * The reason this exists alongside Resend: Resend needs a domain you can add
+ * DNS records to before it will send anywhere except your own address, and a
+ * student project usually does not have one. SMTP works with an ordinary
+ * mailbox — a Gmail account with an App Password — so email verification and
+ * password reset can actually reach a marker's inbox.
+ *
+ * The transport is built once and reused. Nodemailer pools the connection, and
+ * rebuilding it per message would mean a fresh TLS handshake and SMTP AUTH for
+ * every reminder.
+ *
+ * A `from` that does not match the authenticated mailbox is silently rewritten
+ * by most providers (Gmail always does), so `EMAIL_FROM` defaults to the SMTP
+ * user rather than to a niramoy.app address that would quietly become something
+ * else. Anyone who deliberately sets a different envelope has presumably
+ * configured the alias to go with it.
+ */
+function smtpProvider(config: {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  secure: boolean;
+  from: string;
+}): EmailProvider {
+  // Imported lazily so nodemailer is never pulled into a bundle that does not
+  // send mail — it is a server-only package with a large dependency tree.
+  let transport: import("nodemailer").Transporter | undefined;
+
+  async function getTransport(): Promise<import("nodemailer").Transporter> {
+    if (transport) return transport;
+    const nodemailer = await import("nodemailer");
+    transport = nodemailer.createTransport({
+      host: config.host,
+      port: config.port,
+      // Implicit TLS on 465; STARTTLS on 587, which nodemailer negotiates.
+      secure: config.secure,
+      auth: { user: config.user, pass: config.password },
+      // Serverless functions are short-lived; a connection that outlives the
+      // invocation is not reused, only held open against a quota.
+      pool: false,
+      connectionTimeout: 15_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 20_000,
+    });
+    return transport;
+  }
+
+  return {
+    name: "smtp",
+    async send(message) {
+      const mailer = await getTransport();
+      const info = await mailer.sendMail({
+        from: config.from,
+        to: message.to,
+        subject: message.subject,
+        text: message.text,
+        ...(message.html ? { html: message.html } : {}),
+      });
+
+      /*
+       * A recipient the server REFUSED is not a delivery, even though sendMail
+       * resolved. Nodemailer reports partial acceptance rather than throwing,
+       * and treating that as sent is how a verification link silently goes
+       * nowhere — the same failure the SMS console provider exists to avoid.
+       */
+      if (info.rejected?.length) {
+        throw new Error(`smtp rejected ${info.rejected.join(", ")}`);
+      }
+      return { delivered: true, ...(info.messageId ? { id: info.messageId } : {}) };
+    },
+  };
+}
+
 let cached: EmailProvider | undefined;
 
 export function getEmailProvider(): EmailProvider {
   if (cached) return cached;
   const env = getEnv();
+
+  if (env.emailProvider === "smtp" && env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASSWORD) {
+    const port = env.SMTP_PORT ?? 587;
+    cached = smtpProvider({
+      host: env.SMTP_HOST,
+      port,
+      user: env.SMTP_USER,
+      password: env.SMTP_PASSWORD,
+      // 465 is implicit TLS. Anything else starts plaintext and upgrades.
+      secure: env.SMTP_SECURE === undefined ? port === 465 : env.SMTP_SECURE === "true",
+      from: env.EMAIL_FROM ?? env.SMTP_USER,
+    });
+    return cached;
+  }
+
   cached =
     env.emailProvider === "resend" && env.EMAIL_API_KEY
       ? resendProvider(env.EMAIL_API_KEY, env.EMAIL_FROM ?? "Niramoy <noreply@niramoy.app>")
