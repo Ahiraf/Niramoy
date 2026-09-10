@@ -92,7 +92,17 @@ const FORM_FIELDS = new Set([
  * the difference — resend, versus check what you typed — is the one thing the
  * person needs to know.
  */
-function SignupOtpStep({ api, role, onVerified, onBack }) {
+/**
+ * Step one of sign-up: choose who you are, then prove the number.
+ *
+ * The role tabs live HERE rather than on the details form, because the details
+ * form sits behind a proved number. With the choice on the far side of
+ * verification, a patient who realised they meant "doctor" had already spent an
+ * OTP under the wrong role — switching tabs dropped the proved number and sent
+ * them back to this screen for a second code on the same handset. Asking first
+ * costs nothing and makes that impossible.
+ */
+function SignupOtpStep({ api, role, onVerified, onBack, tabs = [], onRoleChange }) {
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [sent, setSent] = useState(null);
@@ -152,6 +162,23 @@ function SignupOtpStep({ api, role, onVerified, onBack }) {
         <i />
         <span>2</span>
       </div>
+
+      {tabs.length > 1 && (
+        <div className="auth-role-tabs" role="tablist" aria-label="Account type">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={role === tab.id}
+              className={`auth-role-tab ${role === tab.id ? "active" : ""}`}
+              onClick={() => onRoleChange?.(tab.id)}
+            >
+              <Icon name={tab.icon} size={14} /> {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <h1>{role === "doctor" ? "Confirm your mobile number" : "Start with your mobile number"}</h1>
       <p className="auth-sub">
@@ -562,6 +589,8 @@ export function AuthPage({
           <SignupOtpStep
             api={api}
             role={role}
+            tabs={tabs}
+            onRoleChange={setRole}
             onVerified={setVerified}
             onBack={() => setMode("signin")}
           />
@@ -576,7 +605,7 @@ export function AuthPage({
           />
         ) : (
         <div className="auth-card">
-          {tabs.length > 1 && (
+          {tabs.length > 1 && !(signUp && verified) && (
           <div className="auth-role-tabs" role="tablist" aria-label="Account type">
             {tabs.map((tab) => (
               <button
