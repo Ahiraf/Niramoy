@@ -30,8 +30,28 @@ const TEXT_SIZE_BOOTSTRAP = `try{
 
 export default function RootLayout({ children }) {
   return (
+    /*
+     * `translate="no"` keeps machine translation off this application.
+     *
+     * Not a preference. The page declares a language and then renders whichever
+     * strings the switch selects, so a browser that decides the two disagree
+     * will offer to "fix" it — and Brave and Chrome did, turning "continue"
+     * into "continuo" and "districts" into "distracts" on the live site. Two
+     * things follow from that, and both are worse than ugly copy:
+     *
+     *   1. Machine translation REPLACES text nodes React owns. React then
+     *      updates a node that is no longer there, so live text silently stops
+     *      changing — which is why the sign-up countdown sat at 5:00 while the
+     *      code behind it expired normally.
+     *   2. This is a medical interface. A symptom, a dose or an emergency
+     *      instruction re-worded by a general-purpose translator is a clinical
+     *      risk, not a cosmetic one.
+     *
+     * Niramoy ships its own Bangla/English switch, which is the honest way to
+     * offer another language: reviewed strings, not a guess layered over the DOM.
+     */
     // Bangla is the default; LanguageProvider updates this when it is changed.
-    <html lang="bn">
+    <html lang="bn" translate="no">
       <head>
         <script dangerouslySetInnerHTML={{ __html: TEXT_SIZE_BOOTSTRAP }} />
       </head>
