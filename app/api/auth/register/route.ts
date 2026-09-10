@@ -19,6 +19,17 @@ import { validateRegistrationNumber } from "../../../../lib/bmdc.js";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Headroom over the platform default.
+ *
+ * Registration writes several rows, issues a session, then tries an email and
+ * possibly an SMS. Each of those is bounded well below this, but the default
+ * 10 seconds leaves no margin on a cold start with a slow third party — and a
+ * timeout here reports failure for an account that was in fact created, which
+ * sends the patient back to a form that will now tell them the address is taken.
+ */
+export const maxDuration = 30;
+
 export const POST = withRoute("POST /api/auth/register", async (request, { requestId, logger }) => {
   const body = await json<Record<string, unknown>>(request, 8192);
   const ip = clientIp(request);

@@ -115,9 +115,20 @@ function smtpProvider(config: {
       // Serverless functions are short-lived; a connection that outlives the
       // invocation is not reused, only held open against a quota.
       pool: false,
-      connectionTimeout: 15_000,
-      greetingTimeout: 10_000,
-      socketTimeout: 20_000,
+      /*
+       * These must fit INSIDE the serverless function's budget, which on
+       * Vercel's Hobby plan starts at 10 seconds.
+       *
+       * The call sites already wrap delivery in `.catch` so a bounce cannot
+       * fail a sign-up — but a catch only helps a promise that REJECTS. An SMTP
+       * connection that hangs rejects nothing: it holds the request open until
+       * the platform kills the whole function, and the caller gets a generic
+       * 500 for a registration that actually succeeded. Worst case here is now
+       * ~8s rather than ~20s, so the mailer gives up before the platform does.
+       */
+      connectionTimeout: 5_000,
+      greetingTimeout: 5_000,
+      socketTimeout: 8_000,
     });
     return transport;
   }
