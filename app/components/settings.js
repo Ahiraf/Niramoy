@@ -415,15 +415,38 @@ export function Settings({ user, role, doctor, reference, api, onNavigate, onUse
 
           {role === "doctor" && (
             <>
+              {/*
+                * Wired to the account's notification channels, like the
+                * patient's above. These two rows previously read `reminders`
+                * and `emails`, which were never declared — so opening Settings
+                * as a doctor threw ReferenceError and rendered nothing at all.
+                * Declaring them as local state would have fixed the crash and
+                * left two switches that move and save nothing, which is the
+                * bug this file's own comment says was already fixed once.
+                */}
               <ToggleRow
-                icon="bell" title="New booking alerts"
-                hint="Tell me as soon as a patient books a slot"
-                on={reminders} onToggle={() => setReminders((v) => !v)}
+                icon="bell" title="In-app booking alerts"
+                hint="Always on. The notification is also the record that we told you."
+                on locked
               />
               <ToggleRow
-                icon="send" title="Daily schedule email"
-                hint="Your consultations for the day, each morning"
-                on={emails} onToggle={() => setEmails((v) => !v)}
+                icon="send" title="Email"
+                hint="A copy of each booking and cancellation"
+                on={channels.includes("email")}
+                busy={savingChannels === "email"}
+                onToggle={() => toggleChannel("email")}
+              />
+              <ToggleRow
+                icon="bell" title="SMS"
+                hint={
+                  user?.phoneVerified
+                    ? "A short text for each new booking, to your confirmed number"
+                    : "Confirm your mobile number above to receive these"
+                }
+                on={channels.includes("sms")}
+                busy={savingChannels === "sms"}
+                pending={!user?.phoneVerified}
+                onToggle={() => toggleChannel("sms")}
               />
               <LinkRow
                 icon="clock" title="Availability"
@@ -436,14 +459,16 @@ export function Settings({ user, role, doctor, reference, api, onNavigate, onUse
           {role === "admin" && (
             <>
               <ToggleRow
-                icon="bell" title="Verification queue alerts"
-                hint="Tell me when a doctor submits an application"
-                on={reminders} onToggle={() => setReminders((v) => !v)}
+                icon="bell" title="In-app queue alerts"
+                hint="Always on. A pending application is shown in the sidebar."
+                on locked
               />
               <ToggleRow
-                icon="send" title="Weekly coverage digest"
-                hint="Directory growth by division and specialty"
-                on={emails} onToggle={() => setEmails((v) => !v)}
+                icon="send" title="Email"
+                hint="A copy of each notification to your staff address"
+                on={channels.includes("email")}
+                busy={savingChannels === "email"}
+                onToggle={() => toggleChannel("email")}
               />
               <LinkRow
                 icon="shield" title="Doctor verification"
