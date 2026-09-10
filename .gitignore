@@ -16,3 +16,6 @@ playwright-report/
 
 # Local PGlite development database
 .pglite/
+
+# Filled-in Vercel env block — real secrets, never commit
+vercel-env.production.txt

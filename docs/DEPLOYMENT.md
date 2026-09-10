@@ -75,9 +75,54 @@ than failing.
 | `GEMINI_API_KEY_1..3` / `OPENAI_API_KEY` / `AI_API_KEY` | Deterministic rules only. **No patient text leaves the system**. Set any one to enable the model layer; they are tried in that order |
 | `EMAIL_API_KEY` | Email logged, not sent. Verification and reset links appear in the log |
 | `VIDEO_API_KEY` | Demo room. Real scoped token, no media. UI says so |
-| `PAYMENT_API_KEY` | Mock provider. Nothing charged, labelled throughout |
+| `SSLCOMMERZ_STORE_ID` / `SSLCOMMERZ_STORE_PASSWORD` | Mock provider. Nothing charged, labelled throughout. Set both for real bKash through the SSLCommerz sandbox — see below |
 | `BMDC_API_URL` | Every application goes to the admin queue. Never auto-approves |
 | `RATE_LIMIT_STORE_URL` | Postgres counters — correct, no extra infrastructure |
+
+## Payments (bKash via SSLCommerz)
+
+`PAYMENT_PROVIDER=bkash` and `=nagad` are **scaffolding and will break
+checkout** — `createPayment` throws `PROVIDER_UNAVAILABLE`, because a direct
+merchant agreement needs a trade licence and a signed contract. Only their
+webhook signature verification is real.
+
+The working route is **SSLCommerz**, an aggregator that fronts bKash behind one
+merchant account. Its sandbox is self-service and free:
+
+1. Register at <https://developer.sslcommerz.com/> and take the sandbox
+   `store_id` and `store_passwd`.
+2. Set `SSLCOMMERZ_STORE_ID` and `SSLCOMMERZ_STORE_PASSWORD`. Both together —
+   one alone is refused at boot rather than silently falling back to the mock.
+3. Deploy, then set the IPN URL in the SSLCommerz merchant panel to
+   `https://<your-app>/api/payments/webhook`.
+4. `npm run pay:check` opens a real sandbox session and prints the hosted page
+   URL, so a bad credential is caught before a demo rather than during one.
+
+**IPN needs a public URL.** SSLCommerz cannot reach `localhost`, so settlement
+only works once deployed. Locally the gateway page opens and the payment stays
+`pending` — that is the expected local behaviour, not a bug.
+
+### What settles a payment
+
+A redirect gateway means the payer spends the middle of the flow on somebody
+else's domain, and both the return URL and the IPN URL are public endpoints
+anyone can POST to. So neither is believed:
+
+- The `val_id` in a callback is only a lookup key. What settles the payment is a
+  server-to-server call to SSLCommerz's validation API asking about that id.
+- The **validated amount is checked against the stored payment row**. A
+  mismatch is recorded as `amount_mismatch` and left unsettled for a human —
+  this is the control that catches a tampered or forged callback naming a real
+  transaction.
+- Every `val_id` is recorded, so the IPN and the browser return racing each
+  other resolves to one settlement rather than two.
+- `ck_payments_succeeded_verified` means the database itself will not store a
+  non-mock `succeeded` without `webhook_verified_at` set.
+
+`SSLCOMMERZ_SANDBOX` defaults to `true`. Setting it to `false` points at the
+live gateway where real money moves, and **production refuses to boot with it**
+— this build has had no clinical or legal review. See
+`REGULATORY_ASSUMPTIONS.md` A7.
 
 ## Migrations
 
@@ -107,13 +152,17 @@ Vercel Cron sends `Authorization: Bearer $CRON_SECRET`. Elsewhere, any scheduler
 that can set a header will do. Jobs are idempotent, so overlapping or repeated
 invocations are safe.
 
-| Job | Schedule |
-|---|---|
-| `appointment-reminders` | hourly |
-| `no-show-sweep` | every 15 min |
-| `waitlist-offers` | every 5 min |
-| `expiry-sweep` | daily 03:30 |
-| `notification-retry` | every 15 min |
+What is actually scheduled is what `vercel.json` registers, and the Hobby plan
+caps that at two jobs, once a day each. The rest are reachable endpoints with no
+schedule attached — see the table in "Scheduled jobs" above for what that costs.
+
+| Job | Scheduled by `vercel.json` | Ideal cadence if you add a scheduler |
+|---|---|---|
+| `appointment-reminders` | 03:00 daily | hourly (then set `REMINDER_WINDOW_MINUTES=60`) |
+| `no-show-sweep` | 03:30 daily | every 15 min |
+| `waitlist-offers` | not scheduled | every 5 min |
+| `expiry-sweep` | not scheduled | daily |
+| `notification-retry` | not scheduled | every 15 min |
 
 ## Before real patients
 
