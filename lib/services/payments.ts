@@ -20,6 +20,7 @@ import {
   isWalletNumber,
   type PaymentMethod,
   type PaymentStatus,
+  type WebhookVerification,
 } from "../payments/provider";
 import type { Principal } from "../security/authz";
 
@@ -48,6 +49,16 @@ export interface PaymentView {
   currency: string;
   provider: string;
   isMock: boolean;
+  /**
+   * A real gateway moving unreal money. Distinct from `isMock`: the SSLCommerz
+   * sandbox runs the actual API, the actual hosted page and the actual IPN, so
+   * the code path is genuine even though nothing is charged. The UI needs to be
+   * able to say exactly that rather than picking between "mocked" and "live",
+   * neither of which would be true.
+   */
+  sandbox: boolean;
+  /** `redirect` means there is no confirm step on our side to render. */
+  flow: "two-step" | "redirect";
   redirectUrl: string | null;
   /** When this payment can no longer be confirmed. Null once it is settled. */
   expiresAt: string | null;
@@ -191,6 +202,8 @@ export async function startPayment(
     currency: appointment.currency,
     provider: method === "cash" ? "cash" : provider.name,
     isMock: provider.isMock,
+    sandbox: method !== "cash" && provider.sandbox,
+    flow: method === "cash" ? "two-step" : provider.flow,
     redirectUrl: intent.redirectUrl,
     // Cash is settled in person and never expires; a wallet payment is only
     // confirmable while its session lasts.
@@ -230,6 +243,19 @@ export async function executePayment(
   if (payment.method !== "bkash") {
     throw new AppError("NOT_ELIGIBLE", {
       message: "That consultation isn't being paid by wallet.",
+    });
+  }
+
+  /*
+   * A redirect gateway has no execute step: the payer authorised on the
+   * gateway's own page and settlement arrives by IPN. Refusing here rather
+   * than in the provider keeps the reason accurate — there is nothing wrong
+   * with the request, it is the wrong half of a flow that does not have one.
+   */
+  if (provider.flow === "redirect") {
+    throw new AppError("NOT_ELIGIBLE", {
+      message: "This payment is confirmed by bKash. Reopen it from your appointments to check.",
+      meta: { provider: provider.name, reason: "redirect_flow_has_no_execute" },
     });
   }
   // Already settled. Return it rather than running the flow twice — a double
@@ -297,6 +323,10 @@ export async function executePayment(
 type PaymentRow = typeof t.payments.$inferSelect;
 
 function toView(payment: PaymentRow): PaymentView {
+  const provider = getPaymentProvider();
+  // Cash never reaches a gateway, so it inherits neither the flow nor the
+  // sandbox labelling of whichever provider happens to be configured.
+  const viaGateway = payment.method !== "cash";
   return {
     id: payment.id,
     status: payment.status as PaymentStatus,
@@ -305,6 +335,8 @@ function toView(payment: PaymentRow): PaymentView {
     currency: payment.currency,
     provider: payment.provider,
     isMock: payment.isMock === "true",
+    sandbox: viaGateway && provider.sandbox,
+    flow: viaGateway ? provider.flow : "two-step",
     redirectUrl: null,
     expiresAt:
       payment.status === "pending" && payment.method === "bkash"
@@ -346,6 +378,27 @@ export async function handleWebhook(
     throw new AppError("FORBIDDEN", { message: "Webhook signature verification failed." });
   }
 
+  return settleVerified(verification, context);
+}
+
+/**
+ * Apply an ALREADY-VERIFIED gateway statement to the payment row.
+ *
+ * Split out because settlement arrives by two routes — the IPN, and the payer's
+ * own browser coming back with a validation id — and both must land on exactly
+ * the same replay protection, amount check and audit trail. Two code paths that
+ * both mark payments succeeded is one code path too many.
+ *
+ * The caller is responsible for having verified. Everything downstream of here
+ * assumes `verification.valid` was true and was established server-to-server.
+ */
+async function settleVerified(
+  verification: WebhookVerification,
+  context: { requestId?: string },
+): Promise<{ handled: boolean; reason?: string }> {
+  const db = getDb();
+  const provider = getPaymentProvider();
+
   if (!verification.eventId || !verification.providerPaymentId || !verification.status) {
     return { handled: false, reason: "incomplete_event" };
   }
@@ -368,19 +421,78 @@ export async function handleWebhook(
     return { handled: false, reason: "duplicate_event" };
   }
 
-  const updated = await db
-    .update(t.payments)
-    .set({
-      status: verification.status,
-      webhookVerifiedAt: new Date(),
-      providerStatusRaw: verification.status,
-    })
+  const targets = await db
+    .select()
+    .from(t.payments)
     .where(
       and(
         eq(t.payments.provider, provider.name),
         eq(t.payments.providerPaymentId, verification.providerPaymentId),
       ),
     )
+    .limit(1);
+
+  const target = targets[0];
+  if (!target) return { handled: false, reason: "unknown_payment" };
+
+  /*
+   * AMOUNT VERIFICATION. The control that matters most on a redirect gateway.
+   *
+   * We submit `total_amount` when opening the session, but the payer spends the
+   * intervening minutes on somebody else's domain, and the callback that comes
+   * back is a public endpoint anyone can POST to. If the gateway reports what
+   * was actually paid, that figure — not our own expectation, and not the
+   * callback body — is the thing to check the row against.
+   *
+   * A mismatch is NOT a failed payment: money may well have moved. It is a
+   * payment we refuse to act on automatically, recorded loudly for a human.
+   */
+  if (verification.status === "succeeded" && verification.amount != null) {
+    const expected = Number(target.amount);
+    const paid = verification.amount;
+    const currencyMismatch =
+      verification.currency != null && verification.currency !== target.currency;
+
+    // Tolerance of one poisha absorbs the gateway's decimal formatting without
+    // admitting a meaningful shortfall.
+    if (Math.abs(paid - expected) > 0.01 || currencyMismatch) {
+      logger.error("payment amount mismatch — refusing to settle", {
+        paymentId: target.id,
+        expected,
+        paid,
+        expectedCurrency: target.currency,
+        paidCurrency: verification.currency,
+      });
+      await db
+        .update(t.payments)
+        .set({
+          failureReason: "amount_mismatch",
+          providerStatusRaw: `mismatch:${paid}${verification.currency ?? ""}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(t.payments.id, target.id));
+
+      await audit({
+        action: "payment.webhook",
+        requestId: context.requestId,
+        resourceType: "payment",
+        resourceId: target.id,
+        outcome: "denied",
+        metadata: { provider: provider.name, reason: "amount_mismatch", expected, paid },
+      });
+      return { handled: false, reason: "amount_mismatch" };
+    }
+  }
+
+  const updated = await db
+    .update(t.payments)
+    .set({
+      status: verification.status,
+      webhookVerifiedAt: new Date(),
+      providerStatusRaw: verification.status,
+      updatedAt: new Date(),
+    })
+    .where(eq(t.payments.id, target.id))
     .returning({ id: t.payments.id, appointmentId: t.payments.appointmentId });
 
   if (!updated[0]) return { handled: false, reason: "unknown_payment" };
@@ -416,4 +528,47 @@ export async function getPayment(
   if (!payment) throw new AppError("NOT_FOUND");
 
   return toView(payment);
+}
+
+/**
+ * Settle from the payer's own return to our origin.
+ *
+ * SSLCommerz posts the browser back to `success_url` with a `val_id`, and also
+ * sends an IPN. Either can arrive first, and on a cold serverless function the
+ * IPN can be the slower one — which would leave the payer staring at "pending"
+ * for a payment that has already gone through.
+ *
+ * This is NOT trusting the browser. The `val_id` in the returned form is just a
+ * lookup key; what settles the payment is the server-to-server validation call
+ * that follows, and a forged val_id gets no answer from SSLCommerz. The result
+ * goes through the same `settleVerified` path as the IPN, so a race between the
+ * two is resolved by the event-id replay guard rather than by whoever wins.
+ */
+export async function settleFromReturn(
+  valId: string,
+  context: { requestId?: string },
+): Promise<{ handled: boolean; reason?: string }> {
+  const provider = getPaymentProvider();
+
+  if (!provider.validateByValId) {
+    return { handled: false, reason: "provider_has_no_validation" };
+  }
+
+  const verification = await provider.validateByValId(valId);
+
+  if (!verification.valid) {
+    logger.warn("rejected a payment return that did not validate", {
+      provider: provider.name,
+      reason: verification.reason,
+    });
+    await audit({
+      action: "payment.return",
+      requestId: context.requestId,
+      outcome: "denied",
+      metadata: { provider: provider.name, reason: verification.reason },
+    });
+    return { handled: false, reason: verification.reason ?? "not_validated" };
+  }
+
+  return settleVerified(verification, context);
 }

@@ -67,6 +67,14 @@ export function BkashCheckout({ open, payment, appointment, onClose, onPaid, api
 
   const digits = wallet.replace(/[\s-]/g, "");
 
+  /*
+   * A hosted gateway (SSLCommerz fronting bKash) sends the payer to its own
+   * page, so there is nothing for us to confirm and no wallet number to take.
+   * Rendering the two-step sheet here would be a form whose submit button
+   * cannot do anything — the server refuses execute on a redirect provider.
+   */
+  const redirecting = payment.flow === "redirect" && Boolean(payment.redirectUrl);
+
   const submit = async (event) => {
     event.preventDefault();
     if (!WALLET.test(digits)) {
@@ -87,6 +95,64 @@ export function BkashCheckout({ open, payment, appointment, onClose, onPaid, api
   };
 
   const fee = new Intl.NumberFormat("en-BD").format(payment.amount);
+
+  if (redirecting) {
+    return (
+      <Modal open={open} title={t("pay.redirectTitle")} onClose={onClose}>
+        <div className="bkash-sheet">
+          <div className="bkash-head">
+            <span className="bkash-mark">bKash</span>
+            <div className="bkash-amount">
+              <span>{t("pay.amount")}</span>
+              <strong>৳ {fee}</strong>
+            </div>
+          </div>
+
+          {appointment && (
+            <p className="bkash-for">
+              {appointment.doctor?.name ?? "Consultation"} · {appointment.date} {appointment.month},{" "}
+              {appointment.time}
+            </p>
+          )}
+
+          <p className="bkash-for">{t("pay.redirectBody")}</p>
+
+          <Banner tone="info" icon="check" title={t("booking.booked")}>
+            {t("pay.slotSafe")}
+          </Banner>
+
+          {/* Still the most important line on the screen: we are about to send
+              them somewhere else, which is exactly when a payer is most open
+              to being sent somewhere else by someone who is not us. */}
+          <Banner tone="info" icon="shield">
+            {t("pay.noPin")}
+          </Banner>
+
+          {payment.sandbox && (
+            <Banner tone="warn" icon="info">
+              {t("pay.sandboxGateway")}
+            </Banner>
+          )}
+
+          <div className="bkash-actions">
+            <button type="button" className="button ghost" onClick={onClose}>
+              {t("pay.later")}
+            </button>
+            {/*
+              A plain link, not a fetch. The payer must SEE bkash's own URL and
+              padlock in the address bar — that is the one habit that protects
+              them, and loading a payment page in an iframe or a popup we styled
+              would be teaching them to skip the check.
+            */}
+            <a className="button primary" href={payment.redirectUrl} rel="noopener">
+              {t("pay.redirectCta")}
+              <Icon name="arrow" size={14} />
+            </a>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
 
   return (
     <Modal open={open} title={t("pay.title")} onClose={onClose}>

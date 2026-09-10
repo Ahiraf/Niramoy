@@ -116,6 +116,32 @@ const STRINGS = {
     en: "This payment session has expired. Your appointment is still booked.",
     bn: "এই পেমেন্ট সেশনের সময় শেষ। আপনার অ্যাপয়েন্টমেন্ট এখনও বহাল আছে।",
   },
+  /* ---- Redirect (hosted gateway) flow ----------------------------------- */
+  // Used when a real gateway fronts bKash and the payer leaves our origin.
+  "pay.redirectTitle": { en: "Continue on bKash", bn: "bKash-এ এগিয়ে যান" },
+  "pay.redirectBody": {
+    en: "You'll be taken to bKash's own secure page to approve this payment, then brought straight back here.",
+    bn: "এই পেমেন্ট অনুমোদনের জন্য আপনাকে bKash-এর নিজস্ব নিরাপদ পাতায় নেওয়া হবে, তারপর আবার এখানে ফিরিয়ে আনা হবে।",
+  },
+  "pay.redirectCta": { en: "Continue to bKash", bn: "bKash-এ যান" },
+  // Distinct from pay.sandbox: the gateway here is REAL, only the money is not.
+  "pay.sandboxGateway": {
+    en: "Test payment. This is the real bKash sandbox — no money moves and no real account is charged.",
+    bn: "পরীক্ষামূলক পেমেন্ট। এটি প্রকৃত bKash স্যান্ডবক্স — কোনো টাকা স্থানান্তর হবে না, কোনো প্রকৃত অ্যাকাউন্ট থেকে কাটা হবে না।",
+  },
+  "pay.checking": { en: "Checking with bKash…", bn: "bKash-এর সঙ্গে যাচাই করা হচ্ছে…" },
+  "pay.returnSuccess": {
+    en: "Payment confirmed by bKash.",
+    bn: "bKash পেমেন্ট নিশ্চিত করেছে।",
+  },
+  "pay.returnUnconfirmed": {
+    en: "We couldn't confirm that payment yet. Your appointment is still booked — check again in a moment.",
+    bn: "আমরা এখনো পেমেন্টটি নিশ্চিত করতে পারিনি। আপনার অ্যাপয়েন্টমেন্ট বহাল আছে — একটু পরে আবার দেখুন।",
+  },
+  "pay.returnCancelled": {
+    en: "Payment cancelled. Your appointment is still booked.",
+    bn: "পেমেন্ট বাতিল হয়েছে। আপনার অ্যাপয়েন্টমেন্ট বহাল আছে।",
+  },
   "pay.later": { en: "Pay later", bn: "পরে দেব" },
   "pay.atChamber": { en: "Pay at the chamber", bn: "চেম্বারে পরিশোধ করুন" },
 

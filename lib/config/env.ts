@@ -72,9 +72,23 @@ const schema = z
     OPENAI_MODEL: z.string().optional(),
     OPENAI_BASE_URL: z.string().url().optional(),
 
-    EMAIL_PROVIDER: z.enum(["console", "resend"]).optional(),
+    /**
+     * Email. `console` logs instead of sending, which keeps sign-up reviewable
+     * without a mailbox; `resend` needs a domain you control DNS for; `smtp`
+     * works with an ordinary account and an app password, which is usually the
+     * only one of the three a student project can actually complete.
+     */
+    EMAIL_PROVIDER: z.enum(["console", "resend", "smtp"]).optional(),
     EMAIL_API_KEY: z.string().optional(),
     EMAIL_FROM: z.string().optional(),
+
+    SMTP_HOST: z.string().optional(),
+    SMTP_PORT: z.coerce.number().int().min(1).max(65_535).optional(),
+    SMTP_USER: z.string().optional(),
+    /** For Gmail this is an App Password, never the account password. */
+    SMTP_PASSWORD: z.string().optional(),
+    /** Implicit TLS. Inferred from the port when unset: true only on 465. */
+    SMTP_SECURE: z.enum(["true", "false"]).optional(),
 
     /**
      * SMS. `console` prints the message instead of sending it, which is what
@@ -102,10 +116,26 @@ const schema = z
     VIDEO_API_SECRET: z.string().optional(),
     VIDEO_DOMAIN: z.string().optional(),
 
-    PAYMENT_PROVIDER: z.enum(["mock", "bkash", "nagad"]).optional(),
+    PAYMENT_PROVIDER: z.enum(["mock", "sslcommerz", "bkash", "nagad"]).optional(),
     PAYMENT_API_KEY: z.string().optional(),
     PAYMENT_API_SECRET: z.string().optional(),
     PAYMENT_WEBHOOK_SECRET: z.string().optional(),
+
+    /*
+     * SSLCommerz — the aggregator that actually fronts bKash for a merchant
+     * without a direct bKash agreement. Sandbox credentials are self-service
+     * from developer.sslcommerz.com and cost nothing, which is what makes a
+     * genuinely working wallet payment demonstrable here.
+     *
+     * SSLCOMMERZ_SANDBOX is a separate switch from APP_ENV on purpose: a
+     * deployed demonstration runs APP_ENV=production against the SANDBOX
+     * gateway, and conflating the two would make that combination unsayable.
+     * It defaults to true — pointing at the live gateway, where real money
+     * moves, has to be a deliberate act.
+     */
+    SSLCOMMERZ_STORE_ID: z.string().optional(),
+    SSLCOMMERZ_STORE_PASSWORD: z.string().optional(),
+    SSLCOMMERZ_SANDBOX: z.enum(["true", "false"]).optional(),
 
     /** A real BM&DC data-sharing endpoint. Unset => admin verifies by hand. */
     BMDC_API_URL: z.string().url().optional(),
@@ -181,11 +211,26 @@ const schema = z
         (raw.AI_API_KEY && raw.AI_BASE_URL)
           ? "openai-compatible"
           : "rules"),
-      emailProvider: raw.EMAIL_PROVIDER ?? (raw.EMAIL_API_KEY ? "resend" : "console"),
+      /*
+       * SMTP wins over Resend when both are configured: it is the more specific
+       * thing to have set up, and a deployer who filled in a host, a user and a
+       * password meant it.
+       */
+      emailProvider:
+        raw.EMAIL_PROVIDER ??
+        (raw.SMTP_HOST && raw.SMTP_USER && raw.SMTP_PASSWORD
+          ? "smtp"
+          : raw.EMAIL_API_KEY
+            ? "resend"
+            : "console"),
       /** A key means a gateway; no key means the code is printed, never sent. */
       smsProvider: raw.SMS_PROVIDER ?? (raw.TEXTBEE_API_KEY ? "textbee" : "console"),
       videoProvider: raw.VIDEO_PROVIDER ?? (raw.VIDEO_API_KEY ? "daily" : "demo"),
-      paymentProvider: raw.PAYMENT_PROVIDER ?? "mock",
+      paymentProvider:
+        raw.PAYMENT_PROVIDER ??
+        (raw.SSLCOMMERZ_STORE_ID && raw.SSLCOMMERZ_STORE_PASSWORD ? "sslcommerz" : "mock"),
+      /** Live gateway only when explicitly switched off. Real money either way. */
+      sslcommerzSandbox: raw.SSLCOMMERZ_SANDBOX !== "false",
     };
   })
   .superRefine((cfg, ctx) => {
@@ -202,7 +247,69 @@ const schema = z
       });
     }
 
+    /*
+     * A mailer missing a credential falls back to `console`, which logs the
+     * message and reports it delivered. A verification link that goes to a log
+     * file instead of an inbox is an account nobody can finish creating, and
+     * nothing in the response says so.
+     */
+    if (cfg.emailProvider === "smtp") {
+      for (const name of ["SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD"] as const) {
+        if (!cfg[name]) {
+          ctx.addIssue({
+            code: "custom",
+            path: [name],
+            message: `EMAIL_PROVIDER=smtp requires ${name}`,
+          });
+        }
+      }
+    }
+
+    if (cfg.emailProvider === "resend" && !cfg.EMAIL_API_KEY) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["EMAIL_API_KEY"],
+        message: "EMAIL_PROVIDER=resend requires EMAIL_API_KEY",
+      });
+    }
+
+    /*
+     * Half-configured SSLCommerz is the dangerous state, in every environment.
+     * Without both credentials getPaymentProvider() falls back to the mock —
+     * which succeeds, cheerfully, and labels itself a sandbox. A deployer who
+     * asked for a real gateway and got a mock has been told nothing went wrong,
+     * and the demo they are about to give is not the one they think it is.
+     */
+    if (cfg.paymentProvider === "sslcommerz") {
+      for (const name of ["SSLCOMMERZ_STORE_ID", "SSLCOMMERZ_STORE_PASSWORD"] as const) {
+        if (!cfg[name]) {
+          ctx.addIssue({
+            code: "custom",
+            path: [name],
+            message: `PAYMENT_PROVIDER=sslcommerz requires ${name}`,
+          });
+        }
+      }
+    }
+
     if (!cfg.isProd) return;
+
+    /*
+     * The live gateway moves real money, and this project has neither the
+     * merchant agreement nor the clinical and legal review that would make
+     * charging a patient defensible. See docs/REGULATORY_ASSUMPTIONS.md A7.
+     */
+    if (cfg.paymentProvider === "sslcommerz" && !cfg.sslcommerzSandbox) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["SSLCOMMERZ_SANDBOX"],
+        message:
+          "SSLCOMMERZ_SANDBOX=false points at the LIVE gateway, where real money moves. " +
+          "This build has no merchant agreement and has not had clinical or legal " +
+          "review — see docs/REGULATORY_ASSUMPTIONS.md A7. Leave it unset for a demo.",
+      });
+    }
+
 
     // Production must not run on a defaulted secret.
     const required: Array<[string, unknown]> = [

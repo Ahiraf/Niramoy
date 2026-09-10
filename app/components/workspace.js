@@ -8,6 +8,7 @@ import { Dashboard } from "./patient/dashboard.js";
 import { FindDoctors, DoctorProfile } from "./patient/find-doctors.js";
 import { Booking } from "./patient/booking.js";
 import { BkashCheckout } from "./patient/bkash-checkout.js";
+import { useT } from "../lib/i18n.js";
 import { Appointments, Consultation } from "./patient/appointments.js";
 import { Booked } from "./patient/booked.js";
 import { Assistant } from "./patient/assistant.js";
@@ -77,6 +78,9 @@ export function Workspace({ portal = "public" }) {
   const [rescheduling, setRescheduling] = useState(null);
   /** A started bKash payment awaiting the payer's confirmation. */
   const [pendingPayment, setPendingPayment] = useState(null);
+  // Only the payment-return copy uses this today; the rest of this file's
+  // toasts are still English-only.
+  const { t } = useT();
   const [searchTerm, setSearchTerm] = useState("");
   /** The appointment just booked, shown on the confirmation screen. */
   const [justBooked, setJustBooked] = useState(null);
@@ -224,6 +228,37 @@ export function Workspace({ portal = "public" }) {
     setMenuOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
+
+  /*
+   * The payer coming back from the hosted bKash page.
+   *
+   * The gateway redirects to "/?payment=<outcome>", where the outcome was
+   * decided SERVER-side by a validation call — this effect only reports it. It
+   * deliberately does not treat the query string as evidence of anything: it
+   * refreshes the appointments from the API, so what the patient ends up
+   * looking at is the stored payment status rather than a URL they could have
+   * typed.
+   *
+   * The param is stripped afterwards so a refresh, or a shared link, does not
+   * announce a payment a second time.
+   */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const outcome = params.get("payment");
+    if (!outcome) return;
+
+    window.history.replaceState({}, "", window.location.pathname);
+
+    const MESSAGES = {
+      success: t("pay.returnSuccess"),
+      cancel: t("pay.returnCancelled"),
+      fail: t("pay.returnUnconfirmed"),
+      unconfirmed: t("pay.returnUnconfirmed"),
+    };
+    showToast(MESSAGES[outcome] ?? MESSAGES.unconfirmed);
+    setActive("appointments");
+    refreshAppointments();
+  }, [t, showToast, refreshAppointments]);
 
   /* ---------------------------------------------------------------------- */
   /* Session                                                                 */

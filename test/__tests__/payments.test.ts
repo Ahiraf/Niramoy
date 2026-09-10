@@ -11,6 +11,7 @@ import { POST as paymentsPost } from "../../app/api/payments/route";
 import { POST as webhookPost } from "../../app/api/payments/webhook/route";
 import { POST as executePost } from "../../app/api/payments/[id]/execute/route";
 import { resetPaymentProvider, signatureMatches } from "../../lib/payments/provider";
+import { resetEnvCache } from "../../lib/config/env";
 import { PAYMENT_SESSION_MINUTES } from "../../lib/services/payments";
 import { requestAs, seedAppointment, type World } from "../fixtures";
 import { call, params, setupWorld, teardownWorld } from "../harness";
@@ -395,5 +396,171 @@ describe("schema-level payment guarantees", () => {
         VALUES ('mock', 'true', '800', 'BDT', 'pending', 'dupe');
       `),
     ).rejects.toThrow(/uq_payments_idempotency/);
+  });
+});
+
+/**
+ * The redirect gateway, against the real database.
+ *
+ * Distinct from sslcommerz.test.ts, which stubs fetch to check what the
+ * PROVIDER believes. This checks what the SERVICE does with that belief once a
+ * payment row exists — specifically, that a validated success whose amount does
+ * not match the row is refused rather than settled.
+ */
+describe("redirect gateway settlement", () => {
+  /** Point the process at SSLCommerz for the duration of one test. */
+  function useSslcommerz(): () => void {
+    const before = { ...process.env };
+    process.env.PAYMENT_PROVIDER = "sslcommerz";
+    process.env.SSLCOMMERZ_STORE_ID = "niramoytest";
+    process.env.SSLCOMMERZ_STORE_PASSWORD = "niramoytest@ssl";
+    process.env.APP_URL = "https://niramoy.example";
+    resetEnvCache();
+    resetPaymentProvider();
+
+    return () => {
+      process.env = before;
+      resetEnvCache();
+      resetPaymentProvider();
+    };
+  }
+
+  /** Answer the validation API with a given amount, whatever was asked. */
+  function stubValidation(payload: Record<string, unknown>): () => void {
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      ({ ok: true, status: 200, json: async () => payload }) as Response) as typeof fetch;
+    return () => {
+      globalThis.fetch = original;
+    };
+  }
+
+  async function seedGatewayPayment(amount: string): Promise<void> {
+    await world.h.client.exec(`
+      INSERT INTO payments (provider, is_mock, amount, currency, status,
+                            idempotency_key, provider_payment_id, method)
+      VALUES ('sslcommerz', 'false', '${amount}', 'BDT', 'pending',
+              'gateway-key', 'nmytxn001', 'bkash');
+    `);
+  }
+
+  it("settles a payment whose validated amount matches the row", async () => {
+    const restoreEnv = useSslcommerz();
+    const restoreFetch = stubValidation({
+      status: "VALID",
+      val_id: "val-match",
+      tran_id: "nmytxn001",
+      amount: "800.00",
+      currency: "BDT",
+    });
+    try {
+      await seedGatewayPayment("800");
+
+      const res = await webhookPost(
+        new Request(`${BASE}/api/payments/webhook`, {
+          method: "POST",
+          body: "val_id=val-match&tran_id=nmytxn001",
+        }),
+      );
+      expect(res.status).toBe(200);
+
+      const { rows } = await world.h.client.query<{ status: string; webhook_verified_at: string }>(
+        `SELECT status, webhook_verified_at FROM payments WHERE provider_payment_id = 'nmytxn001'`,
+      );
+      expect(rows[0]!.status).toBe("succeeded");
+      // The schema will not accept a non-mock success without this.
+      expect(rows[0]!.webhook_verified_at).not.toBeNull();
+    } finally {
+      restoreFetch();
+      restoreEnv();
+    }
+  });
+
+  it("refuses to settle when the validated amount is less than the row", async () => {
+    const restoreEnv = useSslcommerz();
+    // The tampering case: a real transaction, a real val_id, ৳1 actually paid.
+    const restoreFetch = stubValidation({
+      status: "VALID",
+      val_id: "val-short",
+      tran_id: "nmytxn001",
+      amount: "1.00",
+      currency: "BDT",
+    });
+    try {
+      await seedGatewayPayment("800");
+
+      await webhookPost(
+        new Request(`${BASE}/api/payments/webhook`, {
+          method: "POST",
+          body: "val_id=val-short&tran_id=nmytxn001",
+        }),
+      );
+
+      const { rows } = await world.h.client.query<{ status: string; failure_reason: string }>(
+        `SELECT status, failure_reason FROM payments WHERE provider_payment_id = 'nmytxn001'`,
+      );
+      expect(rows[0]!.status).toBe("pending");
+      expect(rows[0]!.failure_reason).toBe("amount_mismatch");
+    } finally {
+      restoreFetch();
+      restoreEnv();
+    }
+  });
+
+  it("refuses to settle when the currency does not match", async () => {
+    const restoreEnv = useSslcommerz();
+    const restoreFetch = stubValidation({
+      status: "VALID",
+      val_id: "val-currency",
+      tran_id: "nmytxn001",
+      amount: "800.00",
+      currency: "USD",
+    });
+    try {
+      await seedGatewayPayment("800");
+
+      await webhookPost(
+        new Request(`${BASE}/api/payments/webhook`, {
+          method: "POST",
+          body: "val_id=val-currency&tran_id=nmytxn001",
+        }),
+      );
+
+      const { rows } = await world.h.client.query<{ status: string }>(
+        `SELECT status FROM payments WHERE provider_payment_id = 'nmytxn001'`,
+      );
+      // 800 USD is not 800 BDT, and settling it would be off by a hundredfold.
+      expect(rows[0]!.status).toBe("pending");
+    } finally {
+      restoreFetch();
+      restoreEnv();
+    }
+  });
+
+  it("ignores a replayed validation id", async () => {
+    const restoreEnv = useSslcommerz();
+    const restoreFetch = stubValidation({
+      status: "VALID",
+      val_id: "val-replay",
+      tran_id: "nmytxn001",
+      amount: "800.00",
+      currency: "BDT",
+    });
+    try {
+      await seedGatewayPayment("800");
+      const body = "val_id=val-replay&tran_id=nmytxn001";
+
+      await webhookPost(new Request(`${BASE}/api/payments/webhook`, { method: "POST", body }));
+      const second = await call<{ handled: boolean; reason?: string }>(
+        webhookPost,
+        new Request(`${BASE}/api/payments/webhook`, { method: "POST", body }),
+      );
+
+      expect(second.body.handled).toBe(false);
+      expect(second.body.reason).toBe("duplicate_event");
+    } finally {
+      restoreFetch();
+      restoreEnv();
+    }
   });
 });
