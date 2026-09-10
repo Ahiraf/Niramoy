@@ -7,8 +7,9 @@
  *
  * Three drivers, chosen from the environment (lib/config/env.ts):
  *
- *   neon   — Vercel Postgres / Neon over HTTP. No socket to keep alive, which is
- *            the right shape for short-lived serverless invocations.
+ *   neon   — Vercel Postgres / Neon over a WebSocket. NOT the HTTP driver: that
+ *            one cannot run an interactive transaction, and slot claiming and
+ *            registration both need one. See the note on the case below.
  *   pg     — node-postgres with a small pool, for a normal server, Docker, and
  *            the concurrency test suite (which needs real parallel connections).
  *   pglite — Postgres compiled to WASM, in-process. The default when no
@@ -19,7 +20,7 @@
  * invocation reuses it rather than opening a new pool per request.
  */
 
-import { drizzle as drizzleNeon } from "drizzle-orm/neon-http";
+import { drizzle as drizzleNeonServerless } from "drizzle-orm/neon-serverless";
 import { drizzle as drizzleNode, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
 
@@ -55,12 +56,48 @@ function build(): { db: Database; close: () => Promise<void>; driver: string } {
 
   switch (env.databaseDriver) {
     case "neon": {
-      // Lazy require: the driver is only pulled in when it is the one in use.
-      const { neon } = require("@neondatabase/serverless") as typeof import("@neondatabase/serverless");
-      const sql = neon(env.databaseUrl as string);
+      /*
+       * WebSockets, not HTTP.
+       *
+       * neon-http is the tempting choice for serverless — one request, no
+       * socket to keep alive — but it CANNOT run an interactive transaction.
+       * drizzle's neon-http session throws "No transactions support in
+       * neon-http driver" the moment `db.transaction()` is called, and this
+       * application depends on transactions in exactly the places where the
+       * alternative is corrupt data: claiming an appointment slot, and creating
+       * a doctor's account against the approval that authorised it.
+       *
+       * That failure is invisible in development and in the test suite, because
+       * both run on PGlite, which supports transactions. It only appears once a
+       * real Neon URL is configured — as a 500 on sign-up and on booking, with
+       * nothing wrong in the route that reported it.
+       *
+       * The Pool speaks the real Postgres protocol over a WebSocket, so
+       * transactions behave normally.
+       */
+      const { Pool, neonConfig } = require("@neondatabase/serverless") as typeof import("@neondatabase/serverless");
+
+      /*
+       * Node has had a global WebSocket since 22, which is what Vercel runs.
+       * Older runtimes need one supplied, and `ws` is not a dependency here —
+       * so say which runtime is at fault rather than failing later inside the
+       * driver on the first query.
+       */
+      if (!neonConfig.webSocketConstructor) {
+        const globalWebSocket = (globalThis as { WebSocket?: unknown }).WebSocket;
+        if (!globalWebSocket) {
+          throw new Error(
+            "The Neon driver needs a WebSocket implementation. Node 22 or newer " +
+              "provides one; on an older runtime, set DATABASE_DRIVER=pg instead.",
+          );
+        }
+        neonConfig.webSocketConstructor = globalWebSocket as never;
+      }
+
+      const pool = new Pool({ connectionString: env.databaseUrl });
       return {
-        db: drizzleNeon(sql, { schema, casing: "snake_case" }) as unknown as Database,
-        close: async () => {},
+        db: drizzleNeonServerless(pool, { schema, casing: "snake_case" }) as unknown as Database,
+        close: () => pool.end(),
         driver: "neon",
       };
     }

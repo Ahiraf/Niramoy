@@ -28,7 +28,10 @@ async function main(): Promise<void> {
 
   switch (driver) {
     case "neon": {
-      const { migrate } = await import("drizzle-orm/neon-http/migrator");
+      // Must match the driver lib/db/client.ts actually builds — that is
+      // neon-serverless (WebSocket), because neon-http cannot run a transaction
+      // and every migration here is wrapped in one.
+      const { migrate } = await import("drizzle-orm/neon-serverless/migrator");
       await migrate(db as never, { migrationsFolder: MIGRATIONS_FOLDER });
       break;
     }
