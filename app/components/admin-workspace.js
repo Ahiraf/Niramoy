@@ -533,7 +533,6 @@ function Specialties({ reference }) {
       <PageHeading
         title="Specialties"
         subtitle="Care categories patients can discover, mapped to the DGHS specialty taxonomy."
-        actions={<button className="button primary"><Icon name="plus" size={14} />Add specialty</button>}
       />
 
       <Banner tone="info" icon="info" title="Where this taxonomy comes from">
@@ -552,9 +551,9 @@ function Specialties({ reference }) {
             <h3>{s.name}</h3>
             <p className="specialty-bn">{s.bn}</p>
             <p className="specialty-blurb">{s.blurb}</p>
-            <div className="specialty-map">
-              Maps from: {s.dghs.join(", ")}
-            </div>
+            {s.dghs?.length ? (
+              <div className="specialty-map">Maps from: {s.dghs.join(", ")}</div>
+            ) : null}
           </div>
         ))}
       </div>

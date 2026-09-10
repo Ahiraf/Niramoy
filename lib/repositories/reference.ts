@@ -16,6 +16,9 @@ export interface SpecialtyView {
   bn: string | null;
   icon: string | null;
   blurb: string | null;
+  /** DGHS source labels this category normalises. Never null — the column
+   *  defaults to an empty array — but callers should still tolerate empty. */
+  dghs: string[];
   doctorCount: number;
 }
 
@@ -51,6 +54,10 @@ export async function listSpecialties(): Promise<SpecialtyView[]> {
       icon: t.specialties.icon,
       blurb: t.specialties.blurb,
       sortOrder: t.specialties.sortOrder,
+      /** The DGHS source labels this category normalises. Named `dghs` because
+       *  that is what the admin Specialties page reads; the column is
+       *  `dghs_labels`, and the mismatch used to crash that page. */
+      dghs: t.specialties.dghsLabels,
       doctorCount: sql<number>`count(${t.doctors.id})::int`,
     })
     .from(t.specialties)
@@ -65,6 +72,7 @@ export async function listSpecialties(): Promise<SpecialtyView[]> {
       t.specialties.nameBn,
       t.specialties.icon,
       t.specialties.blurb,
+      t.specialties.dghsLabels,
       t.specialties.sortOrder,
     )
     .orderBy(t.specialties.sortOrder);

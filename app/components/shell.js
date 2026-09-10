@@ -175,6 +175,13 @@ export function Topbar({ active, notifications, unread, onReadNotifications, onS
         <span>{subtitle}</span>
       </div>
 
+      {/*
+        The doctor directory has its own search, with the specialty, division
+        and fee filters attached to it. Two search boxes on one screen is two
+        places to type the same thing, only one of which respects the filters
+        beside it — so this one steps aside where the real one lives.
+      */}
+      {active !== "doctors" && (
       <form
         className="topbar-search"
         onSubmit={(e) => { e.preventDefault(); onSearch?.(term); }}
@@ -187,6 +194,7 @@ export function Topbar({ active, notifications, unread, onReadNotifications, onS
           aria-label="Search"
         />
       </form>
+      )}
 
       <div className="topbar-actions">
         <div style={{ position: "relative" }} ref={popRef}>
