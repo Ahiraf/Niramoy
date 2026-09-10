@@ -26,6 +26,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { getEnv } from "../config/env";
 import { AppError } from "../errors";
 import { logger } from "../observability/logger";
+import { sslcommerzProvider } from "./sslcommerz";
 
 export type PaymentStatus =
   | "pending"
@@ -80,12 +81,35 @@ export interface WebhookVerification {
   eventId: string | null;
   providerPaymentId: string | null;
   status: PaymentStatus | null;
+  /**
+   * What the gateway says was ACTUALLY paid, when it says so.
+   *
+   * Returned so the service can compare it against the stored row before
+   * believing a success. A callback naming a real transaction but a smaller
+   * amount is the standard tampering case against a redirect gateway, and the
+   * amount is the only thing that catches it. Null means the provider did not
+   * report one, which is not the same as "it matched".
+   */
+  amount?: number | null;
+  currency?: string | null;
   reason?: string;
 }
 
 export interface PaymentProvider {
   readonly name: string;
   readonly isMock: boolean;
+  /**
+   * How the payer authorises.
+   *
+   * `two-step` is the tokenized-checkout shape: create, then execute once the
+   * payer has authorised, both from our origin. `redirect` sends the payer to
+   * the gateway's own hosted page and there is no execute call at all — the
+   * service must not offer a confirm button for one, because pressing it could
+   * not do anything.
+   */
+  readonly flow: "two-step" | "redirect";
+  /** True when the gateway is real but the money is not. Surfaced in the UI. */
+  readonly sandbox: boolean;
   createPayment(input: CreatePaymentInput): Promise<PaymentIntent>;
   /**
    * Confirm a payment the payer has authorised on the wallet's side. Separate
@@ -98,6 +122,13 @@ export interface PaymentProvider {
   refundPayment(input: { providerPaymentId: string; amount: number }): Promise<PaymentStatus>;
   /** Verify a webhook before ANY of its content is believed. */
   verifyWebhook(input: { rawBody: string; headers: Headers }): Promise<WebhookVerification>;
+  /**
+   * Settle directly from a gateway-issued validation id, for providers whose
+   * browser return carries one. Lets a payer who is looking at the screen see
+   * the result without waiting on the IPN, using the same server-to-server
+   * check — it is a second route to the same authority, not a shortcut past it.
+   */
+  validateByValId?(valId: string): Promise<WebhookVerification>;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -135,6 +166,8 @@ export function isWalletNumber(value: string): boolean {
 const mockProvider: PaymentProvider = {
   name: "mock",
   isMock: true,
+  flow: "two-step",
+  sandbox: true,
 
   async createPayment(input) {
     logger.info("sandbox payment created — nothing is charged", {
@@ -214,6 +247,8 @@ function mfsProvider(
   return {
     name,
     isMock: false,
+    flow: "two-step",
+    sandbox: false,
 
     async createPayment(): Promise<PaymentIntent> {
       throw new AppError("PROVIDER_UNAVAILABLE", {
@@ -292,6 +327,23 @@ let cached: PaymentProvider | undefined;
 export function getPaymentProvider(): PaymentProvider {
   if (cached) return cached;
   const env = getEnv();
+
+  /*
+   * SSLCommerz first: it is the one that actually reaches bKash. Both
+   * credentials are required together — env.ts refuses a half-configured
+   * gateway rather than letting it fall through to the mock, because a mock
+   * that quietly stands in for a gateway you asked for is indistinguishable
+   * from a working integration right up until it matters.
+   */
+  if (env.paymentProvider === "sslcommerz" && env.SSLCOMMERZ_STORE_ID && env.SSLCOMMERZ_STORE_PASSWORD) {
+    cached = sslcommerzProvider({
+      storeId: env.SSLCOMMERZ_STORE_ID,
+      storePassword: env.SSLCOMMERZ_STORE_PASSWORD,
+      sandbox: env.sslcommerzSandbox,
+      appUrl: env.APP_URL,
+    });
+    return cached;
+  }
 
   if ((env.paymentProvider === "bkash" || env.paymentProvider === "nagad") &&
       env.PAYMENT_API_KEY && env.PAYMENT_API_SECRET) {
