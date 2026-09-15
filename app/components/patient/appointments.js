@@ -37,16 +37,38 @@ function PaymentNote({ payment }) {
 }
 
 /**
+ * Still owing money through the wallet.
+ *
+ * An appointment with NO payment row counts: a booking whose checkout never got
+ * off the ground is exactly the case a patient needs to be able to retry, and
+ * treating "no payment" as "nothing to pay" is what left those consultations
+ * with no way to pay for them at all.
+ */
+function unpaidByWallet(a) {
+  if (a.payment && a.payment.method !== "bkash") return false;
+  // Nothing was ever owed, so nothing is outstanding.
+  if (!a.payment && Number(a.fee ?? 0) <= 0) return false;
+  const status = a.payment?.status ?? "pending";
+  return status === "pending" || status === "failed" || status === "cancelled";
+}
+
+/**
  * The one action this appointment needs next.
  *
  * Ordered by what is blocking: an unpaid consultation needs paying, a
  * confirmed one needs joining, a finished one needs a review. Everything else
  * on the card is available, just not competing.
  */
-function primaryAction(a, { onPay, onJoinCall, setReviewing, onNavigate }) {
+function primaryAction(a, { onPay, onJoinCall, setReviewing, onNavigate, payingId }) {
   if (a.status === "confirmed") {
-    if (a.payment?.method === "bkash" && a.payment.status === "pending") {
-      return { label: "Pay with bKash", tone: "primary", onClick: () => onPay?.(a) };
+    if (unpaidByWallet(a)) {
+      const busy = payingId === a.id;
+      return {
+        label: busy ? "Opening bKash…" : "Pay with bKash",
+        tone: "primary",
+        disabled: busy,
+        onClick: () => onPay?.(a),
+      };
     }
     return {
       label: "Join call",
@@ -85,14 +107,12 @@ function secondaryActions(a, {
   };
 
   if (a.status === "confirmed") {
-    const unpaid = a.payment?.method === "bkash" && a.payment.status === "pending";
+    const unpaid = unpaidByWallet(a);
     return [
       // Whichever of pay/join is not the primary action stays reachable here.
       unpaid
         ? { label: "Join call", icon: "video", onClick: () => onJoinCall(a) }
-        : a.payment?.status === "pending"
-          ? { label: "Pay now", icon: "send", onClick: () => onPay?.(a) }
-          : null,
+        : { label: "Pay now", icon: "send", onClick: () => onPay?.(a) },
       calendar,
       { label: "Reschedule", icon: "clock", onClick: () => onReschedule(a) },
       policy,
@@ -120,7 +140,7 @@ function secondaryActions(a, {
 
 export function Appointments({
   loading, appointments, waitlist, onNavigate, onCancel, onReschedule,
-  onJoinCall, onReview, onLeaveWaitlist, onPay,
+  onJoinCall, onReview, onLeaveWaitlist, onPay, payingId,
 }) {
   const [tab, setTab] = useState("upcoming");
   const [reviewing, setReviewing] = useState(null);
@@ -215,9 +235,15 @@ export function Appointments({
                   * for, and put Cancel as close to the thumb as Join.
                   */}
                 {(() => {
-                  const primary = primaryAction(a, { onPay, onJoinCall, setReviewing, onNavigate });
+                  const primary = primaryAction(a, {
+                    onPay, onJoinCall, setReviewing, onNavigate, payingId,
+                  });
                   return primary ? (
-                    <button className={`button ${primary.tone} small`} onClick={primary.onClick}>
+                    <button
+                      className={`button ${primary.tone} small`}
+                      onClick={primary.onClick}
+                      disabled={Boolean(primary.disabled)}
+                    >
                       {primary.icon && <Icon name={primary.icon} size={12} />}
                       {primary.label}
                     </button>
