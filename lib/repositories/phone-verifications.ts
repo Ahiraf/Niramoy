@@ -7,7 +7,7 @@
  * the users table, and the answer is not something an unauthenticated caller
  * gets to learn.
  */
-import { and, desc, eq, isNull, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lt, sql } from "drizzle-orm";
 
 import { getDb, type Database } from "../db/client";
 import * as t from "../db/schema";
@@ -140,6 +140,26 @@ export async function consumeTicket(
     )
     .returning({ id: t.phoneVerifications.id });
   return Boolean(rows[0]);
+}
+
+/** Expire the newest live code when a configured SMS gateway rejects the send. */
+export async function expirePending(
+  phone: string,
+  db: Database = getDb(),
+): Promise<number> {
+  const rows = await db
+    .update(t.phoneVerifications)
+    .set({ expiresAt: new Date() })
+    .where(
+      and(
+        eq(t.phoneVerifications.phone, phone),
+        isNull(t.phoneVerifications.verifiedAt),
+        isNull(t.phoneVerifications.consumedAt),
+        gt(t.phoneVerifications.expiresAt, new Date()),
+      ),
+    )
+    .returning({ id: t.phoneVerifications.id });
+  return rows.length;
 }
 
 /** Housekeeping for the cron sweep: expired and never verified. */

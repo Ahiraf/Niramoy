@@ -113,6 +113,7 @@ than failing.
 | `SMTP_HOST` / `SMTP_USER` / `SMTP_PASSWORD` | Email logged, not sent — verification and reset links appear in the log and reach nobody. Gmail works with 2-step verification on and an **App Password**; `npm run email:check -- you@example.com` sends a real test. `EMAIL_API_KEY` selects Resend instead, which needs a domain you control DNS for |
 | `VIDEO_API_KEY` | Demo room. Real scoped token, no media. UI says so |
 | `SSLCOMMERZ_STORE_ID` / `SSLCOMMERZ_STORE_PASSWORD` | Mock provider. Nothing charged, labelled throughout. Set both for real bKash through the SSLCommerz sandbox — see below |
+| `TEXTBEE_API_KEY` | SMS logged, not sent. Set `SMS_PROVIDER=textbee` and keep the paired Android handset online with SMS permission and an active SMS-capable SIM |
 | `BMDC_API_URL` | Every application goes to the admin queue. Never auto-approves |
 | `RATE_LIMIT_STORE_URL` | Postgres counters — correct, no extra infrastructure |
 
@@ -160,6 +161,30 @@ anyone can POST to. So neither is believed:
 live gateway where real money moves, and **production refuses to boot with it**
 — this build has had no clinical or legal review. See
 `REGULATORY_ASSUMPTIONS.md` A7.
+
+## SMS (OTP through TextBee)
+
+TextBee sends from the SIM in the paired Android phone. The application now
+uses TextBee's current account-level `POST /api/v1/gateway/send-sms` endpoint,
+passes `TEXTBEE_DEVICE_ID` and `TEXTBEE_SIM_SUBSCRIPTION_ID` in the request
+when configured, and treats a device-reported failure as a failed OTP send.
+
+Set these Vercel variables:
+
+```text
+SMS_PROVIDER=textbee
+TEXTBEE_API_KEY=<server-side TextBee API key>
+TEXTBEE_DEVICE_ID=<optional device id>
+TEXTBEE_SIM_SUBSCRIPTION_ID=<optional SIM id for a dual-SIM phone>
+```
+
+Before testing a real OTP, confirm in the TextBee dashboard that the device is
+active. On the Android phone, grant TextBee SMS permission, allow restricted
+settings if Android shows that option, disable battery optimization for
+TextBee, keep the phone online, and make sure the selected SIM can send SMS
+and has balance. A red **Failed** message in the phone's Messages app means
+the handset or carrier rejected the SMS after the API request; changing the
+recipient format in the web app cannot fix that physical-device failure.
 
 ## Demo mode
 

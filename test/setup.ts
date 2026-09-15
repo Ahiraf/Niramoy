@@ -22,5 +22,6 @@ delete process.env.BMDC_API_URL;
 delete process.env.SMS_PROVIDER;
 delete process.env.TEXTBEE_API_KEY;
 delete process.env.TEXTBEE_DEVICE_ID;
+delete process.env.TEXTBEE_SIM_SUBSCRIPTION_ID;
 
 jest.setTimeout(30_000);

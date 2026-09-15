@@ -99,6 +99,8 @@ const schema = z
     TEXTBEE_API_KEY: z.string().optional(),
     /** Optional: send from one specific handset rather than the account default. */
     TEXTBEE_DEVICE_ID: z.string().optional(),
+    /** Optional: choose a specific SIM on a dual-SIM handset. */
+    TEXTBEE_SIM_SUBSCRIPTION_ID: z.coerce.number().int().positive().optional(),
     TEXTBEE_BASE_URL: z.string().url().optional(),
 
     /**
