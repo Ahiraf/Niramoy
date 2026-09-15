@@ -24,7 +24,7 @@ const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Frida
  * different kind of thing entirely, and on a clinical directory it is the kind
  * that ends up in front of a patient.
  */
-export function useDoctorSelf(user, api) {
+export function useDoctorSelf(user, api, revision = 0) {
   const [self, setSelf] = useState(null);
   useEffect(() => {
     let cancelled = false;
@@ -42,7 +42,7 @@ export function useDoctorSelf(user, api) {
       }
     })();
     return () => { cancelled = true; };
-  }, [api, user?.doctorId]);
+  }, [api, user?.doctorId, revision]);
   return self;
 }
 

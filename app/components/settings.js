@@ -11,7 +11,8 @@ import { TEXT_SIZES, readTextSize, setTextSize } from "../lib/preferences.js";
  * Everything on this page comes from the session — a doctor sees their own
  * registration and chamber, an admin sees a staff account. The only fields a
  * user can change here are the ones they own; email and role are account
- * operations, and a doctor's specialty and fee live on the published profile.
+ * operations, while a doctor's published consultation fee has its own
+ * doctor-scoped save action below.
  */
 
 const ROLE_LABEL = {
@@ -159,7 +160,7 @@ function LinkRow({ icon, title, hint, action, onClick }) {
   );
 }
 
-export function Settings({ user, role, doctor, reference, api, onNavigate, onUserChange, notify }) {
+export function Settings({ user, role, doctor, reference, api, onNavigate, onUserChange, onDoctorChange, notify }) {
   const [form, setForm] = useState({
     name: user?.name ?? "",
     phone: user?.phone ?? "",
@@ -168,6 +169,9 @@ export function Settings({ user, role, doctor, reference, api, onNavigate, onUse
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [fee, setFee] = useState(doctor?.fee == null ? "" : String(doctor.fee));
+  const [savingFee, setSavingFee] = useState(false);
+  const [feeError, setFeeError] = useState(null);
 
   /**
    * Where notifications are copied to, as stored on the account.
@@ -219,6 +223,11 @@ export function Settings({ user, role, doctor, reference, api, onNavigate, onUse
     });
   }, [user]);
 
+  useEffect(() => {
+    setFee(doctor?.fee == null ? "" : String(doctor.fee));
+    setFeeError(null);
+  }, [doctor]);
+
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
   const divisions = reference?.divisions ?? [];
@@ -243,6 +252,22 @@ export function Settings({ user, role, doctor, reference, api, onNavigate, onUse
     }
     onUserChange?.(result.user);
     notify?.("Profile updated");
+  };
+
+  const saveFee = async (e) => {
+    e.preventDefault();
+    setFeeError(null);
+    setSavingFee(true);
+    const result = await api.updateDoctorProfile({ fee });
+    setSavingFee(false);
+
+    if (!result.ok) {
+      setFeeError(result.error?.details?.fee?.[0] ?? result.message ?? "Could not update the consultation fee.");
+      return;
+    }
+    setFee(String(result.doctor.fee));
+    onDoctorChange?.(result.doctor);
+    notify?.("Consultation fee updated");
   };
 
   const identityLine =
@@ -502,15 +527,29 @@ export function Settings({ user, role, doctor, reference, api, onNavigate, onUse
                   : <span className="status pending">Pending</span>}
               </div>
               {doctor && (
-                <div className="settings-reg-row">
-                  <span>Consultation fee</span>
-                  <strong>{doctor.feeLabel ?? `৳ ${doctor.fee}`}</strong>
-                </div>
+                <form onSubmit={saveFee} className="settings-fee-form">
+                  <Field
+                    label="Consultation fee"
+                    hint="Shown to patients for new appointments. Existing appointments keep their original fee."
+                    error={feeError}
+                  >
+                    <input
+                      className="field"
+                      value={fee}
+                      inputMode="decimal"
+                      onChange={(e) => setFee(e.target.value.replace(/[^\d.]/g, ""))}
+                      placeholder="800"
+                    />
+                  </Field>
+                  <button
+                    className="button primary"
+                    type="submit"
+                    disabled={savingFee || fee === String(doctor.fee)}
+                  >
+                    {savingFee ? "Saving…" : "Save consultation fee"}
+                  </button>
+                </form>
               )}
-              <p className="muted-note">
-                Your specialty, chamber and fee live on your public profile — edit them from
-                Availability and your profile, so patients always see what you actually offer.
-              </p>
             </div>
           )}
 

@@ -87,7 +87,8 @@ export function Workspace({ portal = "public" }) {
   /** The appointment just booked, shown on the confirmation screen. */
   const [justBooked, setJustBooked] = useState(null);
 
-  const doctorSelf = useDoctorSelf(user, api);
+  const [doctorRevision, setDoctorRevision] = useState(0);
+  const doctorSelf = useDoctorSelf(user, api, doctorRevision);
   const online = useOnline();
 
   const showToast = useCallback((message, tone = "success") => {
@@ -540,6 +541,7 @@ export function Workspace({ portal = "public" }) {
     api,
     onNavigate: navigate,
     onUserChange: setUser,
+    onDoctorChange: () => setDoctorRevision((revision) => revision + 1),
     notify: showToast,
   };
 
