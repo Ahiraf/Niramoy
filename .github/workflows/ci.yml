@@ -67,10 +67,8 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Backstop only. The pre-commit hook in .githooks is what actually
+      # prevents a leak — by the time CI runs, a public repository has already
+      # published whatever was pushed, and no rewrite takes that back.
       - name: Check for committed secrets
-        run: |
-          if git grep -nE '(SESSION_SECRET|AI_API_KEY|PAYMENT_API_SECRET|CRON_SECRET)=[A-Za-z0-9_-]{8,}' \
-               -- ':!.env.example' ':!.github/workflows'; then
-            echo "::error::A value that looks like a secret is committed."
-            exit 1
-          fi
+        run: npm run secrets:check

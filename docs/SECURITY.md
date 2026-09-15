@@ -113,6 +113,38 @@ wildcard. With no provider configured, camera and microphone are denied outright
 hydration bootstrap. Removing it means adopting nonces throughout. Recorded here
 rather than left looking deliberate.
 
+## Keeping credentials out of the repository
+
+Real values live in two ignored files — `.env.local` and
+`vercel-env.production.txt` — and only `.env.example`, whose every sensitive
+variable is a bare `NAME=`, is committed. That has held so far: a scan of every
+blob on every ref for the project's actual credentials and for generic key
+shapes returns nothing.
+
+`npm run secrets:check` is what keeps it holding. It looks for two things:
+credential SHAPES a provider issues (`sk-…`, `AIza…`, `ghp_…`, a PEM header),
+which are unambiguous and are flagged in any file; and ASSIGNMENTS of a known
+sensitive variable to a non-placeholder value, which is fuzzier and so is
+limited to config-shaped files. A source file is not exempt — a real key pasted
+into a `.ts` is still caught by looking like a real key — but
+`SESSION_SECRET: z.string()` in a zod schema is not a leak and flagging it
+teaches people to pass `--no-verify`.
+
+It runs in two places, and the order matters:
+
+- **`.githooks/pre-commit`**, enabled per clone with
+  `git config core.hooksPath .githooks`. This is the only point at which a leak
+  can still be *prevented*.
+- **CI**, as a backstop for commits made where the hook was not installed.
+
+CI is deliberately the weaker half. This repository is public, so a secret that
+reaches CI has already been published: GitHub keeps orphaned objects reachable
+after a force-push, forks and clones hold their own copies, and scrapers watch
+the public event firehose. Rewriting history does not unpublish anything. Once a
+credential has been pushed, **rotate it** — that is the whole remedy, and the
+scanner says so in its own failure output rather than implying a rewrite would
+do.
+
 ## Known gaps
 
 - File upload is designed (private storage keys, no public buckets) but no
