@@ -5,7 +5,7 @@
  * the application, is the authority on correctness. Everything here is written
  * around that: we attempt the insert and let the exclusion constraint decide.
  */
-import { and, asc, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 
 import { getDb, type Database } from "../db/client";
 import * as t from "../db/schema";
@@ -142,6 +142,34 @@ export async function list(
   if (filter.patientId) conditions.push(eq(t.appointments.patientId, filter.patientId));
   if (filter.doctorId) conditions.push(eq(t.appointments.doctorId, filter.doctorId));
 
+  /*
+   * ONE payment per appointment, chosen rather than assumed.
+   *
+   * A consultation can carry several payment rows: a lapsed bKash session that
+   * the patient retried is kept, not deleted, because a row the gateway might
+   * still have an opinion about must not vanish. A plain join on
+   * `appointment_id` would therefore return the same appointment once per
+   * attempt and show the patient duplicate cards.
+   *
+   * A settled payment wins; failing that, the most recent attempt — which is
+   * the one whose status the patient is actually waiting on.
+   */
+  const latestPayment = db
+    .selectDistinctOn([t.payments.appointmentId], {
+      appointmentId: t.payments.appointmentId,
+      id: t.payments.id,
+      status: t.payments.status,
+      method: t.payments.method,
+      isMock: t.payments.isMock,
+    })
+    .from(t.payments)
+    .orderBy(
+      t.payments.appointmentId,
+      sql`(${t.payments.status} = 'succeeded') desc`,
+      desc(t.payments.createdAt),
+    )
+    .as("latest_payment");
+
   const rows = await db
     .select({
       ...columns,
@@ -153,19 +181,17 @@ export async function list(
       specialty: t.specialties.name,
       facility: t.facilities.name,
       patientName: t.patients.displayName,
-      paymentId: t.payments.id,
-      paymentStatus: t.payments.status,
-      paymentMethod: t.payments.method,
-      paymentIsMock: t.payments.isMock,
+      paymentId: latestPayment.id,
+      paymentStatus: latestPayment.status,
+      paymentMethod: latestPayment.method,
+      paymentIsMock: latestPayment.isMock,
     })
     .from(t.appointments)
     .leftJoin(t.doctors, eq(t.appointments.doctorId, t.doctors.id))
     .leftJoin(t.specialties, eq(t.doctors.primarySpecialtyId, t.specialties.id))
     .leftJoin(t.facilities, eq(t.doctors.facilityId, t.facilities.id))
     .leftJoin(t.patients, eq(t.appointments.patientId, t.patients.id))
-    // At most one payment per consultation: startPayment keys idempotency on
-    // the appointment, so this join cannot fan the result out.
-    .leftJoin(t.payments, eq(t.payments.appointmentId, t.appointments.id))
+    .leftJoin(latestPayment, eq(latestPayment.appointmentId, t.appointments.id))
     .where(and(...conditions))
     .orderBy(asc(t.appointments.startUtc));
 
