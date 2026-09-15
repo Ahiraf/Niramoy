@@ -160,6 +160,21 @@ const schema = z
      */
     ALLOW_PUBLIC_VIDEO_ROOM: z.enum(["true", "false"]).optional(),
 
+    /**
+     * Open a consultation room outside its appointment window.
+     *
+     * For a demonstration, where the appointment being demonstrated is whatever
+     * was seeded and is rarely happening in the next fifteen minutes. It relaxes
+     * exactly one rule — WHEN the room may be entered — and nothing else: only
+     * the booked doctor and the booked patient can obtain a grant either way,
+     * and a cancelled consultation still has no room.
+     *
+     * Off unless set by hand, and never inferred from APP_ENV: "it is a demo"
+     * is a statement about the audience, not about the environment, and a
+     * deployment can be both a demo and production at once.
+     */
+    DEMO_MODE: z.enum(["true", "false"]).optional(),
+
     /** Seeded synthetic profiles are refused in production. */
     // Left as the raw string: an `.optional().transform(v => v === "true")`
     // would collapse "unset" into `false`, defeating the `?? !isProd` default
@@ -194,6 +209,8 @@ const schema = z
       cronSecret: raw.CRON_SECRET ?? (isProd ? undefined : "dev-cron-secret"),
       /** Never defaulted on. An unlisted room is a decision, not a fallback. */
       allowPublicVideoRoom: raw.ALLOW_PUBLIC_VIDEO_ROOM === "true",
+      /** Never defaulted on, in any environment. See DEMO_MODE above. */
+      demoMode: raw.DEMO_MODE === "true",
       /** Demo profiles are on everywhere except production, unless overridden. */
       allowDemoProfiles:
         raw.ALLOW_DEMO_PROFILES === undefined ? !isProd : raw.ALLOW_DEMO_PROFILES === "true",

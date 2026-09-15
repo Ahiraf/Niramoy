@@ -404,8 +404,6 @@ export function Consultation({ appointment, onNavigate, onComplete }) {
   /** The server-issued join grant. Present once the room has been opened. */
   const call = appointment?.call;
   const [elapsed, setElapsed] = useState(0);
-  const [micOn, setMicOn] = useState(true);
-  const [camOn, setCamOn] = useState(true);
 
   useEffect(() => {
     const t = setInterval(() => setElapsed((s) => s + 1), 1000);
@@ -427,6 +425,8 @@ export function Consultation({ appointment, onNavigate, onComplete }) {
 
   /** A provider that carries media gives us a URL we can frame. */
   const embedUrl = call?.embedUrl || null;
+  /** The room was opened outside its appointment window, because DEMO_MODE. */
+  const outsideWindow = Boolean(call?.demoMode);
 
   return (
     <>
@@ -444,6 +444,7 @@ export function Consultation({ appointment, onNavigate, onComplete }) {
         <div className={`consult-stage${embedUrl ? " embedded" : ""}`}>
           <div className="consult-status">
             <span className="live-dot" /> Secure room · {mmss}
+            {outsideWindow && <span> · demo mode</span>}
           </div>
 
           {embedUrl ? (
@@ -468,34 +469,28 @@ export function Consultation({ appointment, onNavigate, onComplete }) {
               <strong>{peer.name}</strong>
               <span>{peer.subtitle}</span>
               <p className="consult-hint">
-                No video provider is configured, so this is a demo room — the
-                access token is real and scoped to you, but no media is carried.
-                Set VIDEO_PROVIDER=jitsi to hold a real two-way call.
+                No video provider is configured, so this room carries no media.
+                The access token is real and scoped to you — the authorization
+                path is exactly the one a real call uses — but there is no
+                camera or microphone on either side. Set VIDEO_PROVIDER=jitsi to
+                hold a real two-way call.
               </p>
             </div>
           )}
 
           {!embedUrl && <div className="consult-self">You</div>}
 
+          {/*
+            * No mute or camera button here.
+            *
+            * When a provider carries the call it draws its own controls inside
+            * the frame, and a second set beside them could not reach the media.
+            * When no provider is configured there is no media to mute at all.
+            * Either way a button here could only pretend — and on a
+            * consultation screen a patient who believes they are muted says
+            * things they would not otherwise say.
+            */}
           <div className="consult-controls">
-            {!embedUrl && (
-              <>
-                <button
-                  className={`consult-button ${micOn ? "" : "off"}`}
-                  onClick={() => setMicOn((v) => !v)}
-                  aria-label={micOn ? "Mute microphone" : "Unmute microphone"}
-                >
-                  <Icon name="mic" size={17} />
-                </button>
-                <button
-                  className={`consult-button ${camOn ? "" : "off"}`}
-                  onClick={() => setCamOn((v) => !v)}
-                  aria-label={camOn ? "Turn camera off" : "Turn camera on"}
-                >
-                  <Icon name="video" size={17} />
-                </button>
-              </>
-            )}
             <button
               className="button leave-button"
               onClick={async () => {
