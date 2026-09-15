@@ -34,10 +34,13 @@ interface SentSms {
   apiKey: string | null;
   recipients: string[];
   message: string;
+  deviceId?: string;
+  simSubscriptionId?: number;
 }
 
 let sent: SentSms[] = [];
 let gatewayFails = false;
+let gatewayReportsDeviceFailure = false;
 const realFetch = globalThis.fetch;
 
 /** The last code the gateway was asked to deliver. */
@@ -51,11 +54,13 @@ beforeEach(async () => {
 
   sent = [];
   gatewayFails = false;
+  gatewayReportsDeviceFailure = false;
 
   // A configured gateway, pointed at nothing that exists.
   process.env.SMS_PROVIDER = "textbee";
   process.env.TEXTBEE_API_KEY = "test-gateway-key";
   process.env.TEXTBEE_DEVICE_ID = "test-device";
+  process.env.TEXTBEE_SIM_SUBSCRIPTION_ID = "1";
   process.env.TEXTBEE_BASE_URL = "https://sms.invalid/api/v1";
   resetEnvCache();
   resetSmsProvider();
@@ -66,17 +71,26 @@ beforeEach(async () => {
       throw new Error(`unexpected outbound request in test: ${url}`);
     }
     if (gatewayFails) return new Response("device offline", { status: 502 });
+    if (gatewayReportsDeviceFailure) {
+      return Response.json({
+        data: { successCount: 0, failureCount: 1, message: "SMS failed on device" },
+      });
+    }
 
     const headers = new Headers(init?.headers);
     const body = JSON.parse(String(init?.body ?? "{}")) as {
       recipients?: string[];
       message?: string;
+      deviceId?: string;
+      simSubscriptionId?: number;
     };
     sent.push({
       url,
       apiKey: headers.get("x-api-key"),
       recipients: body.recipients ?? [],
       message: body.message ?? "",
+      deviceId: body.deviceId,
+      simSubscriptionId: body.simSubscriptionId,
     });
     return Response.json({ data: { smsBatchId: "batch-1" } });
   }) as typeof fetch;
@@ -87,6 +101,7 @@ afterEach(async () => {
   delete process.env.SMS_PROVIDER;
   delete process.env.TEXTBEE_API_KEY;
   delete process.env.TEXTBEE_DEVICE_ID;
+  delete process.env.TEXTBEE_SIM_SUBSCRIPTION_ID;
   delete process.env.TEXTBEE_BASE_URL;
   resetEnvCache();
   resetSmsProvider();
@@ -151,13 +166,15 @@ describe("normalising a Bangladeshi mobile number", () => {
 });
 
 describe("sending the code", () => {
-  it("posts to the device endpoint with the key, in E.164", async () => {
+  it("posts to the current account endpoint with the key, in E.164", async () => {
     const res = await send("01712-345678");
 
     expect(res.status).toBe(200);
     expect(sent).toHaveLength(1);
-    expect(sent[0]!.url).toBe("https://sms.invalid/api/v1/gateway/devices/test-device/send-sms");
+    expect(sent[0]!.url).toBe("https://sms.invalid/api/v1/gateway/send-sms");
     expect(sent[0]!.apiKey).toBe("test-gateway-key");
+    expect(sent[0]!.deviceId).toBe("test-device");
+    expect(sent[0]!.simSubscriptionId).toBe(1);
     expect(sent[0]!.recipients).toEqual(["+8801712345678"]);
     // The warning is in Bangla; the name, the code and the expiry are not, so
     // a handset that cannot render Bangla still shows something actionable.
@@ -205,6 +222,15 @@ describe("sending the code", () => {
       [world.patientA.userId],
     );
     expect(rows.rows[0]!.n).toBe(1);
+  });
+
+  it("does not treat an HTTP 200 device failure as a sent OTP", async () => {
+    gatewayReportsDeviceFailure = true;
+
+    const failed = await send("01712345678");
+
+    expect(failed.status).toBe(503);
+    expect(failed.body.message).toContain("couldn't send the code");
   });
 
   it("stops after three sends in an hour", async () => {

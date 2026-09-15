@@ -396,6 +396,7 @@ export async function getAvailabilityExceptions(
  */
 export async function getProfileForUser(userId: string): Promise<{
   id: string;
+  userId: string | null;
   displayName: string;
   verificationStatus: string;
   isDemoProfile: boolean;
@@ -403,6 +404,7 @@ export async function getProfileForUser(userId: string): Promise<{
   const rows = await getDb()
     .select({
       id: t.doctors.id,
+      userId: t.doctors.userId,
       displayName: t.doctors.displayName,
       verificationStatus: t.doctors.verificationStatus,
       isDemoProfile: t.doctors.isDemoProfile,
@@ -411,6 +413,17 @@ export async function getProfileForUser(userId: string): Promise<{
     .where(eq(t.doctors.userId, userId))
     .limit(1);
   return rows[0] ?? null;
+}
+
+/** Update the consultation fee on a doctor's own profile. */
+export async function updateFee(doctorId: string, feeAmount: string): Promise<boolean> {
+  const rows = await getDb()
+    .update(t.doctors)
+    .set({ feeAmount, updatedAt: new Date() })
+    .where(eq(t.doctors.id, doctorId))
+    .returning({ id: t.doctors.id });
+
+  return rows.length > 0;
 }
 
 /**

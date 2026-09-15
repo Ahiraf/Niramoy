@@ -133,7 +133,7 @@ export async function requireVerifiedDoctor(request: Request) {
   if (!profile || profile.verificationStatus !== "verified") {
     throw new AppError("NOT_VERIFIED");
   }
-  return profile;
+  return { ...profile, userId: principal.userId };
 }
 
 /**

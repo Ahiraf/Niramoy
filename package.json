@@ -24,6 +24,7 @@
     "verify": "npm run lint && npm run typecheck && npm test && npm run build",
     "lint:fix": "eslint . --fix",
     "pay:check": "tsx scripts/payment-check.ts",
+    "secrets:check": "tsx scripts/secret-scan.ts",
     "email:check": "tsx scripts/email-check.ts"
   },
   "dependencies": {

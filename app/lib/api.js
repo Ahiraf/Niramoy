@@ -107,6 +107,7 @@ export const api = {
 
   doctors: (filters) => request(`/api/doctors${qs(filters)}`),
   doctor: (id) => request(`/api/doctors/${id}`),
+  updateDoctorProfile: (body) => request("/api/doctor/profile", { method: "PATCH", body }),
   slots: (id, days = 14) => request(`/api/doctors/${id}/slots${qs({ days })}`),
   doctorAvailability: () => request("/api/doctor/availability"),
   addDoctorAvailability: (body) => request("/api/doctor/availability", { method: "POST", body }),

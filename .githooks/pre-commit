@@ -1,0 +1,16 @@
+#!/bin/sh
+#
+# Refuse to commit a credential.
+#
+# This is the last moment anything can be prevented. On a public repository, a
+# secret that reaches the remote is published the instant it lands — rewriting
+# history afterwards does not unpublish it, and the only real remedy is to
+# rotate the credential. So the check belongs here, before the commit exists,
+# not only in CI where it can merely report what already happened.
+#
+# Enable it once per clone:   git config core.hooksPath .githooks
+#
+# --no-verify skips it, which is deliberate: a hook that cannot be bypassed gets
+# deleted instead. If you bypass it, say why in the commit message.
+
+exec npm run --silent secrets:check -- --staged
