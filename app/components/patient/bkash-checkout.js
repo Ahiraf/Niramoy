@@ -50,10 +50,11 @@ function useCountdown(expiresAt) {
   return remaining;
 }
 
-export function BkashCheckout({ open, payment, appointment, onClose, onPaid, api, notify }) {
+export function BkashCheckout({ open, payment, appointment, onClose, onPaid, onRetry, api, notify }) {
   const [wallet, setWallet] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const remaining = useCountdown(payment?.expiresAt ?? null);
   const { t } = useT();
 
@@ -70,10 +71,23 @@ export function BkashCheckout({ open, payment, appointment, onClose, onPaid, api
   /*
    * A hosted gateway (SSLCommerz fronting bKash) sends the payer to its own
    * page, so there is nothing for us to confirm and no wallet number to take.
-   * Rendering the two-step sheet here would be a form whose submit button
-   * cannot do anything — the server refuses execute on a redirect provider.
+   *
+   * Keyed on the FLOW alone, never on whether a link happens to be present.
+   * The two used to be conflated, and a redirect payment that came back
+   * without a link — which is what every resumed payment did — silently fell
+   * through to the two-step form below. That form asks for a wallet number and
+   * posts to an endpoint a redirect provider refuses by design, so its Confirm
+   * button could not work. A control that cannot do what it looks like it does
+   * is worse than one that is missing.
    */
-  const redirecting = payment.flow === "redirect" && Boolean(payment.redirectUrl);
+  const redirecting = payment.flow === "redirect";
+  const gatewayUnreachable = redirecting && !payment.redirectUrl;
+
+  const retry = async () => {
+    setRetrying(true);
+    await onRetry?.(appointment ?? null);
+    setRetrying(false);
+  };
 
   const submit = async (event) => {
     event.preventDefault();
@@ -134,20 +148,34 @@ export function BkashCheckout({ open, payment, appointment, onClose, onPaid, api
             </Banner>
           )}
 
+          {gatewayUnreachable && (
+            <Banner tone="warn" icon="alert" title="bKash didn't open">
+              We couldn&apos;t reach bKash to start this payment. Your appointment is
+              still booked — try again, or pay at the chamber.
+            </Banner>
+          )}
+
           <div className="bkash-actions">
-            <button type="button" className="button ghost" onClick={onClose}>
+            <button type="button" className="button ghost" onClick={onClose} disabled={retrying}>
               {t("pay.later")}
             </button>
-            {/*
-              A plain link, not a fetch. The payer must SEE bkash's own URL and
-              padlock in the address bar — that is the one habit that protects
-              them, and loading a payment page in an iframe or a popup we styled
-              would be teaching them to skip the check.
-            */}
-            <a className="button primary" href={payment.redirectUrl} rel="noopener">
-              {t("pay.redirectCta")}
-              <Icon name="arrow" size={14} />
-            </a>
+            {gatewayUnreachable ? (
+              <button type="button" className="button primary" onClick={retry} disabled={retrying}>
+                {retrying ? "Trying again…" : "Try again"}
+                {!retrying && <Icon name="arrow" size={14} />}
+              </button>
+            ) : (
+              /*
+                A plain link, not a fetch. The payer must SEE bkash's own URL and
+                padlock in the address bar — that is the one habit that protects
+                them, and loading a payment page in an iframe or a popup we styled
+                would be teaching them to skip the check.
+              */
+              <a className="button primary" href={payment.redirectUrl} rel="noopener">
+                {t("pay.redirectCta")}
+                <Icon name="arrow" size={14} />
+              </a>
+            )}
           </div>
         </div>
       </Modal>

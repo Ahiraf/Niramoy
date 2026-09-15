@@ -401,3 +401,113 @@ describe("describeSlot", () => {
     expect(describeSlot(midnight, TZ).localLabel).toBe("12:00 AM");
   });
 });
+
+/**
+ * Blocks that cover part of a day.
+ *
+ * A whole-day block was always supported; a doctor with a 14:00 hospital round
+ * had to cancel the entire day to say so, which is a schedule that lies about
+ * the morning. A block carrying hours subtracts only those hours — from the
+ * weekly rules AND from any one-off clinic on the same date.
+ */
+describe("timed blocks", () => {
+  it("removes only the hours it names", () => {
+    const slots = generateSlots({
+      rules: [rule()], // 10:00–12:00 Dhaka, 20-minute slots
+      exceptions: [
+        {
+          date: "2026-08-02",
+          type: "block",
+          startMinute: 10 * 60 + 20,
+          endMinute: 11 * 60,
+          timezone: TZ,
+        },
+      ],
+      now: NOW,
+      ...range(1),
+    });
+
+    // 10:20 and 10:40 are gone; the rest of the window survives.
+    expect(starts(slots)).toEqual([
+      "2026-08-02T04:00:00.000Z",
+      "2026-08-02T05:00:00.000Z",
+      "2026-08-02T05:20:00.000Z",
+      "2026-08-02T05:40:00.000Z",
+    ]);
+  });
+
+  it("drops a slot the block only partly covers", () => {
+    const slots = generateSlots({
+      rules: [rule()],
+      // Ten minutes inside the 10:00 slot. A consultation the doctor can only
+      // attend half of is not a consultation they are available for.
+      exceptions: [
+        {
+          date: "2026-08-02",
+          type: "block",
+          startMinute: 10 * 60 + 10,
+          endMinute: 10 * 60 + 20,
+          timezone: TZ,
+        },
+      ],
+      now: NOW,
+      ...range(1),
+    });
+
+    expect(starts(slots)).not.toContain("2026-08-02T04:00:00.000Z");
+    // Adjacent, not overlapping: 10:20 starts exactly where the block ends.
+    expect(starts(slots)).toContain("2026-08-02T04:20:00.000Z");
+  });
+
+  it("leaves the day standing, unlike a block with no hours", () => {
+    const timed = generateSlots({
+      rules: [rule()],
+      exceptions: [
+        { date: "2026-08-02", type: "block", startMinute: 10 * 60, endMinute: 11 * 60, timezone: TZ },
+      ],
+      now: NOW,
+      ...range(1),
+    });
+    const wholeDay = generateSlots({
+      rules: [rule()],
+      exceptions: [{ date: "2026-08-02", type: "block", timezone: TZ }],
+      now: NOW,
+      ...range(1),
+    });
+
+    expect(timed.length).toBeGreaterThan(0);
+    expect(wholeDay).toHaveLength(0);
+  });
+
+  it("subtracts from a one-off clinic as well as from the weekly rules", () => {
+    const slots = generateSlots({
+      rules: [],
+      exceptions: [
+        {
+          date: "2026-08-02",
+          type: "extra",
+          startMinute: 18 * 60,
+          endMinute: 20 * 60,
+          slotMinutes: 30,
+          bufferMinutes: 0,
+          timezone: TZ,
+        },
+        {
+          date: "2026-08-02",
+          type: "block",
+          startMinute: 19 * 60,
+          endMinute: 20 * 60,
+          timezone: TZ,
+        },
+      ],
+      now: NOW,
+      ...range(1),
+    });
+
+    // 18:00 and 18:30 Dhaka = 12:00 and 12:30 UTC. 19:00 onwards is blocked.
+    expect(starts(slots)).toEqual([
+      "2026-08-02T12:00:00.000Z",
+      "2026-08-02T12:30:00.000Z",
+    ]);
+  });
+});

@@ -355,41 +355,184 @@ function PrescriptionWriter({ appointment, self, api, onClose, onSubmit, notify 
   );
 }
 
+/** "2026-09-20" for today in the browser's own zone, for the date input's min. */
+function todayKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "2026-09-20" -> { day: "20", month: "Sep", label: "Sunday, 20 Sep 2026" }. */
+function describeDateKey(dateKey) {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  // Read back in UTC, because that is how it was built. Constructing a local
+  // Date from the parts would shift the day for anyone west of Greenwich.
+  const at = new Date(Date.UTC(y, m - 1, d));
+  const weekday = WEEKDAYS[at.getUTCDay()];
+  return {
+    day: String(d),
+    month: MONTHS[m - 1],
+    label: `${weekday}, ${d} ${MONTHS[m - 1]} ${y}`,
+  };
+}
+
+const EMPTY_WEEKLY = {
+  weekday: "0",
+  localStart: "09:00",
+  localEnd: "17:00",
+  slotMinutes: "20",
+  bufferMinutes: "0",
+};
+
+const EMPTY_DATED = {
+  date: todayKey(),
+  kind: "extra",
+  localStart: "18:00",
+  localEnd: "21:00",
+  slotMinutes: "20",
+  bufferMinutes: "0",
+  reason: "",
+};
+
+/**
+ * The doctor's schedule: recurring weekly hours, plus what is different about
+ * particular dates.
+ *
+ * The two are kept visually apart because they behave differently — a weekly
+ * rule keeps producing slots forever, a dated entry applies once — and a doctor
+ * about to go on leave needs to know which one they are editing.
+ */
 function Availability({ self, api, notify }) {
   const [rules, setRules] = useState(self?.availability ?? []);
-  const [adding, setAdding] = useState(false);
+  const [exceptions, setExceptions] = useState([]);
+  const [adding, setAdding] = useState(null); // null | "weekly" | "dated"
   const [saving, setSaving] = useState(false);
+  const [busyId, setBusyId] = useState(null);
   const [error, setError] = useState(null);
-  const [form, setForm] = useState({ weekday: "0", localStart: "09:00", localEnd: "17:00", slotMinutes: "20", bufferMinutes: "0" });
+  const [weekly, setWeekly] = useState(EMPTY_WEEKLY);
+  const [dated, setDated] = useState(EMPTY_DATED);
 
   useEffect(() => setRules(self?.availability ?? []), [self]);
 
-  const addHours = async (event) => {
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const result = await api.doctorAvailabilityExceptions();
+      if (!cancelled && result.ok) setExceptions(result.exceptions ?? []);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [api]);
+
+  const openAdd = (which) => {
+    setError(null);
+    setWeekly(EMPTY_WEEKLY);
+    setDated(EMPTY_DATED);
+    setAdding(which);
+  };
+
+  const addWeekly = async (event) => {
     event.preventDefault();
     setSaving(true);
     setError(null);
-    const result = await api.addDoctorAvailability(form);
+    const result = await api.addDoctorAvailability(weekly);
     setSaving(false);
     if (!result.ok) {
       setError(result.message ?? "Could not save those hours.");
       return;
     }
-    setRules((current) => [...current, result.availability].sort((a, b) => a.weekday - b.weekday || a.localStart.localeCompare(b.localStart)));
-    setAdding(false);
+    setRules((current) =>
+      [...current, result.availability].sort(
+        (a, b) => a.weekday - b.weekday || a.localStart.localeCompare(b.localStart),
+      ),
+    );
+    setAdding(null);
     notify?.("Consulting hours added");
   };
 
-  const openAddHours = () => {
+  const addDated = async (event) => {
+    event.preventDefault();
+    setSaving(true);
     setError(null);
-    setAdding(true);
+
+    /*
+     * Three shapes collapse into two stored ones: extra hours, a block over a
+     * range, and a block over the whole day — which is the one with no window
+     * at all. The server decides that from the absence of the times rather
+     * than from a flag, so there is one fewer thing the two can disagree on.
+     */
+    const allDay = dated.kind === "block-all-day";
+    const payload = {
+      date: dated.date,
+      type: dated.kind === "extra" ? "extra" : "block",
+      reason: dated.reason,
+      ...(allDay
+        ? {}
+        : { localStart: dated.localStart, localEnd: dated.localEnd }),
+      ...(dated.kind === "extra"
+        ? { slotMinutes: dated.slotMinutes, bufferMinutes: dated.bufferMinutes }
+        : {}),
+    };
+
+    const result = await api.addDoctorAvailabilityException(payload);
+    setSaving(false);
+    if (!result.ok) {
+      setError(result.message ?? "Could not save that date.");
+      return;
+    }
+    setExceptions((current) =>
+      [...current, result.exception].sort(
+        (a, b) => a.date.localeCompare(b.date) || (a.localStart ?? "").localeCompare(b.localStart ?? ""),
+      ),
+    );
+    setAdding(null);
+    notify?.(dated.kind === "extra" ? "Extra hours added" : "Time blocked");
   };
+
+  const removeRule = async (rule) => {
+    setBusyId(rule.id);
+    const result = await api.removeDoctorAvailability(rule.id);
+    setBusyId(null);
+    if (!result.ok) {
+      notify?.(result.message ?? "Could not remove those hours", "error");
+      return;
+    }
+    setRules((current) => current.filter((r) => r.id !== rule.id));
+    notify?.("Hours removed. Appointments already booked are unaffected.");
+  };
+
+  const removeException = async (entry) => {
+    setBusyId(entry.id);
+    const result = await api.removeDoctorAvailabilityException(entry.id);
+    setBusyId(null);
+    if (!result.ok) {
+      notify?.(result.message ?? "Could not remove that entry", "error");
+      return;
+    }
+    setExceptions((current) => current.filter((e) => e.id !== entry.id));
+    notify?.("Removed");
+  };
+
+  const datedIsBlock = dated.kind !== "extra";
+  const datedIsAllDay = dated.kind === "block-all-day";
 
   return (
     <>
       <PageHeading
         title="Availability"
-        subtitle="Your recurring hours in Bangladesh Standard Time. Patients only ever see bookable slots."
-        actions={<button type="button" className="button primary" onClick={openAddHours}><Icon name="plus" size={14} />Add hours</button>}
+        subtitle="Your recurring hours in Bangladesh Standard Time, and anything different about a particular date. Patients only ever see bookable slots."
+        actions={(
+          <>
+            <button type="button" className="button ghost" onClick={() => openAdd("dated")}>
+              <Icon name="calendar" size={14} />Add a date
+            </button>
+            <button type="button" className="button primary" onClick={() => openAdd("weekly")}>
+              <Icon name="plus" size={14} />Add hours
+            </button>
+          </>
+        )}
       />
 
       <div className="section-card card">
@@ -400,7 +543,7 @@ function Availability({ self, api, notify }) {
               <tr><th>Day</th><th>Hours (BST)</th><th>Stored as (UTC)</th><th>Slot</th><th>Bookable</th><th /></tr>
             </thead>
               <tbody>
-              {rules.map((r, i) => {
+              {rules.map((r) => {
                 const toMinutes = (value) => {
                   const [hours, minutes] = value.split(":").map(Number);
                   return hours * 60 + minutes;
@@ -409,15 +552,20 @@ function Availability({ self, api, notify }) {
                 const eh = toMinutes(r.localEnd);
                 const step = r.slotMinutes + (r.bufferMinutes || 0);
                 return (
-                  <tr key={i}>
+                  <tr key={r.id}>
                     <td>{WEEKDAYS[r.weekday]}</td>
                     <td>{r.localStart} – {r.localEnd}</td>
                     <td className="muted-cell">{r.start} – {r.end}</td>
                     <td>{r.slotMinutes} min{r.bufferMinutes ? ` +${r.bufferMinutes}` : ""}</td>
                     <td><span className="availability-chip">{Math.floor((eh - sh) / step)} slots</span></td>
                     <td style={{ textAlign: "right" }}>
-                      <button className="icon-button" style={{ width: 28, height: 28 }} aria-label="Edit hours">
-                        <Icon name="more" size={14} />
+                      <button
+                        type="button"
+                        className="button ghost small"
+                        onClick={() => removeRule(r)}
+                        disabled={busyId === r.id}
+                      >
+                        {busyId === r.id ? "Removing…" : "Remove"}
                       </button>
                     </td>
                   </tr>
@@ -430,50 +578,98 @@ function Availability({ self, api, notify }) {
             icon="clock"
             title="No recurring hours yet"
             hint="Add the hours you regularly see patients so they can book a consultation."
-            action={<button type="button" className="button primary small" onClick={openAddHours}><Icon name="plus" size={13} />Add hours</button>}
+            action={<button type="button" className="button primary small" onClick={() => openAdd("weekly")}><Icon name="plus" size={13} />Add hours</button>}
+          />
+        )}
+      </div>
+
+      <div className="section-card card">
+        <SectionHead
+          title="Specific dates"
+          action={(
+            <button type="button" className="button ghost small" onClick={() => openAdd("dated")}>
+              <Icon name="plus" size={13} />Add a date
+            </button>
+          )}
+        />
+        {exceptions.length ? (
+          exceptions.map((e) => {
+            const when = describeDateKey(e.date);
+            return (
+              <div className="appointment-row" key={e.id}>
+                <div className="date-chip"><strong>{when.day}</strong><span>{when.month}</span></div>
+                <div className="appt-main">
+                  <strong>
+                    {e.type === "extra" ? "Extra consulting hours" : e.allDay ? "Unavailable all day" : "Time blocked"}
+                  </strong>
+                  <span>
+                    {when.label} ·{" "}
+                    {e.allDay ? "All day" : `${e.localStart} – ${e.localEnd}`}
+                    {e.type === "extra" && e.slotMinutes ? ` · ${e.slotMinutes} min slots` : ""}
+                  </span>
+                  {e.reason && <span className="appt-reason">“{e.reason}”</span>}
+                </div>
+                <StatusPill status={e.type === "extra" ? "confirmed" : "cancelled"} />
+                <button
+                  type="button"
+                  className="button ghost small"
+                  onClick={() => removeException(e)}
+                  disabled={busyId === e.id}
+                >
+                  {busyId === e.id ? "Removing…" : "Remove"}
+                </button>
+              </div>
+            );
+          })
+        ) : (
+          <Empty
+            icon="calendar"
+            title="Nothing different coming up"
+            hint="Open extra hours for one date, or block time you are not available."
+            action={<button type="button" className="button primary small" onClick={() => openAdd("dated")}><Icon name="plus" size={13} />Add a date</button>}
           />
         )}
       </div>
 
       <Modal
-        open={adding}
+        open={adding === "weekly"}
         title="Add recurring hours"
-        onClose={() => !saving && setAdding(false)}
+        onClose={() => !saving && setAdding(null)}
         footer={(
           <>
-            <button type="button" className="button ghost" onClick={() => setAdding(false)} disabled={saving}>Cancel</button>
+            <button type="button" className="button ghost" onClick={() => setAdding(null)} disabled={saving}>Cancel</button>
             <button type="submit" form="availability-form" className="button primary" disabled={saving}>{saving ? "Saving…" : "Save hours"}</button>
           </>
         )}
       >
-        <form id="availability-form" onSubmit={addHours}>
+        <form id="availability-form" onSubmit={addWeekly}>
           <Field label="Day">
             <Select
-              value={form.weekday}
-              onChange={(weekday) => setForm((current) => ({ ...current, weekday }))}
+              value={weekly.weekday}
+              onChange={(weekday) => setWeekly((current) => ({ ...current, weekday }))}
               options={WEEKDAYS.map((day, weekday) => ({ value: String(weekday), label: day }))}
             />
           </Field>
           <div className="field-row">
             <Field label="From">
-              <input className="field" type="time" value={form.localStart} onChange={(event) => setForm((current) => ({ ...current, localStart: event.target.value }))} required />
+              <input className="field" type="time" value={weekly.localStart} onChange={(event) => setWeekly((current) => ({ ...current, localStart: event.target.value }))} required />
             </Field>
             <Field label="Until">
-              <input className="field" type="time" value={form.localEnd} onChange={(event) => setForm((current) => ({ ...current, localEnd: event.target.value }))} required />
+              <input className="field" type="time" value={weekly.localEnd} onChange={(event) => setWeekly((current) => ({ ...current, localEnd: event.target.value }))} required />
             </Field>
           </div>
           <div className="field-row">
             <Field label="Slot length">
               <Select
-                value={form.slotMinutes}
-                onChange={(slotMinutes) => setForm((current) => ({ ...current, slotMinutes }))}
-                options={["15", "20", "30", "45", "60"].map((value) => ({ value, label: `${value} minutes` }))}
+                value={weekly.slotMinutes}
+                onChange={(slotMinutes) => setWeekly((current) => ({ ...current, slotMinutes }))}
+                options={["10", "15", "20", "30", "45", "60"].map((value) => ({ value, label: `${value} minutes` }))}
               />
             </Field>
             <Field label="Buffer between slots" hint="Optional gap after each consultation.">
               <Select
-                value={form.bufferMinutes}
-                onChange={(bufferMinutes) => setForm((current) => ({ ...current, bufferMinutes }))}
+                value={weekly.bufferMinutes}
+                onChange={(bufferMinutes) => setWeekly((current) => ({ ...current, bufferMinutes }))}
                 options={["0", "5", "10", "15"].map((value) => ({ value, label: `${value} minutes` }))}
               />
             </Field>
@@ -482,23 +678,104 @@ function Availability({ self, api, notify }) {
         </form>
       </Modal>
 
-      <Banner tone="info" icon="info" title="How slots are generated">
-        Bookable times come from <code>lib/scheduling.js</code>: recurring rules, minus blocked dates,
-        minus already-booked slots, minus anything in the past or inside the one-hour lead time.
-        Everything is stored in UTC so the schedule stays correct across timezones.
-      </Banner>
+      <Modal
+        open={adding === "dated"}
+        title="Add a specific date"
+        onClose={() => !saving && setAdding(null)}
+        footer={(
+          <>
+            <button type="button" className="button ghost" onClick={() => setAdding(null)} disabled={saving}>Cancel</button>
+            <button type="submit" form="dated-availability-form" className="button primary" disabled={saving}>{saving ? "Saving…" : "Save date"}</button>
+          </>
+        )}
+      >
+        <form id="dated-availability-form" onSubmit={addDated}>
+          <Field label="What is happening">
+            <Select
+              value={dated.kind}
+              onChange={(kind) => setDated((current) => ({ ...current, kind }))}
+              options={[
+                { value: "extra", label: "Extra consulting hours" },
+                { value: "block-range", label: "Block part of the day" },
+                { value: "block-all-day", label: "Unavailable all day" },
+              ]}
+            />
+          </Field>
 
-      <div className="section-card card">
-        <SectionHead title="Upcoming exceptions" action={<button className="text-link">Manage</button>} />
-        <div className="appointment-row">
-          <div className="date-chip"><strong>30</strong><span>Sep</span></div>
-          <div className="appt-main">
-            <strong>Clinic closed</strong>
-            <span>Monday, 30 September · All day</span>
-          </div>
-          <StatusPill status="cancelled" />
-        </div>
-      </div>
+          <Field label="Date" hint="Today or later.">
+            <input
+              className="field"
+              type="date"
+              min={todayKey()}
+              value={dated.date}
+              onChange={(event) => setDated((current) => ({ ...current, date: event.target.value }))}
+              required
+            />
+          </Field>
+
+          {!datedIsAllDay && (
+            <div className="field-row">
+              <Field label="From">
+                <input className="field" type="time" value={dated.localStart} onChange={(event) => setDated((current) => ({ ...current, localStart: event.target.value }))} required />
+              </Field>
+              <Field label="Until">
+                <input className="field" type="time" value={dated.localEnd} onChange={(event) => setDated((current) => ({ ...current, localEnd: event.target.value }))} required />
+              </Field>
+            </div>
+          )}
+
+          {!datedIsBlock && (
+            <div className="field-row">
+              <Field label="Slot length">
+                <Select
+                  value={dated.slotMinutes}
+                  onChange={(slotMinutes) => setDated((current) => ({ ...current, slotMinutes }))}
+                  options={["10", "15", "20", "30", "45", "60"].map((value) => ({ value, label: `${value} minutes` }))}
+                />
+              </Field>
+              <Field label="Buffer between slots">
+                <Select
+                  value={dated.bufferMinutes}
+                  onChange={(bufferMinutes) => setDated((current) => ({ ...current, bufferMinutes }))}
+                  options={["0", "5", "10", "15"].map((value) => ({ value, label: `${value} minutes` }))}
+                />
+              </Field>
+            </div>
+          )}
+
+          <Field label="Note" hint="Optional. Only you see this.">
+            <input
+              className="field"
+              type="text"
+              maxLength={200}
+              placeholder={datedIsBlock ? "Hospital round" : "Evening clinic"}
+              value={dated.reason}
+              onChange={(event) => setDated((current) => ({ ...current, reason: event.target.value }))}
+            />
+          </Field>
+
+          {datedIsBlock ? (
+            <Banner tone="info" icon="info">
+              Blocking removes slots that are not booked yet. Appointments already in the
+              diary stay booked — cancel those individually so the patient is told.
+            </Banner>
+          ) : (
+            <Banner tone="info" icon="info">
+              Extra hours apply to this date alone, on top of your weekly schedule —
+              including on a day you have otherwise blocked.
+            </Banner>
+          )}
+
+          {error && <Banner tone="warn" icon="alert">{error}</Banner>}
+        </form>
+      </Modal>
+
+      <Banner tone="info" icon="info" title="How slots are generated">
+        Bookable times come from the scheduling engine: recurring rules, plus extra dated
+        hours, minus blocked dates and ranges, minus already-booked slots, minus anything in
+        the past or inside the lead time. Times are entered in {rules[0]?.timezone ?? "Asia/Dhaka"}
+        {" "}and stored in UTC, so the schedule stays correct across timezones.
+      </Banner>
     </>
   );
 }

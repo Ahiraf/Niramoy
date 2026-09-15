@@ -252,6 +252,8 @@ export async function getDoctor(idOrSlug: string): Promise<DoctorView | null> {
 }
 
 export interface AvailabilityRule {
+  /** Needed to edit or delete a single rule. Never guessable from the schedule. */
+  id: string;
   weekday: number;
   startMinute: number;
   endMinute: number;
@@ -265,6 +267,7 @@ export async function getAvailability(doctorId: string): Promise<AvailabilityRul
   const db = getDb();
   return db
     .select({
+      id: t.doctorAvailability.id,
       weekday: t.doctorAvailability.weekday,
       startMinute: t.doctorAvailability.startMinute,
       endMinute: t.doctorAvailability.endMinute,
@@ -285,7 +288,7 @@ export async function getAvailability(doctorId: string): Promise<AvailabilityRul
 /** Add one recurring availability rule to a doctor's own schedule. */
 export async function addAvailability(
   doctorId: string,
-  rule: Omit<AvailabilityRule, "timezone"> & { timezone?: string },
+  rule: Omit<AvailabilityRule, "timezone" | "id"> & { timezone?: string },
 ): Promise<AvailabilityRule> {
   const [row] = await getDb()
     .insert(t.doctorAvailability)
@@ -299,6 +302,7 @@ export async function addAvailability(
       timezone: rule.timezone ?? "Asia/Dhaka",
     })
     .returning({
+      id: t.doctorAvailability.id,
       weekday: t.doctorAvailability.weekday,
       startMinute: t.doctorAvailability.startMinute,
       endMinute: t.doctorAvailability.endMinute,
@@ -407,4 +411,144 @@ export async function getProfileForUser(userId: string): Promise<{
     .where(eq(t.doctors.userId, userId))
     .limit(1);
   return rows[0] ?? null;
+}
+
+/**
+ * Remove one recurring rule.
+ *
+ * Scoped by doctor id in the WHERE clause rather than checked beforehand: a
+ * read-then-delete leaves a window in which the row could change owner, and
+ * more practically it is one refactor away from someone forgetting the check.
+ * Returns false when nothing matched, which covers both "no such rule" and
+ * "not yours" — the caller must not be able to tell those apart.
+ */
+export async function deleteAvailability(doctorId: string, ruleId: string): Promise<boolean> {
+  const rows = await getDb()
+    .delete(t.doctorAvailability)
+    .where(
+      and(eq(t.doctorAvailability.id, ruleId), eq(t.doctorAvailability.doctorId, doctorId)),
+    )
+    .returning({ id: t.doctorAvailability.id });
+  return rows.length > 0;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Date-specific availability                                                  */
+/* -------------------------------------------------------------------------- */
+
+export interface AvailabilityExceptionRow {
+  id: string;
+  /** Local calendar date, "YYYY-MM-DD". */
+  date: string;
+  type: "block" | "extra";
+  startMinute: number | null;
+  endMinute: number | null;
+  slotMinutes: number | null;
+  bufferMinutes: number | null;
+  timezone: string;
+  reason: string | null;
+}
+
+/** A local date key as a UTC-midnight Date, which is how the column stores it. */
+export function dateKeyToColumn(dateKey: string): Date {
+  return new Date(`${dateKey}T00:00:00.000Z`);
+}
+
+/**
+ * Every date-specific entry from `fromDateKey` onward, for the doctor's own UI.
+ *
+ * Distinct from `getAvailabilityExceptions`, which is shaped for the scheduling
+ * engine and deliberately carries no ids: the engine has no business being able
+ * to name a row, and the UI cannot delete one without doing so.
+ */
+export async function listExceptions(
+  doctorId: string,
+  fromDateKey: string,
+): Promise<AvailabilityExceptionRow[]> {
+  const rows = await getDb()
+    .select({
+      id: t.availabilityExceptions.id,
+      date: t.availabilityExceptions.date,
+      type: t.availabilityExceptions.type,
+      startMinute: t.availabilityExceptions.startMinute,
+      endMinute: t.availabilityExceptions.endMinute,
+      slotMinutes: t.availabilityExceptions.slotMinutes,
+      bufferMinutes: t.availabilityExceptions.bufferMinutes,
+      timezone: t.availabilityExceptions.timezone,
+      reason: t.availabilityExceptions.reason,
+    })
+    .from(t.availabilityExceptions)
+    .where(
+      and(
+        eq(t.availabilityExceptions.doctorId, doctorId),
+        gte(t.availabilityExceptions.date, dateKeyToColumn(fromDateKey)),
+      ),
+    )
+    .orderBy(asc(t.availabilityExceptions.date), asc(t.availabilityExceptions.startMinute));
+
+  return rows.map((r) => ({
+    ...r,
+    date: r.date.toISOString().slice(0, 10),
+    type: r.type as "block" | "extra",
+  }));
+}
+
+/** Add one date-specific extra clinic or block. */
+export async function addException(
+  doctorId: string,
+  input: {
+    dateKey: string;
+    type: "block" | "extra";
+    startMinute: number | null;
+    endMinute: number | null;
+    slotMinutes: number | null;
+    bufferMinutes: number | null;
+    timezone: string;
+    reason?: string | null;
+  },
+): Promise<AvailabilityExceptionRow> {
+  const [row] = await getDb()
+    .insert(t.availabilityExceptions)
+    .values({
+      doctorId,
+      date: dateKeyToColumn(input.dateKey),
+      type: input.type,
+      startMinute: input.startMinute,
+      endMinute: input.endMinute,
+      slotMinutes: input.slotMinutes,
+      bufferMinutes: input.bufferMinutes,
+      timezone: input.timezone,
+      reason: input.reason ?? null,
+    })
+    .returning({
+      id: t.availabilityExceptions.id,
+      date: t.availabilityExceptions.date,
+      type: t.availabilityExceptions.type,
+      startMinute: t.availabilityExceptions.startMinute,
+      endMinute: t.availabilityExceptions.endMinute,
+      slotMinutes: t.availabilityExceptions.slotMinutes,
+      bufferMinutes: t.availabilityExceptions.bufferMinutes,
+      timezone: t.availabilityExceptions.timezone,
+      reason: t.availabilityExceptions.reason,
+    });
+
+  return {
+    ...row!,
+    date: row!.date.toISOString().slice(0, 10),
+    type: row!.type as "block" | "extra",
+  };
+}
+
+/** Remove one date-specific entry. Scoped by doctor for the same reason. */
+export async function deleteException(doctorId: string, exceptionId: string): Promise<boolean> {
+  const rows = await getDb()
+    .delete(t.availabilityExceptions)
+    .where(
+      and(
+        eq(t.availabilityExceptions.id, exceptionId),
+        eq(t.availabilityExceptions.doctorId, doctorId),
+      ),
+    )
+    .returning({ id: t.availabilityExceptions.id });
+  return rows.length > 0;
 }

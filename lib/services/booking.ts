@@ -95,8 +95,16 @@ export async function availableSlots(
    * cases — a confident, specific claim that is simply untrue in the second,
    * and it sends the patient to a waitlist for slots that will never free up
    * because they were never created.
+   *
+   * A one-off clinic counts as a published schedule. A doctor who has set no
+   * weekly hours but opened a single Thursday evening HAS published hours, and
+   * telling that patient "this doctor has not set a schedule" while the slots
+   * sit there on the screen is the same wrong answer in the other direction.
    */
-  return Object.assign(slots, { hasPublishedHours: rules.length > 0 });
+  const hasPublishedHours =
+    rules.length > 0 || exceptions.some((exception) => exception.type === "extra");
+
+  return Object.assign(slots, { hasPublishedHours });
 }
 
 export interface BookInput {

@@ -1,42 +1,29 @@
 /**
- * /api/doctor/availability — a verified doctor's recurring hours.
+ * /api/doctor/availability — a verified doctor's recurring weekly hours.
  *
- * The doctor id is taken from the session's profile, never from the request.
- * Patients read the generated slots endpoint; this endpoint is only for the
- * doctor who owns the schedule.
+ * The doctor id is taken from the session's profile, never from the request, so
+ * there is no shape of request that edits somebody else's schedule. Patients
+ * read the generated slots endpoint; this one is only for the owner.
+ *
+ * Date-specific availability — a one-off clinic, a blocked afternoon — lives at
+ * ./exceptions. Kept separate because the two answer different questions: this
+ * is "when do I normally work", that is "what is different about this date".
  */
 import { json, ok, withRoute } from "../../../../lib/api/respond";
 import { AppError } from "../../../../lib/errors";
 import * as directory from "../../../../lib/repositories/doctors";
-import { requireDoctor } from "../../../../lib/security/authz";
+import { requireVerifiedDoctor } from "../../../../lib/security/authz";
 import { getEnv } from "../../../../lib/config/env";
 import { localToUtc } from "../../../../lib/scheduling/engine";
+import {
+  assertWindow,
+  formatTimeMinutes,
+  minutesOverlap,
+  parseInteger,
+  parseTimeMinutes,
+} from "../../../../lib/scheduling/input";
 
 export const dynamic = "force-dynamic";
-
-const TIME_RE = /^(\d{2}):(\d{2})$/;
-
-function minutes(value: unknown, field: string): number {
-  const match = TIME_RE.exec(String(value ?? ""));
-  const hour = Number(match?.[1]);
-  const minute = Number(match?.[2]);
-  if (!match || hour > 23 || minute > 59) {
-    throw new AppError("VALIDATION_FAILED", {
-      details: { [field]: ["Use a valid 24-hour time, such as 09:00."] },
-    });
-  }
-  return hour * 60 + minute;
-}
-
-function integer(value: unknown, field: string, min: number, max: number): number {
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
-    throw new AppError("VALIDATION_FAILED", {
-      details: { [field]: [`Enter a whole number between ${min} and ${max}.`] },
-    });
-  }
-  return parsed;
-}
 
 function displayTime(minute: number, timeZone: string): string {
   // The app stores local hours with their zone, while this column is explicitly
@@ -53,9 +40,10 @@ function displayTime(minute: number, timeZone: string): string {
 function present(rule: directory.AvailabilityRule) {
   const zone = rule.timezone || getEnv().DISPLAY_TIMEZONE;
   return {
+    id: rule.id,
     weekday: rule.weekday,
-    localStart: `${String(Math.floor(rule.startMinute / 60)).padStart(2, "0")}:${String(rule.startMinute % 60).padStart(2, "0")}`,
-    localEnd: `${String(Math.floor(rule.endMinute / 60)).padStart(2, "0")}:${String(rule.endMinute % 60).padStart(2, "0")}`,
+    localStart: formatTimeMinutes(rule.startMinute),
+    localEnd: formatTimeMinutes(rule.endMinute),
     start: displayTime(rule.startMinute, zone),
     end: displayTime(rule.endMinute, zone),
     slotMinutes: rule.slotMinutes,
@@ -64,44 +52,29 @@ function present(rule: directory.AvailabilityRule) {
   };
 }
 
-async function ownDoctor(request: Request) {
-  const principal = await requireDoctor(request);
-  const profile = await directory.getProfileForUser(principal.userId);
-  if (!profile || profile.verificationStatus !== "verified") {
-    throw new AppError("NOT_VERIFIED");
-  }
-  return profile;
-}
-
 export const GET = withRoute("GET /api/doctor/availability", async (request) => {
-  const profile = await ownDoctor(request);
+  const profile = await requireVerifiedDoctor(request);
   const rules = await directory.getAvailability(profile.id);
-  return ok({ availability: rules.map(present) });
+  return ok({ availability: rules.map(present), timezone: getEnv().DISPLAY_TIMEZONE });
 });
 
 export const POST = withRoute("POST /api/doctor/availability", async (request) => {
-  const profile = await ownDoctor(request);
+  const profile = await requireVerifiedDoctor(request);
   const body = await json<Record<string, unknown>>(request, 8192);
-  const weekday = integer(body.weekday, "weekday", 0, 6);
-  const startMinute = minutes(body.localStart, "localStart");
-  const endMinute = minutes(body.localEnd, "localEnd");
-  const slotMinutes = integer(body.slotMinutes ?? 20, "slotMinutes", 5, 120);
-  const bufferMinutes = integer(body.bufferMinutes ?? 0, "bufferMinutes", 0, 60);
 
-  if (endMinute <= startMinute) {
-    throw new AppError("VALIDATION_FAILED", {
-      details: { localEnd: ["The end time must be after the start time."] },
-    });
-  }
-  if (slotMinutes > endMinute - startMinute) {
-    throw new AppError("VALIDATION_FAILED", {
-      details: { slotMinutes: ["The slot length must fit inside the consulting hours."] },
-    });
-  }
+  const weekday = parseInteger(body.weekday, "weekday", 0, 6);
+  const startMinute = parseTimeMinutes(body.localStart, "localStart");
+  const endMinute = parseTimeMinutes(body.localEnd, "localEnd");
+  const slotMinutes = parseInteger(body.slotMinutes ?? 20, "slotMinutes", 5, 120);
+  const bufferMinutes = parseInteger(body.bufferMinutes ?? 0, "bufferMinutes", 0, 60);
+
+  assertWindow(startMinute, endMinute, slotMinutes, { end: "localEnd", slot: "slotMinutes" });
 
   const existing = await directory.getAvailability(profile.id);
-  const overlaps = existing.some((rule) =>
-    rule.weekday === weekday && startMinute < rule.endMinute && rule.startMinute < endMinute,
+  const overlaps = existing.some(
+    (rule) =>
+      rule.weekday === weekday &&
+      minutesOverlap(startMinute, endMinute, rule.startMinute, rule.endMinute),
   );
   if (overlaps) {
     throw new AppError("ALREADY_EXISTS", {
@@ -118,4 +91,27 @@ export const POST = withRoute("POST /api/doctor/availability", async (request) =
     timezone: getEnv().DISPLAY_TIMEZONE,
   });
   return ok({ availability: present(rule) }, { status: 201 });
+});
+
+/**
+ * Remove one weekly rule.
+ *
+ * Appointments already booked inside it are deliberately untouched: the rule
+ * describes when new bookings may be taken, and deleting it must not quietly
+ * unbook a patient who is expecting to be seen. The doctor cancels those
+ * individually, which is the path that actually notifies anyone.
+ */
+export const DELETE = withRoute("DELETE /api/doctor/availability", async (request) => {
+  const profile = await requireVerifiedDoctor(request);
+  const id = new URL(request.url).searchParams.get("id") ?? "";
+  if (!id) {
+    throw new AppError("VALIDATION_FAILED", { details: { id: ["Which hours should be removed?"] } });
+  }
+
+  // Scoped to this doctor inside the delete itself. A miss is reported the same
+  // way whether the rule belongs to someone else or does not exist.
+  const removed = await directory.deleteAvailability(profile.id, id);
+  if (!removed) throw new AppError("NOT_FOUND");
+
+  return ok({ removed: true });
 });

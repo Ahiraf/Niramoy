@@ -17,6 +17,7 @@ import { getEnv } from "../config/env";
 import { assertCsrf } from "../auth/csrf";
 import { SESSION_COOKIE, readCookie } from "../auth/cookies";
 import { hashToken } from "../auth/tokens";
+import * as doctors from "../repositories/doctors";
 import * as sessions from "../repositories/sessions";
 import * as users from "../repositories/users";
 import type { UserRole } from "../repositories/users";
@@ -112,6 +113,27 @@ export async function requireAdmin(request: Request): Promise<Principal> {
 
 export async function requireDoctor(request: Request): Promise<Principal> {
   return requireRole(request, "doctor");
+}
+
+/**
+ * The caller's own doctor profile, and only if it is verified.
+ *
+ * Every endpoint that writes a schedule goes through this, so the doctor id
+ * those endpoints act on can only ever be the signed-in doctor's own — there is
+ * no request shape that names a different one. That is the whole of "a doctor
+ * cannot modify another doctor's availability": not a comparison that could be
+ * forgotten, but an id the client never gets to supply.
+ *
+ * Verification is checked here too: an unverified profile is not bookable, so
+ * hours published against one would generate slots no patient can ever see.
+ */
+export async function requireVerifiedDoctor(request: Request) {
+  const principal = await requireDoctor(request);
+  const profile = await doctors.getProfileForUser(principal.userId);
+  if (!profile || profile.verificationStatus !== "verified") {
+    throw new AppError("NOT_VERIFIED");
+  }
+  return profile;
 }
 
 /**

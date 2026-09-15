@@ -10,11 +10,15 @@
  * And only within a window around the appointment. A token is not a standing
  * right to enter a room; it is permission to attend a consultation that is
  * happening now. Outside the window there is nothing to join.
+ *
+ * DEMO_MODE=true lifts the WINDOW and nothing else — see the note at the check
+ * itself. Who may join is never relaxed, in any configuration.
  */
 
 import { eq } from "drizzle-orm";
 
 import { audit } from "../audit";
+import { getEnv } from "../config/env";
 
 import { getDb } from "../db/client";
 import * as t from "../db/schema";
@@ -32,6 +36,9 @@ export const JOIN_CLOSES_MINUTES_AFTER = 30;
  *  hand out anything long-lived. */
 export const TOKEN_TTL_SECONDS = 15 * 60;
 
+/** How long a room opened outside its appointment window lasts. */
+export const DEMO_ROOM_MINUTES = 120;
+
 /**
  * Issue a join grant for an appointment.
  *
@@ -43,7 +50,9 @@ export async function getJoinGrant(
   principal: Principal,
   appointmentId: string,
   context: { requestId?: string },
-): Promise<JoinGrant & { appointmentId: string; role: "doctor" | "patient" }> {
+): Promise<
+  JoinGrant & { appointmentId: string; role: "doctor" | "patient"; demoMode: boolean }
+> {
   const db = getDb();
 
   const appointment = await appointments.findById(appointmentId);
@@ -77,21 +86,49 @@ export async function getJoinGrant(
 
   const now = Date.now();
   const opens = appointment.startUtc.getTime() - JOIN_OPENS_MINUTES_BEFORE * 60_000;
-  const closes = appointment.endUtc.getTime() + JOIN_CLOSES_MINUTES_AFTER * 60_000;
+  const scheduledClose = appointment.endUtc.getTime() + JOIN_CLOSES_MINUTES_AFTER * 60_000;
 
-  if (now < opens) {
-    throw new AppError("NOT_ELIGIBLE", {
-      message: `The room opens ${JOIN_OPENS_MINUTES_BEFORE} minutes before your appointment.`,
-      meta: { opensAt: new Date(opens).toISOString() },
-    });
-  }
-  if (now > closes) {
-    throw new AppError("NOT_ELIGIBLE", { message: "This consultation has ended." });
+  /*
+   * DEMO MODE relaxes exactly one rule: WHEN the room may be entered.
+   *
+   * It exists because the appointment being demonstrated is whatever happens to
+   * be in the database, and almost never one starting in the next fifteen
+   * minutes. Everything above this point still runs — a stranger, an admin, or
+   * the person who booked on someone else's behalf gets the same 404 they
+   * always did, and a cancelled consultation still has no room. What it does
+   * NOT do is become the production default: it is off unless DEMO_MODE=true is
+   * set by hand.
+   */
+  const demoMode = getEnv().demoMode;
+
+  if (!demoMode) {
+    if (now < opens) {
+      throw new AppError("NOT_ELIGIBLE", {
+        message: `The room opens ${JOIN_OPENS_MINUTES_BEFORE} minutes before your appointment.`,
+        meta: { opensAt: new Date(opens).toISOString() },
+      });
+    }
+    if (now > scheduledClose) {
+      throw new AppError("NOT_ELIGIBLE", { message: "This consultation has ended." });
+    }
   }
 
   /* ---- Room ------------------------------------------------------------- */
 
   const provider = getVideoProvider();
+
+  /*
+   * When the room stops existing. In demo mode the appointment's own window may
+   * be long past, and a room that expired last Tuesday is one neither party can
+   * enter — so the demo gets a short forward-looking lifetime instead of the
+   * appointment's. Still bounded: a room with no expiry is a room that outlives
+   * every reason it was created for.
+   */
+  const closes =
+    demoMode && scheduledClose <= now + DEMO_ROOM_MINUTES * 60_000
+      ? now + DEMO_ROOM_MINUTES * 60_000
+      : scheduledClose;
+
   const expiresAt = new Date(closes);
 
   const existing = await db
@@ -166,10 +203,13 @@ export async function getJoinGrant(
     resourceType: "appointment",
     resourceId: appointmentId,
     // The token itself is never logged, here or anywhere.
-    metadata: { provider: provider.name, role, isDemo: grant.isDemo },
+    metadata: { provider: provider.name, role, isDemo: grant.isDemo, demoMode },
   });
 
-  return { ...grant, appointmentId, role };
+  // `demoMode` is returned so the UI can say the room was opened outside its
+  // appointment window. A demonstration that looks identical to the real rule
+  // is a demonstration of the wrong thing.
+  return { ...grant, appointmentId, role, demoMode };
 }
 
 /** Called when a consultation is completed or cancelled. */

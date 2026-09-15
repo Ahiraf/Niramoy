@@ -78,6 +78,8 @@ export function Workspace({ portal = "public" }) {
   const [rescheduling, setRescheduling] = useState(null);
   /** A started bKash payment awaiting the payer's confirmation. */
   const [pendingPayment, setPendingPayment] = useState(null);
+  /** The appointment whose payment is being opened right now, for the button. */
+  const [payingId, setPayingId] = useState(null);
   // Only the payment-return copy uses this today; the rest of this file's
   // toasts are still English-only.
   const { t } = useT();
@@ -385,19 +387,34 @@ export function Workspace({ portal = "public" }) {
     return result;
   }, [rescheduling, refreshAppointments, refreshNotifications, showToast, navigate]);
 
-  /** Resume a bKash payment that was started but never confirmed. */
+  /**
+   * Resume — or retry — a bKash payment for an appointment already booked.
+   *
+   * Deliberately does NOT send an idempotency key. The server owns the retry
+   * sequence: it decides whether this is the same attempt resumed (and hands
+   * back a working gateway link) or a genuinely new one, and a key pinned here
+   * would only let the client argue with that decision.
+   */
   const payForAppointment = useCallback(async (appointment) => {
-    const payment = await api.pay({
-      appointmentId: appointment.id,
-      method: "bkash",
-      idempotencyKey: `appt:${appointment.id}`,
-    });
+    if (!appointment?.id) return;
+    setPayingId(appointment.id);
+    const payment = await api.pay({ appointmentId: appointment.id, method: "bkash" });
+    setPayingId(null);
+
     if (!payment.ok) {
       showToast(payment.message ?? "Could not start that payment", "error");
+      // A payment that turned out to be settled already is not an error the
+      // patient can act on — show them the current state instead.
+      await refreshAppointments();
+      return;
+    }
+    if (payment.payment.status === "succeeded") {
+      showToast("That consultation is already paid for.");
+      await refreshAppointments();
       return;
     }
     setPendingPayment({ payment: payment.payment, appointment });
-  }, [showToast]);
+  }, [showToast, refreshAppointments]);
 
   const cancelAppointment = useCallback(async (id) => {
     const result = await api.updateAppointment(id, { action: "cancel" });
@@ -642,6 +659,7 @@ export function Workspace({ portal = "public" }) {
         open={Boolean(pendingPayment)}
         payment={pendingPayment?.payment}
         appointment={pendingPayment?.appointment}
+        onRetry={payForAppointment}
         onClose={() => {
           setPendingPayment(null);
           showToast("Appointment held. You can pay from your appointments.");
@@ -739,6 +757,7 @@ export function Workspace({ portal = "public" }) {
             onReview={submitReview}
             onLeaveWaitlist={leaveWaitlist}
             onPay={payForAppointment}
+            payingId={payingId}
           />
         );
         break;
@@ -844,6 +863,31 @@ export function Workspace({ portal = "public" }) {
           {view}
         </div>
       </main>
+      {/*
+        * The checkout sheet, rendered for the WHOLE workspace.
+        *
+        * It used to exist only inside the doctor-pending onboarding branch
+        * above, which is a screen a patient never reaches — so "Pay with
+        * bKash" started a real payment on the server and then opened nothing
+        * at all. The button looked broken because, from where the patient was
+        * standing, it was.
+        */}
+      <BkashCheckout
+        open={Boolean(pendingPayment)}
+        payment={pendingPayment?.payment}
+        appointment={pendingPayment?.appointment}
+        onRetry={payForAppointment}
+        onClose={() => {
+          setPendingPayment(null);
+          showToast("Appointment held. You can pay from your appointments.");
+        }}
+        onPaid={() => {
+          setPendingPayment(null);
+          refreshAppointments();
+        }}
+        api={api}
+        notify={showToast}
+      />
       <Toast toast={toast} />
     </div>
   );
