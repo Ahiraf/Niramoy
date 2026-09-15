@@ -9,6 +9,17 @@ import {
 
 const PERIODS = ["Morning", "Afternoon", "Evening"];
 
+/**
+ * How far ahead to ask for slots.
+ *
+ * Wide enough to reach a one-off clinic a doctor opened for a particular date
+ * weeks out — a three-week window silently hid those, and the doctor had no way
+ * to tell that the date they had published was not being offered to anyone. The
+ * server caps this at its own horizon, so asking for more is not a way to make
+ * it do more work than it means to.
+ */
+const SLOT_DAYS = 60;
+
 const PAYMENT_METHODS = [
   { value: "bkash", label: "bKash", hint: "Confirm in the wallet you already use." },
   { value: "cash", label: "Pay at the chamber", hint: "Settle in person on the day." },
@@ -34,7 +45,7 @@ export function Booking({ doctor, family, onConfirm, onBack, onJoinWaitlist, api
     let cancelled = false;
     setLoading(true);
     (async () => {
-      const data = await api.slots(doctor.id, 21);
+      const data = await api.slots(doctor.id, SLOT_DAYS);
       if (cancelled) return;
       setDays(data.days ?? []);
       setHasPublishedHours(data.hasPublishedHours ?? true);
@@ -70,7 +81,7 @@ export function Booking({ doctor, family, onConfirm, onBack, onJoinWaitlist, api
 
     // A 409 means someone took the slot between render and submit — refresh.
     if (!result.ok && ["slot_taken", "slot_unavailable"].includes(result.reason)) {
-      const data = await api.slots(doctor.id, 21);
+      const data = await api.slots(doctor.id, SLOT_DAYS);
       setDays(data.days ?? []);
       setHasPublishedHours(data.hasPublishedHours ?? true);
       setSelectedSlot(null);
