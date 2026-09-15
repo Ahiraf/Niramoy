@@ -10,6 +10,42 @@
 5. Deploy. `vercel.json` registers the cron schedules — read the section below
    before assuming they all run.
 
+## Deployment checklist
+
+Ten things, in the order they bite. Each one has been an actual failure mode
+rather than a hypothetical.
+
+- [ ] **`APP_URL` is the deployed HTTPS URL**, with no trailing slash. Every
+      SSLCommerz callback, the IPN, and the CSRF origin pin are derived from it.
+      Wrong here and the gateway posts settlement to a host that does not exist,
+      with nothing in any log to say why.
+- [ ] **`APP_ENV=production`**, so the strict checks below actually run.
+- [ ] **`SESSION_SECRET`, `CRON_SECRET`, `NIRAMOY_ADMIN_CODE` set**; the first
+      two ≥32 characters. The app refuses to boot otherwise.
+- [ ] **Database attached** — the Vercel Postgres integration sets
+      `POSTGRES_URL` and `POSTGRES_URL_NON_POOLING`. Do not add `DATABASE_URL`
+      by hand as well.
+- [ ] **Migrations applied** to the production database, against the
+      **non-pooled** URL: `DATABASE_URL="$POSTGRES_URL_NON_POOLING" npm run db:migrate`.
+- [ ] **`REMINDER_WINDOW_MINUTES=1440`** while cron runs daily. Silent
+      twenty-three-hour gap otherwise.
+- [ ] **Both SSLCommerz credentials set**, and the IPN URL registered in the
+      merchant panel as `https://<your-app>/api/payments/webhook`. Setting one
+      credential without the other is refused at boot; registering neither IPN
+      nor callbacks leaves every payment `pending`.
+- [ ] **`npm run pay:check`** passes against the sandbox, so a mistyped store
+      password is caught now rather than mid-demo.
+- [ ] **Video decided**: `VIDEO_API_KEY` + `VIDEO_API_SECRET` for JWT Jitsi, or
+      `VIDEO_PROVIDER=jitsi` + `ALLOW_PUBLIC_VIDEO_ROOM=true` to accept an
+      unlisted public room for a marked demonstration.
+- [ ] **`GET /api/admin/diagnostics`** as an admin returns an empty `warnings`
+      array, or only warnings you meant. It reports no secrets and makes no
+      outbound calls.
+
+Then walk the manual test steps in `TESTING.md` on the deployed URL — a payment
+flow that works locally proves very little, because locally the IPN cannot
+arrive at all.
+
 ## Scheduled jobs, and what the Hobby plan costs
 
 Vercel's Hobby plan allows **2 cron jobs per project, running once a day**.
@@ -61,6 +97,7 @@ Also set, though the app boots without them:
 | `REMINDER_WINDOW_MINUTES` | `1440` when reminders run daily. See the cron section |
 | `ALLOW_PUBLIC_VIDEO_ROOM` | `true` to permit credential-free `meet.jit.si` rooms. Production refuses them by default: the room is unlisted, not access-controlled |
 | `ALLOW_DEMO_PROFILES` | `true` to seed the demo directory. Defaults to false in production so synthetic profiles cannot reach a real one |
+| `DEMO_MODE` | `true` opens consultation rooms outside their appointment window. See below |
 
 `ALLOW_DEMO_PROFILES` defaults to **false** in production. The seed refuses to
 run, so synthetic profiles cannot reach a production directory.
@@ -123,6 +160,46 @@ anyone can POST to. So neither is believed:
 live gateway where real money moves, and **production refuses to boot with it**
 — this build has had no clinical or legal review. See
 `REGULATORY_ASSUMPTIONS.md` A7.
+
+## Demo mode
+
+`DEMO_MODE=true` relaxes exactly one rule: **when** a consultation room may be
+entered. Normally the room opens 15 minutes before the appointment and closes 30
+minutes after it ends, which is correct and makes a demonstration impossible —
+the appointment being shown is whatever is in the database, and it is rarely
+starting in the next quarter of an hour.
+
+What it does **not** touch:
+
+- **Who may join.** Only the booked patient and the booked doctor can obtain a
+  grant, in demo mode exactly as without it. Not an admin, not the person who
+  booked on someone else's behalf. `video-demo-mode.test.ts` asserts every one
+  of those refusals *with demo mode on*, because a flag that quietly widened the
+  audience would look identical on the happy path.
+- **A cancelled consultation**, which still has no room.
+- **Room lifetime.** A room opened outside its window gets two hours, not
+  forever.
+
+It is off unless set by hand, and is never inferred from `APP_ENV`: "this is a
+demo" is a statement about the audience, and a deployment can be a demo and a
+production build at once. The consultation screen labels the room `demo mode`
+when it was opened this way, so nobody watching mistakes the relaxed rule for
+the real one.
+
+Turn it off for anything resembling real use.
+
+## Configuration diagnostics
+
+`GET /api/admin/diagnostics` (admin session required) reports how this
+deployment is actually wired: which payment and video providers are live, the
+exact callback URLs derived from `APP_URL`, which database driver is in play,
+and a `warnings` array naming anything likely to surprise you.
+
+It reports **no secrets** — not a value, not a prefix, not a length. The one
+identifier shown in full is the SSLCommerz store id, which is the merchant's
+public name at the gateway. It makes no outbound calls either: probing the
+gateway for real opens a payment session, which is `npm run pay:check` and
+deliberately not a GET endpoint.
 
 ## Migrations
 

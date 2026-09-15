@@ -111,6 +111,18 @@ AI.
 | POST | `/api/ai/summary` | doctor | Own consultation. Always `requiresReview: true` |
 | PATCH | `/api/ai/summary/:id` | doctor | `action: approve \| reject`. The only path to the record |
 
+Doctor scheduling. The doctor id always comes from the session, so there is no
+request shape that edits another doctor's schedule.
+
+| Method | Path | Role | Notes |
+|---|---|---|---|
+| GET | `/api/doctor/availability` | doctor | Own recurring weekly hours |
+| POST | `/api/doctor/availability` | doctor | Add weekly hours. Refuses an overlap with existing ones |
+| DELETE | `/api/doctor/availability?id=` | doctor | Remove one rule. Appointments already booked inside it are untouched |
+| GET | `/api/doctor/availability/exceptions` | doctor | Date-specific entries, from today forward |
+| POST | `/api/doctor/availability/exceptions` | doctor | `type: extra \| block`. A block with no hours covers the whole day; with hours, only that range |
+| DELETE | `/api/doctor/availability/exceptions?id=` | doctor | Remove one dated entry |
+
 Verification, admin, payments, ops.
 
 | Method | Path | Role | Notes |
@@ -121,8 +133,10 @@ Verification, admin, payments, ops.
 | GET | `/api/admin/overview` | admin | Aggregates only |
 | GET/PATCH | `/api/admin/doctors` | admin | Suspend and reinstate; a reason is required |
 | GET | `/api/admin/audit` | admin | Read-only by construction |
-| POST | `/api/payments` | patient | Amount comes from the appointment, not the body |
+| POST | `/api/payments` | patient | Amount comes from the appointment, not the body. Resumes a live payment or opens a new attempt; never a second charge |
 | POST | `/api/payments/webhook` | — | Signature-verified. Not session-authenticated: the caller is a gateway |
+| GET/POST | `/api/payments/return/:outcome` | — | Where the gateway sends the payer back. The outcome in the path decides where they land, never whether they paid |
+| GET | `/api/admin/diagnostics` | admin | How this deployment is wired. Reports no secrets and makes no outbound calls |
 | POST | `/api/cron/:job` | — | `Authorization: Bearer $CRON_SECRET`, constant-time |
 | GET | `/api/health` | — | Liveness. Does not touch the database |
 | GET | `/api/ready` | — | Readiness. 503 when the database is unreachable |
