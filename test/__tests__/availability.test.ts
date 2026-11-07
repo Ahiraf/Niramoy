@@ -17,6 +17,7 @@
 import {
   DELETE as availabilityDelete,
   GET as availabilityGet,
+  PATCH as availabilityPatch,
   POST as availabilityPost,
 } from "../../app/api/doctor/availability/route";
 import {
@@ -219,6 +220,53 @@ describe("what is refused", () => {
 });
 
 describe("one doctor's schedule is not another's", () => {
+  it("edits a weekly rule and keeps it scoped to the doctor", async () => {
+    const listed = await call<{ availability: Array<{ id: string; weekday: number }> }>(
+      availabilityGet,
+      requestAs(world.doctor, `${BASE}/api/doctor/availability`),
+    );
+    const rule = listed.body.availability[0]!;
+
+    const updated = await call(
+      availabilityPatch,
+      requestAs(world.doctor, `${BASE}/api/doctor/availability?id=${rule.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          weekday: rule.weekday,
+          localStart: "08:00",
+          localEnd: "12:00",
+          slotMinutes: "30",
+          bufferMinutes: "5",
+        }),
+      }),
+    );
+    expect(updated.status).toBe(200);
+    expect(updated.body.availability).toMatchObject({
+      id: rule.id,
+      localStart: "08:00",
+      localEnd: "12:00",
+      slotMinutes: 30,
+      bufferMinutes: 5,
+    });
+  });
+
+  it("will not edit a weekly rule belonging to someone else", async () => {
+    const mine = await call<{ availability: { id: string } }>(
+      availabilityGet,
+      requestAs(world.doctor, `${BASE}/api/doctor/availability`),
+    );
+    const ruleId = (mine.body as unknown as { availability: Array<{ id: string }> }).availability[0]!.id;
+
+    const res = await call(
+      availabilityPatch,
+      requestAs(world.otherDoctor, `${BASE}/api/doctor/availability?id=${ruleId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ weekday: 0, localStart: "08:00", localEnd: "12:00" }),
+      }),
+    );
+    expect(res.status).toBe(404);
+  });
+
   it("will not delete a weekly rule belonging to someone else", async () => {
     const mine = await call<{ availability: { id: string } }>(
       availabilityGet,

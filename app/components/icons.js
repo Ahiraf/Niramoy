@@ -35,6 +35,7 @@ const paths = {
   badge: <><circle cx="12" cy="9" r="6"/><path d="m8.5 14.5-1 7 4.5-2.6 4.5 2.6-1-7"/></>,
   trend: <><path d="M22 7 13.5 15.5l-4-4L2 19"/><path d="M16 7h6v6"/></>,
   refresh: <><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 21v-5h5"/></>,
+  edit: <><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"/></>,
 };
 
 export function Icon({ name, size = 18, strokeWidth = 1.8, ...rest }) {

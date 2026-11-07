@@ -314,6 +314,38 @@ export async function addAvailability(
   return row!;
 }
 
+/** Update one recurring availability rule belonging to a doctor's own schedule. */
+export async function updateAvailability(
+  doctorId: string,
+  ruleId: string,
+  rule: Omit<AvailabilityRule, "timezone" | "id"> & { timezone?: string },
+): Promise<AvailabilityRule | null> {
+  const [row] = await getDb()
+    .update(t.doctorAvailability)
+    .set({
+      weekday: rule.weekday,
+      startMinute: rule.startMinute,
+      endMinute: rule.endMinute,
+      slotMinutes: rule.slotMinutes,
+      bufferMinutes: rule.bufferMinutes,
+      ...(rule.timezone ? { timezone: rule.timezone } : {}),
+    })
+    .where(
+      and(eq(t.doctorAvailability.id, ruleId), eq(t.doctorAvailability.doctorId, doctorId)),
+    )
+    .returning({
+      id: t.doctorAvailability.id,
+      weekday: t.doctorAvailability.weekday,
+      startMinute: t.doctorAvailability.startMinute,
+      endMinute: t.doctorAvailability.endMinute,
+      slotMinutes: t.doctorAvailability.slotMinutes,
+      bufferMinutes: t.doctorAvailability.bufferMinutes,
+      timezone: t.doctorAvailability.timezone,
+    });
+
+  return row ?? null;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Scheduling configuration                                                    */
 /* -------------------------------------------------------------------------- */

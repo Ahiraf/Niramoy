@@ -110,7 +110,10 @@ export const api = {
   updateDoctorProfile: (body) => request("/api/doctor/profile", { method: "PATCH", body }),
   slots: (id, days = 14) => request(`/api/doctors/${id}/slots${qs({ days })}`),
   doctorAvailability: () => request("/api/doctor/availability"),
+  doctorReviews: () => request("/api/doctor/reviews"),
   addDoctorAvailability: (body) => request("/api/doctor/availability", { method: "POST", body }),
+  updateDoctorAvailability: (id, body) =>
+    request(`/api/doctor/availability?id=${encodeURIComponent(id)}`, { method: "PATCH", body }),
   removeDoctorAvailability: (id) =>
     request(`/api/doctor/availability?id=${encodeURIComponent(id)}`, { method: "DELETE" }),
 

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Icon } from "./icons.js";
 import {
   Avatar, PageHeading, SectionHead, Stat, Empty, Loading, Modal, Field, Select,
-  StatusPill, Banner,
+  StatusPill, Banner, Rating,
 } from "./ui.js";
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -61,6 +61,7 @@ function initialsOf(name) {
 
 export function DoctorWorkspace({ active, self, appointments, loading, onNavigate, onJoinCall, onIssuePrescription, api, notify }) {
   if (active === "availability") return <Availability self={self} api={api} notify={notify} />;
+  if (active === "doctor-reviews") return <DoctorReviews self={self} api={api} />;
   if (active === "earnings") return <Earnings self={self} appointments={appointments} />;
   if (active === "doctor-schedule") {
     return (
@@ -72,6 +73,72 @@ export function DoctorWorkspace({ active, self, appointments, loading, onNavigat
     );
   }
   return <DoctorHome self={self} appointments={appointments} loading={loading} onNavigate={onNavigate} onJoinCall={onJoinCall} />;
+}
+
+function DoctorReviews({ self, api }) {
+  const [reviews, setReviews] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!self?.id) {
+      setReviews([]);
+      return () => { cancelled = true; };
+    }
+
+    (async () => {
+      const result = await api.doctorReviews();
+      if (cancelled) return;
+      if (!result.ok) {
+        setError(result.message ?? "Could not load your reviews.");
+        setReviews([]);
+        return;
+      }
+      setReviews(result.reviews ?? []);
+    })();
+
+    return () => { cancelled = true; };
+  }, [api, self?.id]);
+
+  return (
+    <>
+      <PageHeading
+        title="Your Reviews"
+        subtitle="See what patients are saying about your consultations."
+      />
+
+      {reviews === null ? <Loading /> : (
+        <>
+          <div className="stat-grid">
+            <Stat icon="star" tone="purple" label="Average rating" value={self?.rating ? self.rating.toFixed(1) : "—"} trend="Published reviews" />
+            <Stat icon="users" tone="blue" label="Reviews received" value={String(self?.ratingCount ?? reviews.length)} trend="Patient feedback" />
+          </div>
+
+          <div className="section-card card">
+            <SectionHead title="Patient reviews" note={`${reviews.length} latest published`} />
+            {error ? (
+              <Banner tone="warn" icon="alert">{error}</Banner>
+            ) : reviews.length ? (
+              reviews.map((review) => (
+                <div className="review-row" key={review.id}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+                    <Rating value={review.rating} />
+                    <time>
+                      {new Date(review.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                    </time>
+                  </div>
+                  <p>{review.comment || <em>No written comment.</em>}</p>
+                  <span className="muted-note">— {review.patientName || "Patient"}</span>
+                </div>
+              ))
+            ) : (
+              <Empty icon="star" title="No reviews yet" hint="Patient reviews will appear here after completed consultations." />
+            )}
+          </div>
+        </>
+      )}
+    </>
+  );
 }
 
 function DoctorHome({ self, appointments, loading, onNavigate, onJoinCall }) {
@@ -412,6 +479,7 @@ function Availability({ self, api, notify }) {
   const [error, setError] = useState(null);
   const [weekly, setWeekly] = useState(EMPTY_WEEKLY);
   const [dated, setDated] = useState(EMPTY_DATED);
+  const [editingRuleId, setEditingRuleId] = useState(null);
 
   useEffect(() => setRules(self?.availability ?? []), [self]);
 
@@ -428,28 +496,48 @@ function Availability({ self, api, notify }) {
 
   const openAdd = (which) => {
     setError(null);
+    setEditingRuleId(null);
     setWeekly(EMPTY_WEEKLY);
     setDated(EMPTY_DATED);
     setAdding(which);
+  };
+
+  const openEdit = (rule) => {
+    setError(null);
+    setEditingRuleId(rule.id);
+    setWeekly({
+      weekday: String(rule.weekday),
+      localStart: rule.localStart,
+      localEnd: rule.localEnd,
+      slotMinutes: String(rule.slotMinutes),
+      bufferMinutes: String(rule.bufferMinutes || 0),
+    });
+    setAdding("weekly");
   };
 
   const addWeekly = async (event) => {
     event.preventDefault();
     setSaving(true);
     setError(null);
-    const result = await api.addDoctorAvailability(weekly);
+    const result = editingRuleId
+      ? await api.updateDoctorAvailability(editingRuleId, weekly)
+      : await api.addDoctorAvailability(weekly);
     setSaving(false);
     if (!result.ok) {
       setError(result.message ?? "Could not save those hours.");
       return;
     }
-    setRules((current) =>
-      [...current, result.availability].sort(
+    setRules((current) => {
+      const next = editingRuleId
+        ? current.map((rule) => rule.id === editingRuleId ? result.availability : rule)
+        : [...current, result.availability];
+      return next.sort(
         (a, b) => a.weekday - b.weekday || a.localStart.localeCompare(b.localStart),
-      ),
-    );
+      );
+    });
     setAdding(null);
-    notify?.("Consulting hours added");
+    setEditingRuleId(null);
+    notify?.(editingRuleId ? "Consulting hours updated" : "Consulting hours added");
   };
 
   const addDated = async (event) => {
@@ -562,6 +650,15 @@ function Availability({ self, api, notify }) {
                       <button
                         type="button"
                         className="button ghost small"
+                        onClick={() => openEdit(r)}
+                        disabled={busyId === r.id || saving}
+                        aria-label={`Edit ${WEEKDAYS[r.weekday]} hours`}
+                      >
+                        <Icon name="edit" size={13} />Edit
+                      </button>{" "}
+                      <button
+                        type="button"
+                        className="button ghost small"
                         onClick={() => removeRule(r)}
                         disabled={busyId === r.id}
                       >
@@ -633,12 +730,17 @@ function Availability({ self, api, notify }) {
 
       <Modal
         open={adding === "weekly"}
-        title="Add recurring hours"
-        onClose={() => !saving && setAdding(null)}
+        title={editingRuleId ? "Edit recurring hours" : "Add recurring hours"}
+        onClose={() => {
+          if (!saving) {
+            setAdding(null);
+            setEditingRuleId(null);
+          }
+        }}
         footer={(
           <>
-            <button type="button" className="button ghost" onClick={() => setAdding(null)} disabled={saving}>Cancel</button>
-            <button type="submit" form="availability-form" className="button primary" disabled={saving}>{saving ? "Saving…" : "Save hours"}</button>
+            <button type="button" className="button ghost" onClick={() => { setAdding(null); setEditingRuleId(null); }} disabled={saving}>Cancel</button>
+            <button type="submit" form="availability-form" className="button primary" disabled={saving}>{saving ? "Saving…" : editingRuleId ? "Update hours" : "Save hours"}</button>
           </>
         )}
       >

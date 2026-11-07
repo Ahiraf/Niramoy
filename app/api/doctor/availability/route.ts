@@ -93,6 +93,51 @@ export const POST = withRoute("POST /api/doctor/availability", async (request) =
   return ok({ availability: present(rule) }, { status: 201 });
 });
 
+/** Update one weekly rule, scoped to the verified doctor's own schedule. */
+export const PATCH = withRoute("PATCH /api/doctor/availability", async (request) => {
+  const profile = await requireVerifiedDoctor(request);
+  const id = new URL(request.url).searchParams.get("id") ?? "";
+  if (!id) {
+    throw new AppError("VALIDATION_FAILED", { details: { id: ["Which hours should be edited?"] } });
+  }
+
+  const body = await json<Record<string, unknown>>(request, 8192);
+  const weekday = parseInteger(body.weekday, "weekday", 0, 6);
+  const startMinute = parseTimeMinutes(body.localStart, "localStart");
+  const endMinute = parseTimeMinutes(body.localEnd, "localEnd");
+  const slotMinutes = parseInteger(body.slotMinutes ?? 20, "slotMinutes", 5, 120);
+  const bufferMinutes = parseInteger(body.bufferMinutes ?? 0, "bufferMinutes", 0, 60);
+
+  assertWindow(startMinute, endMinute, slotMinutes, { end: "localEnd", slot: "slotMinutes" });
+
+  const existing = await directory.getAvailability(profile.id);
+  if (!existing.some((rule) => rule.id === id)) throw new AppError("NOT_FOUND");
+
+  const overlaps = existing.some(
+    (rule) =>
+      rule.id !== id &&
+      rule.weekday === weekday &&
+      minutesOverlap(startMinute, endMinute, rule.startMinute, rule.endMinute),
+  );
+  if (overlaps) {
+    throw new AppError("ALREADY_EXISTS", {
+      message: "Those hours overlap an existing weekly schedule.",
+    });
+  }
+
+  const rule = await directory.updateAvailability(profile.id, id, {
+    weekday,
+    startMinute,
+    endMinute,
+    slotMinutes,
+    bufferMinutes,
+    timezone: getEnv().DISPLAY_TIMEZONE,
+  });
+  if (!rule) throw new AppError("NOT_FOUND");
+
+  return ok({ availability: present(rule) });
+});
+
 /**
  * Remove one weekly rule.
  *
