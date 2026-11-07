@@ -48,6 +48,7 @@ const STRINGS = {
   "nav.doctor-home": { en: "Overview", bn: "সারসংক্ষেপ" },
   "nav.doctor-schedule": { en: "Appointments", bn: "অ্যাপয়েন্টমেন্ট" },
   "nav.availability": { en: "Availability", bn: "সময়সূচি" },
+  "nav.doctor-reviews": { en: "Your Reviews", bn: "আপনার রিভিউ" },
   "nav.earnings": { en: "Earnings", bn: "আয়" },
   "nav.admin-home": { en: "Overview", bn: "সারসংক্ষেপ" },
   // Was missing entirely, so the admin sidebar rendered the raw key
