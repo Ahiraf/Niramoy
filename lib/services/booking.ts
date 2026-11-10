@@ -17,6 +17,7 @@
  */
 
 import { audit } from "../audit";
+import { getEnv } from "../config/env";
 
 import { isAppointmentConflict, isPatientDoubleBooking } from "../db/errors";
 import { withRetry } from "../db/retry";
@@ -29,6 +30,30 @@ import { canBook, canCancel, generateSlots, type Slot } from "../scheduling/engi
 import type { Principal } from "../security/authz";
 
 const SLOT_HORIZON_DAYS = 60;
+const DEMO_START_MINUTE = 8 * 60;
+const DEMO_END_MINUTE = 20 * 60;
+
+/**
+ * Presentation mode keeps the patient booking screen usable even when a
+ * doctor has not published a calendar for the date being demonstrated. It is
+ * intentionally server-side and is enabled only by the explicit DEMO_MODE
+ * flag; normal deployments continue to use the doctor's real schedule.
+ */
+function demoAvailability(consultationMinutes: number) {
+  const timezone = getEnv().DISPLAY_TIMEZONE;
+  return Array.from({ length: 7 }, (_, weekday) => ({
+    weekday,
+    startMinute: DEMO_START_MINUTE,
+    endMinute: DEMO_END_MINUTE,
+    slotMinutes: consultationMinutes,
+    bufferMinutes: 0,
+    timezone,
+  }));
+}
+
+function bookingLeadMinutes(config: DoctorSchedulingConfig): number {
+  return getEnv().demoMode ? 0 : config.leadMinutes;
+}
 
 export interface DoctorSchedulingConfig {
   id: string;
@@ -70,11 +95,15 @@ export async function availableSlots(
   const rangeStart = new Date(now);
   const rangeEnd = new Date(now.getTime() + days * 86_400_000);
 
-  const [rules, exceptions, booked] = await Promise.all([
+  const [publishedRules, publishedExceptions, booked] = await Promise.all([
     directory.getAvailability(doctorId),
     directory.getAvailabilityExceptions(doctorId, rangeStart, rangeEnd),
     appointments.bookedIntervals(doctorId, rangeStart, rangeEnd),
   ]);
+
+  const demoMode = getEnv().demoMode;
+  const rules = demoMode ? demoAvailability(config.consultationMinutes) : publishedRules;
+  const exceptions = demoMode ? [] : publishedExceptions;
 
   const slots = generateSlots({
     rules,
@@ -83,7 +112,7 @@ export async function availableSlots(
     rangeStart,
     rangeEnd,
     now,
-    leadMinutes: config.leadMinutes,
+    leadMinutes: bookingLeadMinutes(config),
   });
 
   /*
@@ -101,7 +130,7 @@ export async function availableSlots(
    * telling that patient "this doctor has not set a schedule" while the slots
    * sit there on the screen is the same wrong answer in the other direction.
    */
-  const hasPublishedHours =
+  const hasPublishedHours = demoMode ||
     rules.length > 0 || exceptions.some((exception) => exception.type === "extra");
 
   return Object.assign(slots, { hasPublishedHours });
@@ -170,7 +199,7 @@ export async function book(
     requestedStart: requested,
     availableSlots: slots,
     now,
-    leadMinutes: config.leadMinutes,
+    leadMinutes: bookingLeadMinutes(config),
     existing,
   });
 
@@ -337,7 +366,7 @@ export async function reschedule(
     requestedStart: requested,
     availableSlots: slots,
     now,
-    leadMinutes: config.leadMinutes,
+    leadMinutes: bookingLeadMinutes(config),
   });
   if (!check.ok) {
     throw new AppError(check.reason === "slot_unavailable" ? "SLOT_UNAVAILABLE" : "INVALID_TIME", {

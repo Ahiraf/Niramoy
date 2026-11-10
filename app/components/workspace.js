@@ -331,7 +331,35 @@ export function Workspace({ portal = "public" }) {
     navigate("booking");
   }, [navigate]);
 
+  /**
+   * The booking screen can outlive the session it was rendered from — for
+   * example, another tab may sign into a doctor account on the same origin.
+   * Re-check the server-owned identity before a patient-only action so the
+   * user is moved out of stale patient UI instead of seeing a generic 403.
+   */
+  const ensurePatientSession = useCallback(async () => {
+    const session = await api.session();
+    if (session.ok && session.user?.role === "patient" && session.user.patientId) {
+      setUser(session.user);
+      return true;
+    }
+
+    if (session.user) {
+      setUser(session.user);
+      setActive(HOME[session.user.role] ?? "dashboard");
+      showToast("You are signed in with a non-patient account. Sign in as a patient to book.", "error");
+    } else {
+      setUser(null);
+      setActive("dashboard");
+      setScreen(admin ? "auth" : "landing");
+      showToast("Your session expired. Please sign in again.", "error");
+    }
+    return false;
+  }, [admin, showToast]);
+
   const confirmBooking = useCallback(async (payload) => {
+    if (!(await ensurePatientSession())) return { ok: false, reason: "wrong_role" };
+
     // Rescheduling reuses the same slot picker, so route it to PATCH instead.
     if (rescheduling) {
       const result = await api.updateAppointment(rescheduling.id, {
@@ -386,7 +414,7 @@ export function Workspace({ portal = "public" }) {
       showToast("Appointment confirmed. You're all set!");
     }
     return result;
-  }, [rescheduling, refreshAppointments, refreshNotifications, showToast, navigate]);
+  }, [ensurePatientSession, rescheduling, refreshAppointments, refreshNotifications, showToast, navigate]);
 
   /**
    * Resume — or retry — a bKash payment for an appointment already booked.

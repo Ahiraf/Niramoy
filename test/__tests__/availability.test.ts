@@ -26,6 +26,7 @@ import {
   POST as exceptionPost,
 } from "../../app/api/doctor/availability/exceptions/route";
 import { availableSlots } from "../../lib/services/booking";
+import { resetEnvCache } from "../../lib/config/env";
 import { localDateKey } from "../../lib/scheduling/engine";
 import { requestAs, type World } from "../fixtures";
 import { call, setupWorld, teardownWorld } from "../harness";
@@ -41,6 +42,8 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await teardownWorld(world);
+  delete process.env.DEMO_MODE;
+  resetEnvCache();
 });
 
 /** A date key `days` ahead, read in the doctor's own zone. */
@@ -216,6 +219,21 @@ describe("what is refused", () => {
       }),
     );
     expect(clash.status).toBe(409);
+  });
+});
+
+describe("presentation booking mode", () => {
+  it("offers every future date even when the doctor has no published schedule", async () => {
+    await clearWeeklyHours();
+    process.env.DEMO_MODE = "true";
+    resetEnvCache();
+
+    const date = futureDateKey(25);
+    const slots = await slotsFor(date);
+
+    expect(slots.length).toBeGreaterThan(0);
+    expect((await availableSlots(world.doctor.doctorId!, { days: 45 }) as { hasPublishedHours?: boolean }).hasPublishedHours)
+      .toBe(true);
   });
 });
 
