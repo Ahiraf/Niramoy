@@ -17,6 +17,7 @@ export const NAV = {
     { id: "doctor-home", label: "Overview", icon: "grid" },
     { id: "doctor-schedule", label: "Appointments", icon: "calendar" },
     { id: "availability", label: "Availability", icon: "clock" },
+    { id: "doctor-reviews", label: "Your Reviews", icon: "star" },
     { id: "earnings", label: "Earnings", icon: "trend" },
   ],
   admin: [
@@ -49,6 +50,7 @@ const TITLES = {
   "doctor-home": ["Doctor overview", "Your day"],
   "doctor-schedule": ["Appointments", "Your consultation schedule"],
   availability: ["Availability", "Recurring hours and exceptions"],
+  "doctor-reviews": ["Your Reviews", "Patient feedback about your consultations"],
   earnings: ["Earnings", "Completed consultations"],
   "admin-home": ["Admin overview", "Platform health"],
   approvals: ["Sign-up approvals", "Who may register as a doctor"],

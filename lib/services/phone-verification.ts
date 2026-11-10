@@ -138,6 +138,10 @@ export async function startSignupVerification(
       code,
       expiresInMinutes: SIGNUP_OTP_TTL_MINUTES,
     });
+    if (getSmsProvider().canDeliver && !result.delivered) {
+      await phoneVerifications.expirePending(target.e164);
+      throw new Error(result.reason ?? "sms_not_accepted_by_gateway");
+    }
     delivered = result.delivered;
   } catch (err) {
     logger.error("signup sms failed", { err, provider: getSmsProvider().name });
@@ -327,6 +331,9 @@ export async function startPhoneVerification(
       code,
       expiresInMinutes: PHONE_CODE_TTL_MINUTES,
     });
+    if (getSmsProvider().canDeliver && !result.delivered) {
+      throw new Error(result.reason ?? "sms_not_accepted_by_gateway");
+    }
     delivered = result.delivered;
   } catch (err) {
     // The gateway is a handset: it goes flat, loses signal, and comes back.

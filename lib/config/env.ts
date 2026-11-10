@@ -99,6 +99,8 @@ const schema = z
     TEXTBEE_API_KEY: z.string().optional(),
     /** Optional: send from one specific handset rather than the account default. */
     TEXTBEE_DEVICE_ID: z.string().optional(),
+    /** Optional: choose a specific SIM on a dual-SIM handset. */
+    TEXTBEE_SIM_SUBSCRIPTION_ID: z.coerce.number().int().positive().optional(),
     TEXTBEE_BASE_URL: z.string().url().optional(),
 
     /**
@@ -160,6 +162,21 @@ const schema = z
      */
     ALLOW_PUBLIC_VIDEO_ROOM: z.enum(["true", "false"]).optional(),
 
+    /**
+     * Open a consultation room outside its appointment window.
+     *
+     * For a demonstration, where the appointment being demonstrated is whatever
+     * was seeded and is rarely happening in the next fifteen minutes. It relaxes
+     * exactly one rule — WHEN the room may be entered — and nothing else: only
+     * the booked doctor and the booked patient can obtain a grant either way,
+     * and a cancelled consultation still has no room.
+     *
+     * Off unless set by hand, and never inferred from APP_ENV: "it is a demo"
+     * is a statement about the audience, not about the environment, and a
+     * deployment can be both a demo and production at once.
+     */
+    DEMO_MODE: z.enum(["true", "false"]).optional(),
+
     /** Seeded synthetic profiles are refused in production. */
     // Left as the raw string: an `.optional().transform(v => v === "true")`
     // would collapse "unset" into `false`, defeating the `?? !isProd` default
@@ -194,6 +211,15 @@ const schema = z
       cronSecret: raw.CRON_SECRET ?? (isProd ? undefined : "dev-cron-secret"),
       /** Never defaulted on. An unlisted room is a decision, not a fallback. */
       allowPublicVideoRoom: raw.ALLOW_PUBLIC_VIDEO_ROOM === "true",
+      /**
+       * A production deployment that explicitly enables synthetic demo
+       * profiles is also a presentation deployment. Keeping booking mode on
+       * there prevents the patient demo from depending on a second Vercel
+       * switch; DEMO_MODE=true remains the explicit override for other setups.
+       */
+      demoMode:
+        raw.DEMO_MODE === "true" ||
+        (raw.APP_ENV === "production" && raw.ALLOW_DEMO_PROFILES === "true"),
       /** Demo profiles are on everywhere except production, unless overridden. */
       allowDemoProfiles:
         raw.ALLOW_DEMO_PROFILES === undefined ? !isProd : raw.ALLOW_DEMO_PROFILES === "true",

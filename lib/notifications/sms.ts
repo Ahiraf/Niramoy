@@ -32,6 +32,7 @@ export interface SmsMessage {
 }
 
 export interface SmsResult {
+  /** The gateway accepted the message for delivery by the handset. */
   delivered: boolean;
   id?: string;
   /** Set when delivery was not attempted, e.g. no gateway is configured. */
@@ -71,19 +72,17 @@ const TEXTBEE_DEFAULT_BASE_URL = "https://api.textbee.dev/api/v1";
 /**
  * TextBee.
  *
- * Two endpoints exist: one scoped to a single device, and an account-level one
- * that picks a device. We use the device-scoped form when TEXTBEE_DEVICE_ID is
- * set, because a deployment with two registered handsets should not have the
- * gateway choose which SIM a patient sees the code arrive from.
+ * TextBee's account-level endpoint accepts an optional deviceId and SIM
+ * subscription in the request body. The older device-scoped endpoint still
+ * exists, but is deprecated and does not make it possible to select a SIM.
  */
 function textbeeProvider(config: {
   apiKey: string;
   deviceId?: string;
+  simSubscriptionId?: number;
   baseUrl: string;
 }): SmsProvider {
-  const url = config.deviceId
-    ? `${config.baseUrl}/gateway/devices/${encodeURIComponent(config.deviceId)}/send-sms`
-    : `${config.baseUrl}/gateway/send-sms`;
+  const url = `${config.baseUrl}/gateway/send-sms`;
 
   return {
     name: "textbee",
@@ -94,7 +93,14 @@ function textbeeProvider(config: {
       const res = await fetch(url, {
         method: "POST",
         headers: { "x-api-key": config.apiKey, "Content-Type": "application/json" },
-        body: JSON.stringify({ recipients: [message.to], message: message.text }),
+        body: JSON.stringify({
+          recipients: [message.to],
+          message: message.text,
+          ...(config.deviceId ? { deviceId: config.deviceId } : {}),
+          ...(config.simSubscriptionId !== undefined
+            ? { simSubscriptionId: config.simSubscriptionId }
+            : {}),
+        }),
         signal: AbortSignal.timeout(10_000),
       });
 
@@ -105,8 +111,37 @@ function textbeeProvider(config: {
         throw new Error(`textbee responded ${res.status}${detail ? `: ${detail.slice(0, 200)}` : ""}`);
       }
 
-      const body = (await res.json().catch(() => ({}))) as { data?: { smsBatchId?: string } };
-      const id = body.data?.smsBatchId;
+      const body = (await res.json().catch(() => ({}))) as {
+        data?: {
+          success?: boolean;
+          message?: string;
+          smsBatchId?: string;
+          successCount?: number;
+          failureCount?: number;
+        };
+      };
+      const result = body.data;
+      const id = result?.smsBatchId;
+      const successCount = result?.successCount ?? 0;
+      const failureCount = result?.failureCount ?? 0;
+
+      /*
+       * TextBee returns HTTP 200 both for an accepted queue entry and for an
+       * immediate dispatch result. A 200 alone is not enough: the device can
+       * report failureCount > 0, which is exactly what Android displays as a
+       * red "Failed" message. Surface that as a provider failure so the OTP
+       * route does not leave a live code that nobody received.
+       */
+      const accepted = result?.success === true || Boolean(id) || successCount > 0;
+      const failed = failureCount > 0 && successCount === 0 && !id;
+      if (!accepted || failed) {
+        logger.warn("textbee handset rejected SMS", {
+          failureCount,
+          reason: result?.message ?? "unrecognised_gateway_result",
+        });
+        return { delivered: false, reason: "textbee_handset_failed" };
+      }
+
       return { delivered: true, ...(id ? { id } : {}) };
     },
   };
@@ -122,6 +157,9 @@ export function getSmsProvider(): SmsProvider {
       ? textbeeProvider({
           apiKey: env.TEXTBEE_API_KEY,
           ...(env.TEXTBEE_DEVICE_ID ? { deviceId: env.TEXTBEE_DEVICE_ID } : {}),
+          ...(env.TEXTBEE_SIM_SUBSCRIPTION_ID !== undefined
+            ? { simSubscriptionId: env.TEXTBEE_SIM_SUBSCRIPTION_ID }
+            : {}),
           baseUrl: env.TEXTBEE_BASE_URL ?? TEXTBEE_DEFAULT_BASE_URL,
         })
       : consoleSmsProvider;

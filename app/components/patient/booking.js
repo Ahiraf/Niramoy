@@ -9,6 +9,15 @@ import {
 
 const PERIODS = ["Morning", "Afternoon", "Evening"];
 
+/**
+ * How far ahead to ask for slots.
+ *
+ * Show the local calendar from today through the same date one month later.
+ * The server uses the same horizon, so the date cards and booking validation
+ * cannot disagree about the range available during a demonstration.
+ */
+const SLOT_DAYS = 30;
+
 const PAYMENT_METHODS = [
   { value: "bkash", label: "bKash", hint: "Confirm in the wallet you already use." },
   { value: "cash", label: "Pay at the chamber", hint: "Settle in person on the day." },
@@ -34,7 +43,7 @@ export function Booking({ doctor, family, onConfirm, onBack, onJoinWaitlist, api
     let cancelled = false;
     setLoading(true);
     (async () => {
-      const data = await api.slots(doctor.id, 21);
+      const data = await api.slots(doctor.id, SLOT_DAYS);
       if (cancelled) return;
       setDays(data.days ?? []);
       setHasPublishedHours(data.hasPublishedHours ?? true);
@@ -70,7 +79,7 @@ export function Booking({ doctor, family, onConfirm, onBack, onJoinWaitlist, api
 
     // A 409 means someone took the slot between render and submit — refresh.
     if (!result.ok && ["slot_taken", "slot_unavailable"].includes(result.reason)) {
-      const data = await api.slots(doctor.id, 21);
+      const data = await api.slots(doctor.id, SLOT_DAYS);
       setDays(data.days ?? []);
       setHasPublishedHours(data.hasPublishedHours ?? true);
       setSelectedSlot(null);

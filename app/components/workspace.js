@@ -78,6 +78,8 @@ export function Workspace({ portal = "public" }) {
   const [rescheduling, setRescheduling] = useState(null);
   /** A started bKash payment awaiting the payer's confirmation. */
   const [pendingPayment, setPendingPayment] = useState(null);
+  /** The appointment whose payment is being opened right now, for the button. */
+  const [payingId, setPayingId] = useState(null);
   // Only the payment-return copy uses this today; the rest of this file's
   // toasts are still English-only.
   const { t } = useT();
@@ -85,7 +87,8 @@ export function Workspace({ portal = "public" }) {
   /** The appointment just booked, shown on the confirmation screen. */
   const [justBooked, setJustBooked] = useState(null);
 
-  const doctorSelf = useDoctorSelf(user, api);
+  const [doctorRevision, setDoctorRevision] = useState(0);
+  const doctorSelf = useDoctorSelf(user, api, doctorRevision);
   const online = useOnline();
 
   const showToast = useCallback((message, tone = "success") => {
@@ -328,7 +331,35 @@ export function Workspace({ portal = "public" }) {
     navigate("booking");
   }, [navigate]);
 
+  /**
+   * The booking screen can outlive the session it was rendered from — for
+   * example, another tab may sign into a doctor account on the same origin.
+   * Re-check the server-owned identity before a patient-only action so the
+   * user is moved out of stale patient UI instead of seeing a generic 403.
+   */
+  const ensurePatientSession = useCallback(async () => {
+    const session = await api.session();
+    if (session.ok && session.user?.role === "patient" && session.user.patientId) {
+      setUser(session.user);
+      return true;
+    }
+
+    if (session.user) {
+      setUser(session.user);
+      setActive(HOME[session.user.role] ?? "dashboard");
+      showToast("You are signed in with a non-patient account. Sign in as a patient to book.", "error");
+    } else {
+      setUser(null);
+      setActive("dashboard");
+      setScreen(admin ? "auth" : "landing");
+      showToast("Your session expired. Please sign in again.", "error");
+    }
+    return false;
+  }, [admin, showToast]);
+
   const confirmBooking = useCallback(async (payload) => {
+    if (!(await ensurePatientSession())) return { ok: false, reason: "wrong_role" };
+
     // Rescheduling reuses the same slot picker, so route it to PATCH instead.
     if (rescheduling) {
       const result = await api.updateAppointment(rescheduling.id, {
@@ -383,21 +414,36 @@ export function Workspace({ portal = "public" }) {
       showToast("Appointment confirmed. You're all set!");
     }
     return result;
-  }, [rescheduling, refreshAppointments, refreshNotifications, showToast, navigate]);
+  }, [ensurePatientSession, rescheduling, refreshAppointments, refreshNotifications, showToast, navigate]);
 
-  /** Resume a bKash payment that was started but never confirmed. */
+  /**
+   * Resume — or retry — a bKash payment for an appointment already booked.
+   *
+   * Deliberately does NOT send an idempotency key. The server owns the retry
+   * sequence: it decides whether this is the same attempt resumed (and hands
+   * back a working gateway link) or a genuinely new one, and a key pinned here
+   * would only let the client argue with that decision.
+   */
   const payForAppointment = useCallback(async (appointment) => {
-    const payment = await api.pay({
-      appointmentId: appointment.id,
-      method: "bkash",
-      idempotencyKey: `appt:${appointment.id}`,
-    });
+    if (!appointment?.id) return;
+    setPayingId(appointment.id);
+    const payment = await api.pay({ appointmentId: appointment.id, method: "bkash" });
+    setPayingId(null);
+
     if (!payment.ok) {
       showToast(payment.message ?? "Could not start that payment", "error");
+      // A payment that turned out to be settled already is not an error the
+      // patient can act on — show them the current state instead.
+      await refreshAppointments();
+      return;
+    }
+    if (payment.payment.status === "succeeded") {
+      showToast("That consultation is already paid for.");
+      await refreshAppointments();
       return;
     }
     setPendingPayment({ payment: payment.payment, appointment });
-  }, [showToast]);
+  }, [showToast, refreshAppointments]);
 
   const cancelAppointment = useCallback(async (id) => {
     const result = await api.updateAppointment(id, { action: "cancel" });
@@ -523,6 +569,7 @@ export function Workspace({ portal = "public" }) {
     api,
     onNavigate: navigate,
     onUserChange: setUser,
+    onDoctorChange: () => setDoctorRevision((revision) => revision + 1),
     notify: showToast,
   };
 
@@ -642,6 +689,7 @@ export function Workspace({ portal = "public" }) {
         open={Boolean(pendingPayment)}
         payment={pendingPayment?.payment}
         appointment={pendingPayment?.appointment}
+        onRetry={payForAppointment}
         onClose={() => {
           setPendingPayment(null);
           showToast("Appointment held. You can pay from your appointments.");
@@ -739,6 +787,7 @@ export function Workspace({ portal = "public" }) {
             onReview={submitReview}
             onLeaveWaitlist={leaveWaitlist}
             onPay={payForAppointment}
+            payingId={payingId}
           />
         );
         break;
@@ -844,6 +893,31 @@ export function Workspace({ portal = "public" }) {
           {view}
         </div>
       </main>
+      {/*
+        * The checkout sheet, rendered for the WHOLE workspace.
+        *
+        * It used to exist only inside the doctor-pending onboarding branch
+        * above, which is a screen a patient never reaches — so "Pay with
+        * bKash" started a real payment on the server and then opened nothing
+        * at all. The button looked broken because, from where the patient was
+        * standing, it was.
+        */}
+      <BkashCheckout
+        open={Boolean(pendingPayment)}
+        payment={pendingPayment?.payment}
+        appointment={pendingPayment?.appointment}
+        onRetry={payForAppointment}
+        onClose={() => {
+          setPendingPayment(null);
+          showToast("Appointment held. You can pay from your appointments.");
+        }}
+        onPaid={() => {
+          setPendingPayment(null);
+          refreshAppointments();
+        }}
+        api={api}
+        notify={showToast}
+      />
       <Toast toast={toast} />
     </div>
   );

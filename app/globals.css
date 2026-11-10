@@ -1030,6 +1030,86 @@ body {
   .modal-actions .button, .bkash-actions .button { width: auto; }
 }
 
+/* --- Final mobile containment --------------------------------------------- */
+/*
+ * Keep every responsive surface inside the viewport. A few dashboard cards
+ * contain long names, tables, or action groups; without these minimum-width
+ * and wrapping rules they become the source of horizontal page scrolling on
+ * narrow Android and iPhone screens.
+ */
+@media (max-width: 760px) {
+  .main-area, .content, .content > *, .card, .section-card,
+  .profile-card, .booking-side, .doctor-card, .appointment-card,
+  .consult-shell, .consult-stage, .auth-card, .pending-card {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .content { overflow-x: clip; }
+  .page-heading h1, .page-heading p, .topbar-heading strong,
+  .topbar-heading span, .doctor-card h3, .profile-intro h2,
+  .summary-line strong, .appointment-card strong, .appointment-card span {
+    overflow-wrap: anywhere;
+  }
+
+  .page-heading-actions, .doctor-card-footer, .next-footer,
+  .profile-intro, .summary-doctor, .pay-option {
+    flex-wrap: wrap;
+  }
+
+  .page-heading-actions .button,
+  .doctor-card-footer .button,
+  .next-footer .button { min-width: 0; }
+
+  .profile-card, .booking-side, .section-card { overflow: hidden; }
+  .slot-grid { min-width: 0; }
+  .slot { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pay-option-body, .doctor-detail, .appt-main, .summary-doctor .doctor-detail { min-width: 0; }
+
+  .availability-table, .rx-table { min-width: 560px; }
+  .availability-table-wrap, .rx-table-wrap { overflow-x: auto; max-width: 100%; }
+
+  .consult-stage { min-height: 280px; }
+  .consult-frame { min-width: 0; }
+}
+
+@media (max-width: 420px) {
+  .content { padding-inline: 12px; }
+  .page-heading-actions { gap: 7px; }
+  .page-heading-actions .button { padding-inline: 10px; }
+  .section-card, .profile-card, .booking-side { padding-inline: 14px; }
+  .slot-grid { gap: 6px; }
+  .date-row { margin-inline: -14px; padding-inline: 14px; }
+  .doctor-card-footer { align-items: stretch; }
+  .doctor-card-footer .button { width: 100%; }
+}
+
+/* --- Final phone viewport guard ------------------------------------------ */
+/* Keep every workspace surface inside narrow Android and iPhone viewports. */
+@media (max-width: 760px) {
+  html, body { width: 100%; max-width: 100%; overflow-x: hidden; }
+  .app-shell, .main-area, .topbar, .content { width: 100%; max-width: 100%; min-width: 0; }
+  .app-shell { display: block; }
+  .topbar { gap: 8px; padding-inline: max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right)); }
+  .topbar-actions { gap: 6px; flex: 0 0 auto; }
+  .topbar-actions > div { display: flex; align-items: center; gap: 6px; }
+  .page-heading, .page-heading-actions, .card-top, .section-subhead,
+  .consult-footer, .bkash-head { min-width: 0; }
+  .page-heading-actions { flex-wrap: wrap; }
+  .page-heading-actions .button { min-width: 0; flex: 1 1 150px; }
+  .profile-intro > div, .summary-doctor > div, .doctor-detail,
+  .pay-option-body, .field-group, .banner { min-width: 0; }
+  .profile-intro h2, .profile-intro p, .summary-line strong,
+  .banner, .secure-note, .consult-footer { overflow-wrap: anywhere; }
+  .booking-section, .slot-group, .slot-grid { min-width: 0; max-width: 100%; }
+  .slot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .slot { width: 100%; min-width: 0; padding-inline: 8px; }
+  .pay-option { align-items: flex-start; }
+  .pay-option .bkash-mark { margin-left: auto; }
+  .consult-footer { flex-direction: column; align-items: flex-start; }
+  .availability-table-wrap, .rx-table-wrap, .directory-table { max-width: 100%; overflow-x: auto; }
+}
+
 /* --- Users who prefer less motion ------------------------------------------ */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

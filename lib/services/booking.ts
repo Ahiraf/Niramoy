@@ -17,6 +17,7 @@
  */
 
 import { audit } from "../audit";
+import { getEnv } from "../config/env";
 
 import { isAppointmentConflict, isPatientDoubleBooking } from "../db/errors";
 import { withRetry } from "../db/retry";
@@ -28,7 +29,39 @@ import * as directory from "../repositories/doctors";
 import { canBook, canCancel, generateSlots, type Slot } from "../scheduling/engine";
 import type { Principal } from "../security/authz";
 
-const SLOT_HORIZON_DAYS = 60;
+// Today through the same local calendar date one month later.
+const SLOT_HORIZON_DAYS = 30;
+const DEMO_START_MINUTE = 0;
+const DEMO_END_MINUTE = 24 * 60;
+
+/**
+ * Presentation mode keeps the patient booking screen usable even when a
+ * doctor has not published a calendar for the date being demonstrated. It is
+ * intentionally server-side and is enabled only by the explicit DEMO_MODE
+ * flag; normal deployments continue to use the doctor's real schedule.
+ */
+function demoAvailability(consultationMinutes: number) {
+  const timezone = getEnv().DISPLAY_TIMEZONE;
+  return Array.from({ length: 7 }, (_, weekday) => ({
+    weekday,
+    startMinute: DEMO_START_MINUTE,
+    endMinute: DEMO_END_MINUTE,
+    slotMinutes: consultationMinutes,
+    bufferMinutes: 0,
+    timezone,
+  }));
+}
+
+function bookingLeadMinutes(config: DoctorSchedulingConfig): number {
+  return demoBookingEnabled() ? 0 : config.leadMinutes;
+}
+
+function demoBookingEnabled(): boolean {
+  const env = getEnv();
+  // Test fixtures opt into this explicitly so scheduling tests still exercise
+  // the real published-hours path by default.
+  return env.demoMode || (!env.isTest && env.allowDemoProfiles);
+}
 
 export interface DoctorSchedulingConfig {
   id: string;
@@ -70,11 +103,15 @@ export async function availableSlots(
   const rangeStart = new Date(now);
   const rangeEnd = new Date(now.getTime() + days * 86_400_000);
 
-  const [rules, exceptions, booked] = await Promise.all([
+  const [publishedRules, publishedExceptions, booked] = await Promise.all([
     directory.getAvailability(doctorId),
     directory.getAvailabilityExceptions(doctorId, rangeStart, rangeEnd),
     appointments.bookedIntervals(doctorId, rangeStart, rangeEnd),
   ]);
+
+  const demoMode = demoBookingEnabled();
+  const rules = demoMode ? demoAvailability(config.consultationMinutes) : publishedRules;
+  const exceptions = demoMode ? [] : publishedExceptions;
 
   const slots = generateSlots({
     rules,
@@ -83,7 +120,7 @@ export async function availableSlots(
     rangeStart,
     rangeEnd,
     now,
-    leadMinutes: config.leadMinutes,
+    leadMinutes: bookingLeadMinutes(config),
   });
 
   /*
@@ -95,8 +132,16 @@ export async function availableSlots(
    * cases — a confident, specific claim that is simply untrue in the second,
    * and it sends the patient to a waitlist for slots that will never free up
    * because they were never created.
+   *
+   * A one-off clinic counts as a published schedule. A doctor who has set no
+   * weekly hours but opened a single Thursday evening HAS published hours, and
+   * telling that patient "this doctor has not set a schedule" while the slots
+   * sit there on the screen is the same wrong answer in the other direction.
    */
-  return Object.assign(slots, { hasPublishedHours: rules.length > 0 });
+  const hasPublishedHours = demoMode ||
+    rules.length > 0 || exceptions.some((exception) => exception.type === "extra");
+
+  return Object.assign(slots, { hasPublishedHours });
 }
 
 export interface BookInput {
@@ -162,7 +207,7 @@ export async function book(
     requestedStart: requested,
     availableSlots: slots,
     now,
-    leadMinutes: config.leadMinutes,
+    leadMinutes: bookingLeadMinutes(config),
     existing,
   });
 
@@ -329,7 +374,7 @@ export async function reschedule(
     requestedStart: requested,
     availableSlots: slots,
     now,
-    leadMinutes: config.leadMinutes,
+    leadMinutes: bookingLeadMinutes(config),
   });
   if (!check.ok) {
     throw new AppError(check.reason === "slot_unavailable" ? "SLOT_UNAVAILABLE" : "INVALID_TIME", {

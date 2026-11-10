@@ -8,6 +8,7 @@
  * sees it, with the rating on the profile reflecting it.
  */
 import { GET as doctorGet } from "../../app/api/doctors/[id]/route";
+import { GET as doctorReviewsGet } from "../../app/api/doctor/reviews/route";
 import { GET as reviewsGet, POST as reviewPost } from "../../app/api/reviews/route";
 import { eq } from "drizzle-orm";
 import * as t from "../../lib/db/schema";
@@ -36,6 +37,32 @@ const completedVisit = (): Promise<string> =>
   });
 
 describe("a patient reviews a doctor, and other patients see it", () => {
+  it("lets the doctor see their own published reviews only", async () => {
+    const appointmentId = await completedVisit();
+    await call(
+      reviewPost,
+      requestAs(world.patientA, `${BASE}/api/reviews`, {
+        method: "POST",
+        body: JSON.stringify({ appointmentId, rating: 5, comment: "Very clear advice." }),
+      }),
+    );
+
+    const own = await call<{ reviews: { rating: number; comment: string; patientName: string }[] }>(
+      doctorReviewsGet,
+      requestAs(world.doctor, `${BASE}/api/doctor/reviews?doctorId=${world.otherDoctor.doctorId}`),
+    );
+    expect(own.status).toBe(200);
+    expect(own.body.reviews).toHaveLength(1);
+    expect(own.body.reviews[0]).toMatchObject({ rating: 5, comment: "Very clear advice." });
+
+    const other = await call<{ reviews: unknown[] }>(
+      doctorReviewsGet,
+      requestAs(world.otherDoctor, `${BASE}/api/doctor/reviews`),
+    );
+    expect(other.status).toBe(200);
+    expect(other.body.reviews).toHaveLength(0);
+  });
+
   it("shows the written review on the doctor's public profile", async () => {
     const appointmentId = await completedVisit();
 

@@ -107,9 +107,28 @@ export const api = {
 
   doctors: (filters) => request(`/api/doctors${qs(filters)}`),
   doctor: (id) => request(`/api/doctors/${id}`),
+  updateDoctorProfile: (body) => request("/api/doctor/profile", { method: "PATCH", body }),
   slots: (id, days = 14) => request(`/api/doctors/${id}/slots${qs({ days })}`),
   doctorAvailability: () => request("/api/doctor/availability"),
+  doctorReviews: () => request("/api/doctor/reviews"),
   addDoctorAvailability: (body) => request("/api/doctor/availability", { method: "POST", body }),
+  updateDoctorAvailability: (id, body) =>
+    request(`/api/doctor/availability?id=${encodeURIComponent(id)}`, { method: "PATCH", body }),
+  removeDoctorAvailability: (id) =>
+    request(`/api/doctor/availability?id=${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  /*
+   * Date-specific availability: a one-off clinic, or time taken away. Separate
+   * endpoint from the weekly rules because it answers a different question —
+   * "what is different about this date", not "when do I normally work".
+   */
+  doctorAvailabilityExceptions: () => request("/api/doctor/availability/exceptions"),
+  addDoctorAvailabilityException: (body) =>
+    request("/api/doctor/availability/exceptions", { method: "POST", body }),
+  removeDoctorAvailabilityException: (id) =>
+    request(`/api/doctor/availability/exceptions?id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
 
   appointments: (filters) => request(`/api/appointments${qs(filters)}`),
   book: (body) => request("/api/appointments", { method: "POST", body }),

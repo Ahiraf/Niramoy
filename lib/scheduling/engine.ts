@@ -39,6 +39,15 @@ export interface AvailabilityException {
   /** Local calendar date, "YYYY-MM-DD". */
   date: string;
   type: "block" | "extra";
+  /**
+   * The window this exception covers, in minutes from local midnight.
+   *
+   * Required for `extra`. For `block` they are OPTIONAL and mean two different
+   * things: both null blocks the WHOLE DAY (leave, a holiday), while a pair
+   * blocks only that range (a hospital round, a meeting) and leaves the rest of
+   * the day bookable. A doctor who is out from 14:00 to 15:00 should not have
+   * to cancel their morning clinic to say so.
+   */
   startMinute?: number | null;
   endMinute?: number | null;
   slotMinutes?: number | null;
@@ -211,7 +220,20 @@ export function generateSlots({
 
   const zone = rules[0]?.timezone ?? exceptions[0]?.timezone ?? "UTC";
 
-  const blocked = new Set(exceptions.filter((e) => e.type === "block").map((e) => e.date));
+  // A block with no window covers the whole day; one with a window is subtracted
+  // from whatever the day would otherwise have offered, below.
+  const blocked = new Set(
+    exceptions
+      .filter((e) => e.type === "block" && (e.startMinute == null || e.endMinute == null))
+      .map((e) => e.date),
+  );
+
+  const blockedIntervals: Interval[] = exceptions
+    .filter((e) => e.type === "block" && e.startMinute != null && e.endMinute != null)
+    .map((e) => ({
+      start: localToUtc(e.date, e.startMinute!, e.timezone),
+      end: localToUtc(e.date, e.endMinute!, e.timezone),
+    }));
   const extrasByDate = new Map<string, AvailabilityException[]>();
   for (const exception of exceptions) {
     if (exception.type !== "extra") continue;
@@ -276,6 +298,13 @@ export function generateSlots({
       if (time <= cutoff) continue; // past, or inside the lead-time window
       if (seen.has(time)) continue; // two rules covering the same time
       if (booked.some((interval) => overlaps(slot, interval))) continue;
+      /*
+       * A timed block subtracts from BOTH the recurring rules and any extra
+       * clinic on that date. Applying it here rather than when the windows are
+       * built is what makes a block that only partly covers a window drop just
+       * the slots it touches.
+       */
+      if (blockedIntervals.some((interval) => overlaps(slot, interval))) continue;
 
       seen.add(time);
       out.push(slot);

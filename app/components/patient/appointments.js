@@ -37,16 +37,38 @@ function PaymentNote({ payment }) {
 }
 
 /**
+ * Still owing money through the wallet.
+ *
+ * An appointment with NO payment row counts: a booking whose checkout never got
+ * off the ground is exactly the case a patient needs to be able to retry, and
+ * treating "no payment" as "nothing to pay" is what left those consultations
+ * with no way to pay for them at all.
+ */
+function unpaidByWallet(a) {
+  if (a.payment && a.payment.method !== "bkash") return false;
+  // Nothing was ever owed, so nothing is outstanding.
+  if (!a.payment && Number(a.fee ?? 0) <= 0) return false;
+  const status = a.payment?.status ?? "pending";
+  return status === "pending" || status === "failed" || status === "cancelled";
+}
+
+/**
  * The one action this appointment needs next.
  *
  * Ordered by what is blocking: an unpaid consultation needs paying, a
  * confirmed one needs joining, a finished one needs a review. Everything else
  * on the card is available, just not competing.
  */
-function primaryAction(a, { onPay, onJoinCall, setReviewing, onNavigate }) {
+function primaryAction(a, { onPay, onJoinCall, setReviewing, onNavigate, payingId }) {
   if (a.status === "confirmed") {
-    if (a.payment?.method === "bkash" && a.payment.status === "pending") {
-      return { label: "Pay with bKash", tone: "primary", onClick: () => onPay?.(a) };
+    if (unpaidByWallet(a)) {
+      const busy = payingId === a.id;
+      return {
+        label: busy ? "Opening bKash…" : "Pay with bKash",
+        tone: "primary",
+        disabled: busy,
+        onClick: () => onPay?.(a),
+      };
     }
     return {
       label: "Join call",
@@ -85,14 +107,12 @@ function secondaryActions(a, {
   };
 
   if (a.status === "confirmed") {
-    const unpaid = a.payment?.method === "bkash" && a.payment.status === "pending";
+    const unpaid = unpaidByWallet(a);
     return [
       // Whichever of pay/join is not the primary action stays reachable here.
       unpaid
         ? { label: "Join call", icon: "video", onClick: () => onJoinCall(a) }
-        : a.payment?.status === "pending"
-          ? { label: "Pay now", icon: "send", onClick: () => onPay?.(a) }
-          : null,
+        : { label: "Pay now", icon: "send", onClick: () => onPay?.(a) },
       calendar,
       { label: "Reschedule", icon: "clock", onClick: () => onReschedule(a) },
       policy,
@@ -120,7 +140,7 @@ function secondaryActions(a, {
 
 export function Appointments({
   loading, appointments, waitlist, onNavigate, onCancel, onReschedule,
-  onJoinCall, onReview, onLeaveWaitlist, onPay,
+  onJoinCall, onReview, onLeaveWaitlist, onPay, payingId,
 }) {
   const [tab, setTab] = useState("upcoming");
   const [reviewing, setReviewing] = useState(null);
@@ -215,9 +235,15 @@ export function Appointments({
                   * for, and put Cancel as close to the thumb as Join.
                   */}
                 {(() => {
-                  const primary = primaryAction(a, { onPay, onJoinCall, setReviewing, onNavigate });
+                  const primary = primaryAction(a, {
+                    onPay, onJoinCall, setReviewing, onNavigate, payingId,
+                  });
                   return primary ? (
-                    <button className={`button ${primary.tone} small`} onClick={primary.onClick}>
+                    <button
+                      className={`button ${primary.tone} small`}
+                      onClick={primary.onClick}
+                      disabled={Boolean(primary.disabled)}
+                    >
                       {primary.icon && <Icon name={primary.icon} size={12} />}
                       {primary.label}
                     </button>
@@ -378,8 +404,6 @@ export function Consultation({ appointment, onNavigate, onComplete }) {
   /** The server-issued join grant. Present once the room has been opened. */
   const call = appointment?.call;
   const [elapsed, setElapsed] = useState(0);
-  const [micOn, setMicOn] = useState(true);
-  const [camOn, setCamOn] = useState(true);
 
   useEffect(() => {
     const t = setInterval(() => setElapsed((s) => s + 1), 1000);
@@ -401,6 +425,8 @@ export function Consultation({ appointment, onNavigate, onComplete }) {
 
   /** A provider that carries media gives us a URL we can frame. */
   const embedUrl = call?.embedUrl || null;
+  /** The room was opened outside its appointment window, because DEMO_MODE. */
+  const outsideWindow = Boolean(call?.demoMode);
 
   return (
     <>
@@ -418,6 +444,7 @@ export function Consultation({ appointment, onNavigate, onComplete }) {
         <div className={`consult-stage${embedUrl ? " embedded" : ""}`}>
           <div className="consult-status">
             <span className="live-dot" /> Secure room · {mmss}
+            {outsideWindow && <span> · demo mode</span>}
           </div>
 
           {embedUrl ? (
@@ -442,34 +469,28 @@ export function Consultation({ appointment, onNavigate, onComplete }) {
               <strong>{peer.name}</strong>
               <span>{peer.subtitle}</span>
               <p className="consult-hint">
-                No video provider is configured, so this is a demo room — the
-                access token is real and scoped to you, but no media is carried.
-                Set VIDEO_PROVIDER=jitsi to hold a real two-way call.
+                No video provider is configured, so this room carries no media.
+                The access token is real and scoped to you — the authorization
+                path is exactly the one a real call uses — but there is no
+                camera or microphone on either side. Set VIDEO_PROVIDER=jitsi to
+                hold a real two-way call.
               </p>
             </div>
           )}
 
           {!embedUrl && <div className="consult-self">You</div>}
 
+          {/*
+            * No mute or camera button here.
+            *
+            * When a provider carries the call it draws its own controls inside
+            * the frame, and a second set beside them could not reach the media.
+            * When no provider is configured there is no media to mute at all.
+            * Either way a button here could only pretend — and on a
+            * consultation screen a patient who believes they are muted says
+            * things they would not otherwise say.
+            */}
           <div className="consult-controls">
-            {!embedUrl && (
-              <>
-                <button
-                  className={`consult-button ${micOn ? "" : "off"}`}
-                  onClick={() => setMicOn((v) => !v)}
-                  aria-label={micOn ? "Mute microphone" : "Unmute microphone"}
-                >
-                  <Icon name="mic" size={17} />
-                </button>
-                <button
-                  className={`consult-button ${camOn ? "" : "off"}`}
-                  onClick={() => setCamOn((v) => !v)}
-                  aria-label={camOn ? "Turn camera off" : "Turn camera on"}
-                >
-                  <Icon name="video" size={17} />
-                </button>
-              </>
-            )}
             <button
               className="button leave-button"
               onClick={async () => {

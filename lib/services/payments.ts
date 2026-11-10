@@ -7,7 +7,7 @@
  * successful.
  */
 
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 
 import { audit } from "../audit";
 import { getDb } from "../db/client";
@@ -111,17 +111,61 @@ export async function startPayment(
     throw new AppError("NOT_ELIGIBLE", { message: "That consultation is no longer scheduled." });
   }
 
-  // Client-supplied, so a retried request cannot double-charge.
-  const idempotencyKey = String(input.idempotencyKey ?? "") || `appt:${appointment.id}`;
+  /*
+   * The idempotency key, NAMESPACED to this appointment.
+   *
+   * The column is globally unique, so a client-supplied key is otherwise a
+   * string one patient can use to collide with another's — reading their
+   * payment back on a match, or squatting the key so their checkout cannot
+   * open. Prefixing it with the appointment id makes both impossible while
+   * keeping what the key is actually for: two identical clicks from the same
+   * patient on the same consultation de-duplicate.
+   */
+  const clientKey = String(input.idempotencyKey ?? "").trim().slice(0, 80);
+  const baseKey = clientKey ? `appt:${appointment.id}:${clientKey}` : `appt:${appointment.id}`;
 
-  const existing = await db
-    .select()
-    .from(t.payments)
-    .where(eq(t.payments.idempotencyKey, idempotencyKey))
-    .limit(1);
+  /*
+   * The most recent attempt on this consultation, whatever it was keyed as.
+   *
+   * Looked up by APPOINTMENT rather than by key, because a retry is stored
+   * under a new key (`…#2`) and a lookup by the key the client happens to have
+   * sent would keep finding the spent first attempt and open a fresh gateway
+   * session on every click.
+   */
+  const prior = (
+    await db
+      .select()
+      .from(t.payments)
+      .where(
+        and(
+          eq(t.payments.appointmentId, appointment.id),
+          eq(t.payments.patientId, principal.patientId),
+        ),
+      )
+      .orderBy(desc(t.payments.createdAt))
+      .limit(1)
+  )[0];
 
-  // Idempotent replay: the same session, with the same deadline it already had.
-  if (existing[0]) return toView(existing[0]);
+  /*
+   * A replay of a LIVE payment returns that payment — including, for a hosted
+   * gateway, a link to its page that still works.
+   *
+   * This is what made the pay button dead after the first click: the replay
+   * path returned `redirectUrl: null`, so the checkout sheet saw a redirect
+   * provider with nowhere to send the payer and fell back to rendering the
+   * two-step wallet form — whose Confirm posts to an endpoint a redirect
+   * provider refuses by design.
+   */
+  if (prior && prior.method === method) {
+    const resumed = await resumeExisting(prior, appointment, context);
+    if (resumed) return resumed;
+  }
+
+  /*
+   * Nothing live to resume, so this is a genuinely new attempt and needs its
+   * own key, and therefore its own gateway transaction id.
+   */
+  const attemptKey = prior ? await nextAttemptKey(appointment.id, baseKey) : baseKey;
 
   const amount = Number(appointment.feeAmount);
 
@@ -138,7 +182,7 @@ export async function startPayment(
         description: `Niramoy consultation ${appointment.reference}`,
         method,
         returnUrl: `${context.appUrl}/appointments`,
-        idempotencyKey,
+        idempotencyKey: attemptKey,
       });
 
   let paymentId: string;
@@ -160,18 +204,29 @@ export async function startPayment(
         // A real provider's intent starts pending regardless of what it claims;
         // only a verified webhook advances it.
         status: provider.isMock ? intent.status : "pending",
-        idempotencyKey,
+        idempotencyKey: attemptKey,
       })
       .returning({ id: t.payments.id, createdAt: t.payments.createdAt });
     paymentId = inserted[0]!.id;
     createdAt = inserted[0]!.createdAt;
   } catch (err) {
     if (isUniqueViolation(err)) {
-      // Lost a race with an identical request; return the winner.
+      /*
+       * Lost a race with an identical request; return the winner. Scoped to
+       * this patient and appointment like every other read of this table — an
+       * unscoped lookup by key here would hand back whatever row happened to
+       * hold it, which is the leak the namespacing above exists to prevent.
+       */
       const again = await db
         .select()
         .from(t.payments)
-        .where(eq(t.payments.idempotencyKey, idempotencyKey))
+        .where(
+          and(
+            eq(t.payments.idempotencyKey, attemptKey),
+            eq(t.payments.patientId, principal.patientId),
+            eq(t.payments.appointmentId, appointment.id),
+          ),
+        )
         .limit(1);
       if (again[0]) {
         paymentId = again[0].id;
@@ -212,6 +267,130 @@ export async function startPayment(
         ? sessionExpiresAt(createdAt).toISOString()
         : null,
   };
+}
+
+/** The appointment fields a payment is opened against. */
+interface PayableAppointment {
+  id: string;
+  reference: string;
+  currency: string;
+}
+
+/**
+ * The next key in an appointment's attempt series.
+ *
+ * Counting rows rather than parsing suffixes: the count is what the unique
+ * index ultimately arbitrates anyway, and two racing retries computing the same
+ * key is handled by the unique-violation branch above rather than by being
+ * clever here.
+ */
+async function nextAttemptKey(appointmentId: string, baseKey: string): Promise<string> {
+  const rows = await getDb()
+    .select({ n: sql<number>`count(*)::int` })
+    .from(t.payments)
+    .where(eq(t.payments.appointmentId, appointmentId));
+  return `${baseKey}#${(rows[0]?.n ?? 1) + 1}`;
+}
+
+/**
+ * What to do with a payment row that already exists for this appointment.
+ *
+ * Returns a view to hand straight back, or null meaning "this attempt is spent,
+ * open a fresh one". The distinction is the whole of retry: a patient must be
+ * able to pay for an appointment they failed to pay for the first time, without
+ * that ever becoming a second charge for one they DID pay for.
+ */
+async function resumeExisting(
+  payment: PaymentRow,
+  appointment: PayableAppointment,
+  context: { appUrl: string },
+): Promise<PaymentView | null> {
+  const db = getDb();
+  const provider = getPaymentProvider();
+
+  // Settled, in either direction. There is nothing to restart.
+  if (payment.status === "succeeded" || payment.status === "refunded") return toView(payment);
+  // Cash never reaches a gateway; the row only records the patient's choice.
+  if (payment.method === "cash") return toView(payment);
+
+  /*
+   * A provider swap since this row was written. Its transaction id means
+   * nothing to the gateway now configured, so it can be neither resumed nor
+   * reconciled against it.
+   */
+  const sameProvider = payment.provider === provider.name;
+
+  const live =
+    payment.status === "pending" &&
+    Date.now() <= sessionExpiresAt(payment.createdAt).getTime();
+
+  if (live && sameProvider && provider.flow === "redirect") {
+    /*
+     * Re-open the SAME transaction rather than a second one. `transactionId` is
+     * derived from the idempotency key, so this reaches the session the payer
+     * already has — which is the difference between resuming a payment and
+     * creating one they could pay twice.
+     */
+    const intent = await provider.createPayment({
+      amount: Number(payment.amount),
+      currency: payment.currency,
+      reference: appointment.reference,
+      description: `Niramoy consultation ${appointment.reference}`,
+      method: "bkash",
+      returnUrl: `${context.appUrl}/appointments`,
+      idempotencyKey: payment.idempotencyKey,
+    });
+    return toView(payment, intent.redirectUrl);
+  }
+
+  if (live) return toView(payment);
+
+  /* ---- Spent: failed, cancelled, or a lapsed session -------------------- */
+
+  /*
+   * Ask the GATEWAY about the old transaction before opening a new one.
+   *
+   * A pending row can mean the payer never paid — or that they paid and the IPN
+   * never arrived. Opening a second session on the strength of our own row is
+   * exactly how a patient pays twice, and our row is the one piece of evidence
+   * that cannot tell those two cases apart.
+   */
+  if (sameProvider && provider.flow === "redirect" && payment.providerPaymentId) {
+    const atGateway = await provider
+      .getPaymentStatus(payment.providerPaymentId)
+      .catch(() => null);
+
+    if (atGateway === "succeeded") {
+      logger.warn("a spent payment session turns out to have settled at the gateway", {
+        paymentId: payment.id,
+      });
+      await db
+        .update(t.payments)
+        .set({ providerStatusRaw: "reconciled:succeeded", updatedAt: new Date() })
+        .where(eq(t.payments.id, payment.id));
+
+      /*
+       * Deliberately NOT marked succeeded here. This call reports a status, not
+       * an amount, and the amount check is the control that catches a tampered
+       * payment. The IPN, or the payer's own return, settles it properly.
+       */
+      throw new AppError("ALREADY_EXISTS", {
+        message:
+          "bKash has already taken a payment for this consultation. Give it a moment and refresh — we're confirming it now.",
+      });
+    }
+  }
+
+  // Close the lapsed row so it can never be confirmed later, then let the
+  // caller open a fresh attempt.
+  if (payment.status === "pending") {
+    await db
+      .update(t.payments)
+      .set({ status: "cancelled", failureReason: "session_expired", updatedAt: new Date() })
+      .where(and(eq(t.payments.id, payment.id), eq(t.payments.status, "pending")));
+  }
+
+  return null;
 }
 
 /**
@@ -322,7 +501,14 @@ export async function executePayment(
 
 type PaymentRow = typeof t.payments.$inferSelect;
 
-function toView(payment: PaymentRow): PaymentView {
+/**
+ * A stored row as the client sees it.
+ *
+ * `redirectUrl` is passed in rather than read from the row: a hosted gateway
+ * page is a short-lived session, not a property of the payment, and storing one
+ * would mean handing back a link that had quietly stopped working.
+ */
+function toView(payment: PaymentRow, redirectUrl: string | null = null): PaymentView {
   const provider = getPaymentProvider();
   // Cash never reaches a gateway, so it inherits neither the flow nor the
   // sandbox labelling of whichever provider happens to be configured.
@@ -337,7 +523,7 @@ function toView(payment: PaymentRow): PaymentView {
     isMock: payment.isMock === "true",
     sandbox: viaGateway && provider.sandbox,
     flow: viaGateway ? provider.flow : "two-step",
-    redirectUrl: null,
+    redirectUrl,
     expiresAt:
       payment.status === "pending" && payment.method === "bkash"
         ? sessionExpiresAt(payment.createdAt).toISOString()
