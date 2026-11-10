@@ -211,8 +211,15 @@ const schema = z
       cronSecret: raw.CRON_SECRET ?? (isProd ? undefined : "dev-cron-secret"),
       /** Never defaulted on. An unlisted room is a decision, not a fallback. */
       allowPublicVideoRoom: raw.ALLOW_PUBLIC_VIDEO_ROOM === "true",
-      /** Never defaulted on, in any environment. See DEMO_MODE above. */
-      demoMode: raw.DEMO_MODE === "true",
+      /**
+       * A production deployment that explicitly enables synthetic demo
+       * profiles is also a presentation deployment. Keeping booking mode on
+       * there prevents the patient demo from depending on a second Vercel
+       * switch; DEMO_MODE=true remains the explicit override for other setups.
+       */
+      demoMode:
+        raw.DEMO_MODE === "true" ||
+        (raw.APP_ENV === "production" && raw.ALLOW_DEMO_PROFILES === "true"),
       /** Demo profiles are on everywhere except production, unless overridden. */
       allowDemoProfiles:
         raw.ALLOW_DEMO_PROFILES === undefined ? !isProd : raw.ALLOW_DEMO_PROFILES === "true",

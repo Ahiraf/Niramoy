@@ -223,6 +223,18 @@ describe("what is refused", () => {
 });
 
 describe("presentation booking mode", () => {
+  it("includes the current Bangladesh date when it still has future demo slots", async () => {
+    await clearWeeklyHours();
+    process.env.DEMO_MODE = "true";
+    resetEnvCache();
+
+    const now = new Date("2026-11-10T03:00:00.000Z"); // 09:00 in Bangladesh
+    const today = localDateKey(now, ZONE);
+    const slots = await availableSlots(world.doctor.doctorId!, { days: 1, now });
+
+    expect(slots.some((slot) => localDateKey(slot.start, ZONE) === today)).toBe(true);
+  });
+
   it("offers every future date even when the doctor has no published schedule", async () => {
     await clearWeeklyHours();
     process.env.DEMO_MODE = "true";
