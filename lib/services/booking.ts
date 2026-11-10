@@ -29,9 +29,10 @@ import * as directory from "../repositories/doctors";
 import { canBook, canCancel, generateSlots, type Slot } from "../scheduling/engine";
 import type { Principal } from "../security/authz";
 
-const SLOT_HORIZON_DAYS = 60;
-const DEMO_START_MINUTE = 8 * 60;
-const DEMO_END_MINUTE = 20 * 60;
+// Today through the same local calendar date one month later.
+const SLOT_HORIZON_DAYS = 30;
+const DEMO_START_MINUTE = 0;
+const DEMO_END_MINUTE = 24 * 60;
 
 /**
  * Presentation mode keeps the patient booking screen usable even when a
@@ -52,7 +53,14 @@ function demoAvailability(consultationMinutes: number) {
 }
 
 function bookingLeadMinutes(config: DoctorSchedulingConfig): number {
-  return getEnv().demoMode ? 0 : config.leadMinutes;
+  return demoBookingEnabled() ? 0 : config.leadMinutes;
+}
+
+function demoBookingEnabled(): boolean {
+  const env = getEnv();
+  // Test fixtures opt into this explicitly so scheduling tests still exercise
+  // the real published-hours path by default.
+  return env.demoMode || (!env.isTest && env.allowDemoProfiles);
 }
 
 export interface DoctorSchedulingConfig {
@@ -101,7 +109,7 @@ export async function availableSlots(
     appointments.bookedIntervals(doctorId, rangeStart, rangeEnd),
   ]);
 
-  const demoMode = getEnv().demoMode;
+  const demoMode = demoBookingEnabled();
   const rules = demoMode ? demoAvailability(config.consultationMinutes) : publishedRules;
   const exceptions = demoMode ? [] : publishedExceptions;
 

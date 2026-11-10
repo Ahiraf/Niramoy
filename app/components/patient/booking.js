@@ -12,13 +12,11 @@ const PERIODS = ["Morning", "Afternoon", "Evening"];
 /**
  * How far ahead to ask for slots.
  *
- * Wide enough to reach a one-off clinic a doctor opened for a particular date
- * weeks out — a three-week window silently hid those, and the doctor had no way
- * to tell that the date they had published was not being offered to anyone. The
- * server caps this at its own horizon, so asking for more is not a way to make
- * it do more work than it means to.
+ * Show the local calendar from today through the same date one month later.
+ * The server uses the same horizon, so the date cards and booking validation
+ * cannot disagree about the range available during a demonstration.
  */
-const SLOT_DAYS = 60;
+const SLOT_DAYS = 30;
 
 const PAYMENT_METHODS = [
   { value: "bkash", label: "bKash", hint: "Confirm in the wallet you already use." },
