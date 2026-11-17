@@ -14,7 +14,7 @@
  *     consent and a retention policy, not a flag someone flips (brief §14).
  */
 
-import { createHmac, randomBytes } from "node:crypto";
+import { createHmac, createSign, randomBytes } from "node:crypto";
 
 import { getEnv } from "../config/env";
 import { AppError } from "../errors";
@@ -268,9 +268,21 @@ function jitsiPublicProvider(domain: string): VideoProvider {
  * Jitsi with JWT authentication. The secret signs a token naming the room and
  * the participant; it never leaves the server.
  */
-function jitsiProvider(appId: string, secret: string, domain: string): VideoProvider {
+function jitsiProvider(apiKey: string, secret: string, domain: string): VideoProvider {
   const base64url = (value: object): string =>
     Buffer.from(JSON.stringify(value)).toString("base64url");
+  const isJaas = secret.includes("BEGIN") && apiKey.includes("/");
+  const appId = isJaas ? apiKey.split("/", 1)[0]! : apiKey;
+
+  const sign = (header: object, payload: object): string => {
+    const encodedHeader = base64url(header);
+    const encodedPayload = base64url(payload);
+    const signingInput = `${encodedHeader}.${encodedPayload}`;
+    const signature = isJaas
+      ? createSign("RSA-SHA256").update(signingInput).sign(secret, "base64url")
+      : createHmac("sha256", secret).update(signingInput).digest("base64url");
+    return `${signingInput}.${signature}`;
+  };
 
   return {
     name: "jitsi",
@@ -286,25 +298,34 @@ function jitsiProvider(appId: string, secret: string, domain: string): VideoProv
     async getJoinToken({ room, userId, displayName, role, ttlSeconds }) {
       const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
 
-      const header = base64url({ alg: "HS256", typ: "JWT" });
-      const payload = base64url({
-        aud: appId,
+      const nowSeconds = Math.floor(Date.now() / 1000);
+      const header = {
+        alg: isJaas ? "RS256" : "HS256",
+        ...(isJaas ? { kid: apiKey } : {}),
+        typ: "JWT",
+      };
+      const payload = {
+        aud: isJaas ? "jitsi" : appId,
         iss: appId,
-        sub: domain,
+        ...(isJaas ? { sub: appId } : {}),
         room: room.roomName,
         exp: Math.floor(expiresAt.getTime() / 1000),
-        nbf: Math.floor(Date.now() / 1000) - 10,
+        nbf: nowSeconds - 10,
         context: {
-          user: { id: userId, name: displayName, moderator: role === "doctor" },
+          user: {
+            id: userId,
+            name: displayName,
+            moderator: isJaas ? String(role === "doctor") : role === "doctor",
+          },
           features: { recording: false, livestreaming: false, transcription: false },
+          ...(isJaas ? { room: { regex: false } } : {}),
         },
-      });
-      const signature = createHmac("sha256", secret)
-        .update(`${header}.${payload}`)
-        .digest("base64url");
+      };
+      const jwt = sign(header, payload);
 
-      const url = `https://${domain}/${room.roomName}`;
-      const jwt = `${header}.${payload}.${signature}`;
+      const url = isJaas
+        ? `https://${domain}/${appId}/${room.roomName}`
+        : `https://${domain}/${room.roomName}`;
 
       return {
         url,
@@ -333,10 +354,11 @@ export function getVideoProvider(): VideoProvider {
   if (env.videoProvider === "daily" && env.VIDEO_API_KEY) {
     cached = dailyProvider(env.VIDEO_API_KEY, env.VIDEO_DOMAIN);
   } else if (env.videoProvider === "jitsi" && env.VIDEO_API_KEY && env.VIDEO_API_SECRET) {
+    const isJaas = env.VIDEO_API_KEY.includes("/") && env.VIDEO_API_SECRET.includes("BEGIN");
     cached = jitsiProvider(
       env.VIDEO_API_KEY,
       env.VIDEO_API_SECRET,
-      env.VIDEO_DOMAIN ?? "meet.jit.si",
+      env.VIDEO_DOMAIN ?? (isJaas ? "8x8.vc" : "meet.jit.si"),
     );
   } else if (env.videoProvider === "jitsi") {
     // Asked for Jitsi with no credentials. The public service can carry the

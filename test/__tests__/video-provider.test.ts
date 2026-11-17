@@ -9,6 +9,7 @@
 import { getEnv, resetEnvCache } from "../../lib/config/env";
 import { getVideoProvider, resetVideoProvider } from "../../lib/video/provider";
 import { contentSecurityPolicy } from "../../lib/security/headers";
+import { generateKeyPairSync } from "node:crypto";
 
 const ORIGINAL = { ...process.env };
 
@@ -72,6 +73,29 @@ describe("video provider selection", () => {
     // an outsider could know or guess.
     expect(a.roomName).not.toBe(b.roomName);
     expect(a.roomName.length).toBeGreaterThan(30);
+  });
+
+  it("creates a JaaS JWT that makes the doctor the moderator", async () => {
+    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    withEnv({
+      VIDEO_PROVIDER: "jitsi",
+      VIDEO_API_KEY: "vpaas-magic-cookie-demo/app-key",
+      VIDEO_API_SECRET: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+      VIDEO_DOMAIN: undefined,
+    });
+
+    const provider = getVideoProvider();
+    const grant = await provider.getJoinToken({ ...participant, room, role: "doctor" });
+    const token = new URL(grant.embedUrl!).searchParams.get("jwt")!;
+    const [header, payload, signature] = token.split(".") as [string, string, string];
+
+    expect(provider.name).toBe("jitsi");
+    expect(grant.embedUrl).toContain("https://8x8.vc/vpaas-magic-cookie-demo/niramoy-test");
+    expect(JSON.parse(Buffer.from(header, "base64url").toString()).alg).toBe("RS256");
+    expect(JSON.parse(Buffer.from(header, "base64url").toString()).kid).toBe("vpaas-magic-cookie-demo/app-key");
+    expect(JSON.parse(Buffer.from(payload, "base64url").toString()).aud).toBe("jitsi");
+    expect(JSON.parse(Buffer.from(payload, "base64url").toString()).context.user.moderator).toBe("true");
+    expect(signature).toBeTruthy();
   });
 
   it("opens the CSP only to the provider that is configured", () => {
