@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { TelemedicineScene } from "./telemedicine-scene.js";
 
 import { Icon } from "./icons.js";
 import { LanguageSwitch } from "./shell.js";
@@ -118,16 +118,13 @@ export function Landing({ stats, onSignIn, onSignUp }) {
           copy of the sentence beside it.
         */}
         <aside className="landing-hero-art">
-          <Image
-            src="/landing-hero.png"
-            alt={t("landing.hero.alt")}
-            width={586}
-            height={880}
-            sizes="(max-width: 1080px) 100vw, 44vw"
-            priority
-          />
+          <TelemedicineScene lang={lang} />
         </aside>
       </section>
+
+      <a className="landing-scroll" href="#how">
+        {t("landing.nav.how")} <span aria-hidden="true">↓</span>
+      </a>
 
       <section className="landing-section" id="roles">
         <div className="landing-head">

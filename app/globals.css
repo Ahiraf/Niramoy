@@ -669,10 +669,47 @@ textarea.field, .textarea { height: auto; padding: 10px 12px; line-height: 1.55;
 
 /* --- Landing -------------------------------------------------------------- */
 .landing { min-height: 100vh; background: var(--cream); }
+html:has(.landing) { overflow-y: scroll; scroll-padding-top: 150px; }
+body:has(.landing) { height: auto; overflow-y: visible; }
+.landing section[id] { scroll-margin-top: 150px; }
+.landing-scroll { display: flex; width: fit-content; align-items: center; gap: 14px; margin: 0 auto 28px; padding: 12px 20px; color: var(--teal-dark); font-size: 16px; font-weight: 650; }
+.landing-scroll span { font-size: 24px; }
+.tele-scene { position: relative; width: 100%; max-width: 520px; aspect-ratio: 1; perspective: 1000px; isolation: isolate; }
+.tele-device { position: absolute; inset: 12% 12% 14%; background: #fff; border-radius: 28px; padding: 14px; border: 2px solid #e1efea; box-shadow: 9px 10px 0 #b0d8ce, 20px 28px 40px #163e3526; transform: rotateY(-14deg) rotateX(7deg) rotateZ(-4deg); animation: tele-float 7s ease-in-out infinite; }
+.tele-device-top { display: flex; gap: 5px; align-items: center; height: 26px; }
+.tele-device-top > span { width: 6px; height: 6px; border-radius: 50%; background: #bad9d3; }
+.tele-device-top > i { margin-left: auto; color: #09877b; }
+.tele-screen { position: relative; height: 73%; overflow: hidden; border-radius: 18px; background: radial-gradient(ellipse at 30% 15%, #e6f5e7, #b5dcd4); }
+.tele-cross { position: absolute; top: 12px; right: 20px; font-size: 52px; font-weight: 900; color: #ffffffa8; }
+.tele-doctor { position: absolute; width: 180px; height: 230px; bottom: -10px; left: 50%; transform: translateX(-50%); }
+.tele-hair { position: absolute; left: 48px; top: 4px; width: 85px; height: 96px; background: linear-gradient(120deg,#35484b,#172b30); border-radius: 42px 42px 25px 25px; box-shadow: inset -10px -4px 12px #0003; }
+.tele-face { position: absolute; left: 55px; top: 28px; width: 72px; height: 83px; border-radius: 28px 24px 35px 35px; background: radial-gradient(at 28% 30%,#f7d7b8,#dca880); box-shadow: inset -7px -4px 10px #ac6c4326; z-index: 3; }
+.tele-face i { position: absolute; top: 30px; left: 18px; width: 5px; height: 7px; background: #253a3d; border-radius: 50%; }
+.tele-face i + i { left: 48px; }
+.tele-face span { position: absolute; top: 50px; left: 29px; width: 18px; height: 10px; border-bottom: 3px solid #ae715c; border-radius: 50%; }
+.tele-neck { position: absolute; left: 78px; top: 98px; width: 29px; height: 30px; background: #deb18e; z-index: 2; }
+.tele-coat { position: absolute; bottom: 0; left: 5px; width: 170px; height: 119px; border-radius: 52px 52px 0 0; background: linear-gradient(110deg,#fff 35%,#dceae7); box-shadow: inset -12px 0 14px #9bb8b52e; }
+.tele-shirt { position: absolute; left: 61px; width: 50px; height: 100%; background: #167e78; clip-path: polygon(0 0,100% 0,75% 100%,25% 100%); }
+.tele-stethoscope { position: absolute; top: 8px; left: 45px; width: 81px; height: 63px; border: 5px solid #345158; border-top: 0; border-radius: 0 0 45px 45px; }
+.tele-coat b { position: absolute; right: 24px; bottom: 20px; color: #168a7b; font-size: 25px; }
+.tele-controls { display: flex; justify-content: center; align-items: center; gap: 14px; height: 18%; }
+.tele-controls span { display: grid; place-items: center; width: 35px; height: 35px; border-radius: 50%; background: #e3f2ee; color: #177a72; }
+.tele-controls .tele-end { color: white; background: #d97d74; font-size: 27px; }
+.tele-wave { position: absolute; bottom: 12px; right: 12px; display: flex; align-items: center; gap: 3px; height: 24px; }
+.tele-wave i { width: 3px; height: 14px; border-radius: 3px; background: #24887a; animation: tele-wave 1.3s ease-in-out infinite alternate; }
+.tele-note { position: absolute; display: flex; align-items: center; gap: 12px; padding: 16px; background: #ffffffed; border: 1px solid #d7e9e2; border-radius: 16px; box-shadow: 3px 5px 0 #d2e5de, 0 15px 28px #183e3512; color: #087b71; }
+.tele-note strong { display: block; font-size: 14px; color: #183d43; }
+.tele-note span { display: block; margin-top: 4px; font-size: 11px; color: #597174; }
+.tele-book { top: 2%; left: 0; transform: rotate(-3deg); }
+.tele-rx { bottom: 9%; right: 0; transform: rotate(3deg); }
+.tele-platform { position: absolute; bottom: 1%; left: 15%; width: 70%; height: 12%; border-radius: 50%; background: #d5e9df; box-shadow: 0 10px 0 #bed6cb; z-index: -1; }
+.tele-orbit { position: absolute; inset: 6% 0; border: 1px dashed #a5cbbf; border-radius: 50%; transform: rotate(-22deg); z-index: -1; }
+@keyframes tele-float { 50% { transform: translateY(-10px) rotateY(-8deg) rotateX(3deg) rotateZ(-2deg); } }
+@keyframes tele-wave { to { transform: scaleY(.3); } }
 .landing-nav { position: sticky; top: 0; z-index: 9; display: flex; align-items: center; gap: 28px; padding: 15px 44px; background: rgba(248,250,248,.88); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
 .landing-nav .brand { padding: 0; }
 .landing-links { display: flex; gap: 24px; margin-left: 12px; }
-.landing-links a { color: #647479; font-size: calc(12px * var(--text-scale)); font-weight: 650; }
+.landing-links a { color: #435e64; font-size: calc(16px * var(--text-scale)); font-weight: 650; padding-block: 12px; }
 .landing-links a:hover { color: var(--teal); }
 .landing-nav-actions { margin-left: auto; display: flex; gap: 9px; }
 
@@ -1108,6 +1145,31 @@ body {
   .pay-option .bkash-mark { margin-left: auto; }
   .consult-footer { flex-direction: column; align-items: flex-start; }
   .availability-table-wrap, .rx-table-wrap, .directory-table { max-width: 100%; overflow-x: auto; }
+}
+
+/* Public navigation stays readable and reachable at all widths. */
+.landing-nav { flex-wrap: wrap; gap: 16px 24px; }
+.landing-nav-actions { align-items: center; flex-wrap: wrap; }
+.landing-nav-actions .button, .landing-nav .lang-switch button { font-size: calc(16px * var(--text-scale)); min-height: 44px; }
+@media (max-width: 1180px) {
+  .landing-links { order: 3; width: 100%; justify-content: center; margin-left: 0; }
+}
+@media (max-width: 760px) {
+  .landing-nav { position: relative; padding: 14px 16px; }
+  .landing-links { display: flex; flex-wrap: wrap; gap: 4px 20px; }
+  .landing-nav-actions { width: 100%; margin-left: 0; gap: 8px; }
+  .landing-nav-actions .button.ghost { display: inline-flex; }
+  .landing-links a { font-size: 16px; }
+  .tele-note { padding: 10px; gap: 7px; }
+  .tele-note strong { font-size: 12px; }
+  .tele-note span { font-size: 10px; }
+  .tele-doctor { transform: translateX(-50%) scale(.8); transform-origin: bottom; }
+  .landing-hero { gap: 28px; }
+}
+@media (max-width: 380px) {
+  .tele-doctor { transform: translateX(-50%) scale(.65); }
+  .tele-device { padding: 9px; }
+  .tele-controls span { width: 27px; height: 27px; }
 }
 
 /* --- Users who prefer less motion ------------------------------------------ */
