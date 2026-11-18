@@ -94,6 +94,8 @@ describe("video provider selection", () => {
     expect(JSON.parse(Buffer.from(header, "base64url").toString()).alg).toBe("RS256");
     expect(JSON.parse(Buffer.from(header, "base64url").toString()).kid).toBe("vpaas-magic-cookie-demo/app-key");
     expect(JSON.parse(Buffer.from(payload, "base64url").toString()).aud).toBe("jitsi");
+    expect(JSON.parse(Buffer.from(payload, "base64url").toString()).iss).toBe("chat");
+    expect(JSON.parse(Buffer.from(payload, "base64url").toString()).sub).toBe("vpaas-magic-cookie-demo");
     expect(JSON.parse(Buffer.from(payload, "base64url").toString()).context.user.moderator).toBe("true");
     expect(signature).toBeTruthy();
   });

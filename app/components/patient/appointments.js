@@ -213,7 +213,9 @@ export function Appointments({
                 <span>{a.doctor?.specialty} · {a.type}</span>
                 {a.reason && <span className="appt-reason">“{a.reason}”</span>}
                 <div style={{ marginTop: 8 }}>
-                  <StatusPill status={a.status} />
+                  {a.status === "confirmed" && a.payment?.status === "succeeded"
+                    ? <span className="status confirmed">Appointment confirmed</span>
+                    : <StatusPill status={a.status} />}
                   <PaymentNote payment={a.payment} />
                 </div>
               </div>
@@ -442,10 +444,10 @@ export function Consultation({ appointment, onNavigate, onComplete }) {
 
       <div className="card consult-shell">
         <div className={`consult-stage${embedUrl ? " embedded" : ""}`}>
-          <div className="consult-status">
+          {!embedUrl && <div className="consult-status">
             <span className="live-dot" /> Secure room · {mmss}
             {outsideWindow && <span> · demo mode</span>}
-          </div>
+          </div>}
 
           {embedUrl ? (
             /*
@@ -490,9 +492,20 @@ export function Consultation({ appointment, onNavigate, onComplete }) {
             * consultation screen a patient who believes they are muted says
             * things they would not otherwise say.
             */}
-          <div className="consult-controls">
+        </div>
+
+        <div className="consult-footer">
+          <span className="consult-connection">
+            {embedUrl
+              ? `Secure room · ${mmss}${outsideWindow ? " · demo mode" : ""} · Connected via ${call.provider} · not recorded${call.provider === "jitsi-public" ? " · public room, unlisted" : ""}`
+              : "Recording is off · This conversation is private and encrypted."}
+          </span>
+          <div className="consult-footer-actions">
+            <button className="button secondary small" onClick={() => onNavigate("records")}>
+              <Icon name="file" size={12} />View medical history
+            </button>
             <button
-              className="button leave-button"
+              className={`button ${viewerIsDoctor ? "primary danger" : "ghost"} small leave-button`}
               onClick={async () => {
                 if (viewerIsDoctor && appointment && !(await onComplete(appointment.id))) return;
                 onNavigate("appointments");
@@ -501,17 +514,6 @@ export function Consultation({ appointment, onNavigate, onComplete }) {
               {viewerIsDoctor ? "End consultation" : "Leave consultation"}
             </button>
           </div>
-        </div>
-
-        <div className="consult-footer">
-          <span>
-            {embedUrl
-              ? `Connected via ${call.provider} · not recorded${call.provider === "jitsi-public" ? " · public room, unlisted" : ""}`
-              : "Recording is off · This conversation is private and encrypted."}
-          </span>
-          <button className="button secondary small" onClick={() => onNavigate("records")}>
-            <Icon name="file" size={12} />View medical history
-          </button>
         </div>
       </div>
 

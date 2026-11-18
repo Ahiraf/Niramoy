@@ -48,6 +48,8 @@ export type AuditAction =
   | "appointment.complete"
   | "appointment.no_show"
   | "record.read"
+  | "care_message.read"
+  | "care_message.send"
   | "record.create"
   | "record.amend"
   | "prescription.create"

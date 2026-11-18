@@ -70,6 +70,7 @@ export const RATE_LIMITS = {
   review: { limit: 10, windowSeconds: 3600 },
   "admin-action": { limit: 200, windowSeconds: 60 },
   "video-token": { limit: 30, windowSeconds: 300 },
+  "care-message": { limit: 30, windowSeconds: 60 },
 } as const satisfies Record<string, RateLimitRule>;
 
 export type RateLimitBucket = keyof typeof RATE_LIMITS;

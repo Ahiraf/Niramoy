@@ -90,18 +90,18 @@ export function IntakePanel({ intake, onChange, onSkip, collapsed, onExpand }) {
     intake.ageBand,
     intake.durationBand,
     intake.severity,
-    intake.pregnant === true ? "yes" : null,
+    intake.pregnant !== null ? "answered" : null,
     intake.conditions.length ? "conditions" : null,
   ].filter(Boolean).length;
 
   if (collapsed) {
     return (
-      <button type="button" className="intake-summary" onClick={onExpand}>
+      <button type="button" className="intake-summary" aria-expanded="false" onClick={onExpand}>
         <Icon name="file" size={13} />
         <span>
           {answered
-            ? `${answered} detail${answered === 1 ? "" : "s"} added — these help me route you`
-            : "Add a few details (optional) — age, how long, how bad"}
+            ? `${answered} health detail${answered === 1 ? "" : "s"} added · Edit`
+            : "Add health details · Optional"}
         </span>
         <Icon name="chevron" size={14} />
       </button>
@@ -113,10 +113,10 @@ export function IntakePanel({ intake, onChange, onSkip, collapsed, onExpand }) {
       <header>
         <div>
           <strong>A few optional questions</strong>
-          <p>They make the suggestion more accurate. Skip any, or all of them.</p>
+          <p>Share only what you’re comfortable with. You can leave any answer blank.</p>
         </div>
-        <button type="button" className="text-link" onClick={onSkip}>
-          Skip
+        <button type="button" className="text-link" aria-expanded="true" onClick={onSkip}>
+          Done
         </button>
       </header>
 

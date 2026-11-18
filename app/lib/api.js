@@ -84,6 +84,10 @@ const qs = (params = {}) => {
 };
 
 export const api = {
+  conversations: () => request("/api/messages"),
+  messages: (appointmentId, before) => request(`/api/messages${qs({ appointmentId, before })}`),
+  sendMessage: (body) => request("/api/messages", { method: "POST", body }),
+  readMessages: (appointmentId, ids) => request("/api/messages", { method: "PATCH", body: { appointmentId, ids } }),
   // Accounts. The session lives in an HttpOnly cookie, so there is no token to
   // pass around — the browser attaches it to every one of these calls.
   session: () => request("/api/auth"),

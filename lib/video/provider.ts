@@ -306,7 +306,10 @@ function jitsiProvider(apiKey: string, secret: string, domain: string): VideoPro
       };
       const payload = {
         aud: isJaas ? "jitsi" : appId,
-        iss: appId,
+        // JaaS verifies a fixed issuer. The application id belongs in `sub`
+        // and the URL; using it as `iss` produces the provider's opaque
+        // “not allowed to join this call” error before the meeting starts.
+        iss: isJaas ? "chat" : appId,
         ...(isJaas ? { sub: appId } : {}),
         room: room.roomName,
         exp: Math.floor(expiresAt.getTime() / 1000),

@@ -12,3 +12,4 @@ export * from "./scheduling";
 export * from "./clinical";
 export * from "./ai";
 export * from "./platform";
+export * from "./messaging";

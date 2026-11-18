@@ -20,6 +20,7 @@ import { DoctorWorkspace, useDoctorSelf } from "./doctor-workspace.js";
 import { AdminWorkspace } from "./admin-workspace.js";
 import { Landing } from "./landing.js";
 import { AuthPage } from "./auth-page.js";
+import { CareMessages } from "./care-messages.js";
 import { appointmentStatus } from "../../lib/scheduling/appointment-status";
 
 const HOME = { patient: "dashboard", doctor: "doctor-home", admin: "admin-home" };
@@ -284,6 +285,9 @@ export function Workspace({ portal = "public" }) {
    * announce a payment a second time.
    */
   useEffect(() => {
+    // Boot selects the role's home view. Handle the gateway return only after
+    // that finishes, otherwise boot overwrites My appointments with Dashboard.
+    if (screen !== "app" || role !== "patient") return;
     const params = new URLSearchParams(window.location.search);
     const outcome = params.get("payment");
     if (!outcome) return;
@@ -299,7 +303,7 @@ export function Workspace({ portal = "public" }) {
     showToast(MESSAGES[outcome] ?? MESSAGES.unconfirmed);
     setActive("appointments");
     refreshAppointments();
-  }, [t, showToast, refreshAppointments]);
+  }, [screen, role, t, showToast, refreshAppointments]);
 
   /* ---------------------------------------------------------------------- */
   /* Session                                                                 */
@@ -721,6 +725,8 @@ export function Workspace({ portal = "public" }) {
         }}
         onPaid={() => {
           setPendingPayment(null);
+          setActive("appointments");
+          showToast("Appointment confirmed");
           refreshAppointments();
         }}
         api={api}
@@ -750,6 +756,7 @@ export function Workspace({ portal = "public" }) {
       view = <Consultation appointment={activeCall} onNavigate={navigate} onComplete={completeCall} />;
     }
     if (active === "profile") view = <Settings {...settingsProps} />;
+    if (active === "messages") view = <CareMessages api={api} role={role} onNavigate={navigate} />;
   } else if (role === "admin") {
     view = (
       <AdminWorkspace
@@ -763,6 +770,9 @@ export function Workspace({ portal = "public" }) {
     if (active === "profile") view = <Settings {...settingsProps} />;
   } else {
     switch (active) {
+      case "messages":
+        view = <CareMessages api={api} role={role} onNavigate={navigate} />;
+        break;
       case "doctors":
         view = (
           <FindDoctors
@@ -938,6 +948,8 @@ export function Workspace({ portal = "public" }) {
         }}
         onPaid={() => {
           setPendingPayment(null);
+          setActive("appointments");
+          showToast("Appointment confirmed");
           refreshAppointments();
         }}
         api={api}

@@ -45,6 +45,7 @@ const STRINGS = {
   "nav.appointments": { en: "My appointments", bn: "আমার অ্যাপয়েন্টমেন্ট" },
   "nav.records": { en: "Medical records", bn: "স্বাস্থ্য রেকর্ড" },
   "nav.assistant": { en: "AI health assistant", bn: "এআই স্বাস্থ্য সহায়ক" },
+  "nav.messages": { en: "Messages", bn: "সরাসরি বার্তা" },
   "nav.doctor-home": { en: "Overview", bn: "সারসংক্ষেপ" },
   "nav.doctor-schedule": { en: "Appointments", bn: "অ্যাপয়েন্টমেন্ট" },
   "nav.availability": { en: "Availability", bn: "সময়সূচি" },

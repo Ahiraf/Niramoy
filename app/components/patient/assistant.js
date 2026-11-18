@@ -2,15 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "../icons.js";
-import { Avatar, ErrorState, PageHeading, Rating, Banner, Loading } from "../ui.js";
+import { Avatar, ErrorState, PageHeading, Rating } from "../ui.js";
 import { EMPTY_INTAKE, IntakePanel } from "./intake.js";
 import { useT } from "../../lib/i18n.js";
 
 const PROMPTS = [
-  "I've had a headache every day for two weeks",
-  "My child has a rash and itchy skin",
-  "I feel anxious and can't sleep properly",
-  "Burning feeling when I pass urine",
+  ["Headache", "I've had a headache every day for two weeks"],
+  ["Skin concern", "My child has a rash and itchy skin"],
+  ["Sleep & anxiety", "I feel anxious and can't sleep properly"],
+  ["Urinary discomfort", "Burning feeling when I pass urine"],
 ];
 
 const URGENCY_TONE = {
@@ -114,8 +114,7 @@ export function Assistant({ api, onOpenDoctor, onNavigate, user }) {
       from: "ai",
       text:
         `${firstName ? `Hi ${firstName}, I'm` : "I'm"} here to help you find the right care. ` +
-        "Tell me what you're experiencing — in Bangla or English — and I'll suggest a " +
-        "direction and matching doctors.",
+        "How are you feeling today? You can write in Bangla or English.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -125,7 +124,8 @@ export function Assistant({ api, onOpenDoctor, onNavigate, user }) {
   const [dictationLang, setDictationLang] = useState("bn-BD");
   const [intake, setIntake] = useState(EMPTY_INTAKE);
   /** Collapsed once triage has run — the answers stay, the form gets out of the way. */
-  const [intakeOpen, setIntakeOpen] = useState(true);
+  const [intakeOpen, setIntakeOpen] = useState(false);
+  const inputRef = useRef(null);
 
   const { t } = useT();
   const dictation = useDictation({
@@ -138,19 +138,25 @@ export function Assistant({ api, onOpenDoctor, onNavigate, user }) {
   const scrollRef = useRef(null);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   }, [messages, thinking, result]);
 
   const send = async (text) => {
     const message = (text ?? input).trim();
     if (!message || thinking) return;
 
+    dictation.stop();
     setInput("");
     setFailed(null);
     setMessages((m) => [...m, { id: `u-${Date.now()}`, from: "user", text: message }]);
     setThinking(true);
 
-    const data = await api.triage({ message, intake });
+    let data;
+    try {
+      data = await api.triage({ message, intake });
+    } catch {
+      data = { ok: false, reason: "network" };
+    }
     setThinking(false);
 
     if (!data.ok) {
@@ -184,10 +190,11 @@ export function Assistant({ api, onOpenDoctor, onNavigate, user }) {
     <>
       <PageHeading
         title="AI health assistant"
-        subtitle="A starting point for understanding your symptoms — never a diagnosis."
+        subtitle="Describe how you feel. We’ll help you find your next step."
+        actions={<button className="button secondary" onClick={() => onNavigate("messages")}><Icon name="send" size={15} />Message your doctor</button>}
       />
 
-      <div className="ai-layout">
+      <div className="ai-layout assistant-comfort">
         <section className="ai-panel card">
           <div className="ai-head">
             <div className="ai-icon"><Icon name="bot" size={21} /></div>
@@ -195,10 +202,10 @@ export function Assistant({ api, onOpenDoctor, onNavigate, user }) {
               <h2>Care guide</h2>
               <p>Symptom triage · doctor matching</p>
             </div>
-            <span className="status confirmed" style={{ marginLeft: "auto" }}>Online</span>
+
           </div>
 
-          <div className="chat-area" ref={scrollRef}>
+          <div className="chat-area" ref={scrollRef} role="log" aria-label="Conversation with care guide" aria-live="polite">
             {messages.map((m) => (
               <div className={`chat-message ${m.from === "user" ? "user" : ""}`} key={m.id}>
                 {m.from === "ai"
@@ -211,7 +218,7 @@ export function Assistant({ api, onOpenDoctor, onNavigate, user }) {
             {thinking && (
               <div className="chat-message">
                 <div className="avatar sm teal">AI</div>
-                <div className="chat-bubble typing">
+                <div className="chat-bubble typing" role="status" aria-label="Preparing your guidance">
                   <i /><i /><i />
                 </div>
               </div>
@@ -276,31 +283,29 @@ export function Assistant({ api, onOpenDoctor, onNavigate, user }) {
 
           {messages.length === 1 && (
             <div className="prompt-chips">
-              {PROMPTS.map((p) => (
-                <button key={p} className="prompt-chip" onClick={() => send(p)}>{p}</button>
+              {PROMPTS.map(([label, text]) => (
+                <button key={label} className="prompt-chip" onClick={() => { setInput(text); inputRef.current?.focus(); }}>{label}</button>
               ))}
             </div>
           )}
 
-          <IntakePanel
-            intake={intake}
-            onChange={setIntake}
-            collapsed={!intakeOpen}
-            onExpand={() => setIntakeOpen(true)}
-            onSkip={() => setIntakeOpen(false)}
-          />
 
           <form
             className="chat-compose"
             onSubmit={(e) => { e.preventDefault(); send(); }}
           >
-            <input
+            <label className="compose-label" htmlFor="symptom-description">Your symptoms</label>
+            <textarea
+              id="symptom-description"
+              ref={inputRef}
+              rows={3}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Describe how you're feeling…"
+              placeholder="What’s bothering you, and when did it start?"
               aria-label="Describe your symptoms"
               disabled={thinking}
             />
+            <div className="compose-actions">
             {dictation.supported && (
               <button
                 type="button"
@@ -314,14 +319,15 @@ export function Assistant({ api, onOpenDoctor, onNavigate, user }) {
               </button>
             )}
             <button className="button primary" type="submit" aria-label="Send" disabled={thinking || !input.trim()}>
-              <Icon name="send" size={15} />
+              <Icon name="send" size={15} /> {thinking ? "Sending…" : "Send"}
             </button>
+            </div>
           </form>
 
           {dictation.supported && (
             <div className="dictation-row">
               <span aria-live="polite">
-                {dictation.listening ? "Listening — speak now" : "You can dictate instead of typing"}
+                {dictation.listening ? "Listening — speak now" : "Voice typing"}
               </span>
               <div role="group" aria-label="Dictation language">
                 {DICTATION_LANGS.map((l) => (
@@ -339,14 +345,22 @@ export function Assistant({ api, onOpenDoctor, onNavigate, user }) {
             </div>
           )}
 
+          <IntakePanel
+            intake={intake}
+            onChange={setIntake}
+            collapsed={!intakeOpen}
+            onExpand={() => setIntakeOpen(true)}
+            onSkip={() => setIntakeOpen(false)}
+          />
+
+
           <p className="ai-disclaimer">
-            Niramoy AI offers general guidance, not a diagnosis. In an emergency, call 999.
+            Niramoy AI offers general guidance, not a diagnosis. In an emergency, <a href="tel:999">call 999</a>.
           </p>
         </section>
 
-        <aside className="side-info card">
-          {result?.matches?.length ? (
-            <>
+        {!triage?.redFlag && Boolean(result?.matches?.length) && (
+        <aside className="side-info card" aria-label="Matching doctors">
               <h3>Matching doctors</h3>
               <p className="muted-note" style={{ marginTop: -4 }}>
                 Ranked by specialty fit, location, rating and availability.
@@ -370,30 +384,8 @@ export function Assistant({ api, onOpenDoctor, onNavigate, user }) {
               <button className="button secondary" style={{ width: "100%", marginTop: 10 }} onClick={() => onNavigate("doctors")}>
                 Browse all doctors <Icon name="arrow" size={13} />
               </button>
-            </>
-          ) : (
-            <>
-              <h3>What can I help with?</h3>
-              <div className="safety-box">
-                <strong><Icon name="shield" size={13} /> Your safety comes first</strong>
-                This assistant does not replace a doctor. It helps you prepare for a consultation and
-                understand general health information. Emergency symptoms are flagged immediately and
-                never routed into a booking.
-              </div>
-              {[
-                ["heart", "Check my symptoms", "Get a recommended care direction"],
-                ["users", "Find the right doctor", "Match with a verified specialist"],
-                ["file", "Understand my prescription", "Explain medicines and instructions"],
-                ["calendar", "Book a convenient slot", "Find care that fits your schedule"],
-              ].map(([icon, title, sub]) => (
-                <div className="triage-option" key={title}>
-                  <div className="triage-option-icon"><Icon name={icon} size={15} /></div>
-                  <div><strong>{title}</strong><span>{sub}</span></div>
-                </div>
-              ))}
-            </>
-          )}
         </aside>
+        )}
       </div>
     </>
   );

@@ -477,7 +477,7 @@ textarea.field, .textarea { height: auto; padding: 10px 12px; line-height: 1.55;
 
 /* --- Consultation room ---------------------------------------------------- */
 .consult-shell { padding: 18px; background: #122e35; border-color: #16383f; }
-.consult-stage { position: relative; height: 420px; border-radius: 12px; overflow: hidden; display: grid; place-items: center; background: linear-gradient(135deg, #274c50, #18373f 55%, #2c605e); }
+.consult-stage { position: relative; height: clamp(360px, 52vw, 640px); border-radius: 12px; overflow: hidden; display: grid; place-items: center; background: linear-gradient(135deg, #274c50, #18373f 55%, #2c605e); }
 .consult-status { position: absolute; top: 18px; left: 20px; display: flex; align-items: center; gap: 8px; color: #d1eeea; font-size: calc(11px * var(--text-scale)); }
 .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #83d5b4; animation: pulse 1.8s infinite; }
 @keyframes pulse { 50% { opacity: .35; } }
@@ -486,20 +486,18 @@ textarea.field, .textarea { height: auto; padding: 10px 12px; line-height: 1.55;
 .consult-peer span { display: block; font-size: calc(11px * var(--text-scale)); color: #b3d1cf; margin-top: 5px; }
 .consult-hint { color: #8fb2b0; font-size: calc(10px * var(--text-scale)); margin: 16px auto 0; max-width: 330px; line-height: 1.5; }
 .consult-self { position: absolute; top: 18px; right: 20px; width: 108px; height: 74px; border-radius: 9px; background: rgba(255,255,255,.09); border: 1px solid rgba(255,255,255,.16); display: grid; place-items: center; color: #cfe6e3; font-size: calc(10px * var(--text-scale)); font-weight: 700; }
-.consult-controls { position: absolute; bottom: 18px; left: 20px; right: 20px; display: flex; justify-content: center; gap: 9px; }
 .consult-button { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; background: rgba(255,255,255,.11); border: 1px solid rgba(255,255,255,.2); color: #fff; transition: .15s ease; }
 .consult-button:hover { background: rgba(255,255,255,.2); }
 .consult-button.off { background: #d86569; border-color: #d86569; }
 .leave-button { background: #d86569; color: #fff; }
 .leave-button:hover { background: #c4565a; }
-/* The embedded provider frame fills the stage; it draws its own controls, so
-   the stage keeps only the status pill and our End consultation button. */
+/* The embedded provider frame has its own controls. Nothing from Niramoy sits
+   on top of it: on a phone that was obscuring Jitsi's join and hang-up buttons. */
 .consult-stage.embedded { display: block; background: #0d2329; }
 .consult-frame { width: 100%; height: 100%; border: 0; display: block; }
-.consult-stage.embedded .consult-status { z-index: 2; background: rgba(6,24,28,.72); padding: 5px 10px; border-radius: 999px; }
-.consult-stage.embedded .consult-controls { z-index: 2; bottom: 12px; pointer-events: none; }
-.consult-stage.embedded .consult-controls .leave-button { pointer-events: auto; box-shadow: 0 6px 18px rgba(0,0,0,.35); }
 .consult-footer { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 15px 3px 0; color: #b9d0cf; font-size: calc(10px * var(--text-scale)); }
+.consult-connection { flex: 1; min-width: 0; line-height: 1.5; }
+.consult-footer-actions { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; justify-content: flex-end; }
 
 /* --- AI assistant --------------------------------------------------------- */
 .chat-area { overflow-y: auto; max-height: 430px; }
@@ -629,7 +627,7 @@ textarea.field, .textarea { height: auto; padding: 10px 12px; line-height: 1.55;
   .field-row, .review-grid, .specialty-grid, .profile-facts { grid-template-columns: 1fr; }
   .rx-editor-row { grid-template-columns: 1fr 1fr; }
   .rx-editor-row .icon-button { grid-column: span 2; width: 100%; }
-  .consult-stage { height: 320px; }
+  .consult-stage { height: min(58dvh, 440px); min-height: 300px; }
   .consult-self { width: 78px; height: 56px; }
   .modal-body { padding: 16px; }
   .directory-table { display: block; overflow-x: auto; white-space: nowrap; }
@@ -1124,7 +1122,9 @@ body {
   .slot { width: 100%; min-width: 0; padding-inline: 8px; }
   .pay-option { align-items: flex-start; }
   .pay-option .bkash-mark { margin-left: auto; }
-  .consult-footer { flex-direction: column; align-items: flex-start; }
+  .consult-footer { flex-direction: column; align-items: stretch; }
+  .consult-footer-actions { justify-content: stretch; }
+  .consult-footer-actions .button { flex: 1; min-height: 44px; }
   .availability-table-wrap, .rx-table-wrap, .directory-table { max-width: 100%; overflow-x: auto; }
 }
 
@@ -1431,6 +1431,87 @@ html[data-text-size="larger"] { --text-scale: 1.32; }
 .rx-guidance { border-top: 1px dashed var(--line); padding-top: 12px; }
 .rx-guidance p { font-size: calc(11px * var(--text-scale)); color: var(--muted); line-height: 1.6; margin: 0 0 6px; }
 .booking-tz { font-size: calc(10.5px * var(--text-scale)); color: var(--muted); margin: -4px 0 10px; }
+
+/* Private appointment conversations. Text remains selectable and wraps safely. */
+.care-chat { display: grid; grid-template-columns: minmax(230px, .8fr) minmax(0, 1.8fr); gap: 18px; margin-top: 18px; align-items: start; }
+.care-inbox { padding: 18px; max-height: 75dvh; overflow-y: auto; }
+.care-inbox h2, .care-conversation h2 { font-size: calc(18px * var(--text-scale)); margin: 0 0 12px; }
+.care-thread { display: block; width: 100%; text-align: left; border: 1px solid var(--line); background: #f1f7f2; border-radius: 12px; padding: 14px; margin-bottom: 10px; color: var(--ink); }
+.care-thread.active { border-color: #208570; background: #dceee2; box-shadow: inset 3px 0 #208570; }
+.care-thread strong, .care-thread span, .care-thread b { display: block; overflow-wrap: anywhere; }
+.care-thread strong { font-size: calc(14px * var(--text-scale)); }
+.care-thread span { font-size: calc(12px * var(--text-scale)); color: var(--muted); line-height: 1.5; margin-top: 4px; }
+.care-thread b { font-size: 12px; color: var(--teal-dark); margin-top: 6px; }
+.care-conversation { min-width: 0; overflow: hidden; }
+.care-conversation > .empty-state { padding: 48px 24px; }
+.care-conversation header { padding: 18px; border-bottom: 1px solid var(--line); background: #e6f1e9; }
+.care-conversation header p { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 0; }
+.care-back { display: none; }
+.care-message-log { height: min(48dvh, 460px); min-height: 220px; overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.care-message { max-width: 88%; align-self: flex-start; background: #eaf2ed; padding: 12px 14px; border-radius: 14px 14px 14px 3px; overflow-wrap: anywhere; }
+.care-message.mine { align-self: flex-end; background: #d4eade; border-radius: 14px 14px 3px 14px; }
+.care-sender { font-size: 12px; font-weight: 700; color: #34654e; }
+.care-message p { white-space: pre-wrap; font-size: calc(15px * var(--text-scale)); line-height: 1.6; margin: 5px 0 8px; }
+.care-message small { font-size: 11px; color: #526b5b; }
+.care-chat-empty { padding: 18px; color: var(--muted); font-size: 14px; line-height: 1.6; }
+.care-compose { padding: 18px; border-top: 1px solid var(--line); }
+.care-compose label { display: block; font-size: 14px; font-weight: 700; margin-bottom: 8px; }
+.care-compose textarea { display: block; width: 100%; resize: vertical; min-height: 85px; max-height: 260px; border: 1px solid #b5cebf; border-radius: 10px; padding: 12px; font-size: max(16px, calc(14px * var(--text-scale))); line-height: 1.5; color: var(--ink); background: #fff; }
+.care-compose > div { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 10px; }
+.care-compose small { color: var(--muted); }
+.care-compose .button { min-height: 44px; }
+.care-chat-error { margin-top: 12px; padding: 14px; color: #853e3e; background: #fcebea; border-radius: 10px; }
+@media (max-width: 760px) {
+  .care-chat { grid-template-columns: minmax(0, 1fr); }
+  .care-chat:not(.thread-open) .care-conversation, .care-chat.thread-open .care-inbox { display: none; }
+  .care-inbox { max-height: none; }
+  .care-back { display: inline-flex; margin-bottom: 14px; min-height: 44px; }
+  .care-message-log { padding: 12px; }
+  .care-compose, .care-conversation header { padding: 14px; }
+  .care-message { max-width: 94%; }
+}
+
+/* A focused, single-column care conversation; details are progressive. */
+.ai-layout.assistant-comfort { grid-template-columns: minmax(0, 1fr); max-width: 840px; margin-inline: auto; gap: 20px; }
+.assistant-comfort .ai-panel { min-height: 0; padding: 24px; }
+.assistant-comfort .ai-head { margin-bottom: 16px; }
+.assistant-comfort .ai-head h2 { font-size: calc(20px * var(--text-scale)); }
+.assistant-comfort .ai-head p { font-size: calc(13px * var(--text-scale)); }
+.assistant-comfort .chat-area { flex: none; max-height: 440px; padding: 14px; background: #edf5ef; }
+.assistant-comfort .chat-bubble { font-size: calc(15px * var(--text-scale)); line-height: 1.65; max-width: 100%; overflow-wrap: anywhere; }
+.assistant-comfort .prompt-chips { gap: 8px; margin: 14px 0 0; }
+.assistant-comfort .prompt-chip { min-height: 42px; font-size: calc(13px * var(--text-scale)); padding: 9px 14px; }
+.assistant-comfort .chat-compose { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+.compose-label { font-size: calc(14px * var(--text-scale)); font-weight: 700; }
+.assistant-comfort textarea { width: 100%; min-height: 100px; resize: vertical; padding: 14px; border: 1px solid #b9d4c5; border-radius: 12px; background: #fff; color: var(--ink); font-size: max(16px, calc(15px * var(--text-scale))); line-height: 1.5; }
+.compose-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.assistant-comfort .chat-compose button { width: auto; min-width: 100px; height: 44px; font-size: 14px; }
+.assistant-comfort .chat-compose .mic-button { min-width: 44px; width: 44px; }
+.assistant-comfort .dictation-row { margin: 6px 0; font-size: 13px; gap: 8px; flex-wrap: wrap; }
+.assistant-comfort .dictation-row .chip { min-height: 40px; font-size: 13px; }
+.assistant-comfort .intake-summary { margin: 14px 0 0; min-height: 48px; font-size: calc(14px * var(--text-scale)); border-style: solid; background: #edf5ef; }
+.assistant-comfort .intake-panel { margin-top: 14px; }
+.assistant-comfort .intake-panel .chip { min-height: 44px; height: auto; padding-block: 9px; font-size: 13px; }
+.assistant-comfort .intake-panel .text-link { min-height: 44px; padding-inline: 8px; }
+.assistant-comfort .intake-panel p, .assistant-comfort .intake-row legend { font-size: calc(13px * var(--text-scale)); line-height: 1.5; }
+.assistant-comfort .ai-disclaimer { font-size: calc(12px * var(--text-scale)); line-height: 1.6; margin-top: 16px; }
+.assistant-comfort .ai-disclaimer a { color: var(--teal-dark); text-decoration: underline; font-weight: 700; }
+.assistant-comfort .triage-result p { font-size: calc(14px * var(--text-scale)); line-height: 1.6; }
+.assistant-comfort .side-info h3 { font-size: 18px; }
+.assistant-comfort .match-main strong { font-size: 15px; }
+.assistant-comfort .match-main > span, .assistant-comfort .match-why li { font-size: 13px; }
+@media (max-width: 760px) {
+  .assistant-comfort .ai-panel { padding: 16px; }
+  .assistant-comfort .chat-area { padding: 12px; max-height: 50dvh; }
+  .assistant-comfort .chat-message { gap: 8px; }
+  .assistant-comfort .chat-message .avatar { display: none; }
+  .assistant-comfort .chat-bubble { width: 100%; padding: 12px; }
+  .assistant-comfort .prompt-chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .assistant-comfort .prompt-chip { text-align: center; padding-inline: 8px; }
+  .assistant-comfort .side-info { padding: 16px; }
+  .assistant-comfort .match-row { flex-wrap: wrap; }
+  .assistant-comfort .match-side { margin-left: auto; }
+}
 
 /* Shared visual theme: sea-glass surfaces, deep teal navigation, warm accents.
    Screen-only so clinical printouts keep their existing clean paper layout. */
