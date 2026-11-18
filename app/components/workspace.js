@@ -142,6 +142,20 @@ export function Workspace({ portal = "public" }) {
     return true;
   }, []);
 
+  // A booking can be made by another person while a doctor is already viewing
+  // their workspace. Poll the small notification endpoint independently of the
+  // heavier appointment refresh, and refresh immediately when the tab returns.
+  useEffect(() => {
+    if (screen !== "app") return;
+    const refresh = () => { void refreshNotifications(); };
+    const poll = setInterval(refresh, 15_000);
+    window.addEventListener("focus", refresh);
+    return () => {
+      clearInterval(poll);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [screen, refreshNotifications]);
+
   const refreshReference = useCallback(async () => {
     const data = await api.reference();
     if (data.ok === false) return false;

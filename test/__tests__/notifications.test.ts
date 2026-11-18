@@ -13,9 +13,11 @@ import * as t from "../../lib/db/schema";
 import { resetEnvCache } from "../../lib/config/env";
 import { resetSmsProvider } from "../../lib/notifications/sms";
 import { notify } from "../../lib/repositories/clinical";
+import { availableSlots } from "../../lib/services/booking";
+import { POST as bookAppointment } from "../../app/api/appointments/route";
 import * as users from "../../lib/repositories/users";
-import { setupWorld, teardownWorld } from "../harness";
-import type { World } from "../fixtures";
+import { call, setupWorld, teardownWorld } from "../harness";
+import { requestAs, type World } from "../fixtures";
 
 let world: World;
 
@@ -46,6 +48,26 @@ const send = (userId: string, dedupeKey: string) =>
   });
 
 describe("notification delivery honours the account's channels", () => {
+  it("alerts the booked doctor's account as well as the patient", async () => {
+    const slots = await availableSlots(world.doctor.doctorId!, { days: 30 });
+    expect(slots.length).toBeGreaterThan(0);
+
+    const booked = await call(
+      bookAppointment,
+      requestAs(world.patientA, "http://localhost:3000/api/appointments", {
+        method: "POST",
+        body: JSON.stringify({ doctorId: world.doctor.doctorId, startUtc: slots[0]!.start.toISOString() }),
+      }),
+    );
+    expect(booked.status).toBe(201);
+
+    const { rows } = await world.h.client.query<{ type: string; title: string }>(
+      `SELECT type, title FROM notifications WHERE user_id = $1 AND channel = 'in_app'`,
+      [world.doctor.userId],
+    );
+    expect(rows).toContainEqual({ type: "appointment_booked", title: "New appointment booked" });
+  });
+
   it("always writes the in-app record, whatever the preference", async () => {
     await users.updateProfile(world.patientA.userId, { notificationChannels: [] });
 

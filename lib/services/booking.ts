@@ -65,6 +65,8 @@ function demoBookingEnabled(): boolean {
 
 export interface DoctorSchedulingConfig {
   id: string;
+  /** The doctor account that owns this profile. Null only for demo profiles. */
+  userId: string | null;
   consultationMinutes: number;
   leadMinutes: number;
   cancelWindowMinutes: number;
@@ -81,6 +83,7 @@ async function schedulingConfig(doctorId: string): Promise<DoctorSchedulingConfi
 
   return {
     id: doctorId,
+    userId: raw.userId,
     consultationMinutes: raw.consultationMinutes,
     leadMinutes: raw.leadMinutes,
     cancelWindowMinutes: raw.cancelWindowMinutes,
@@ -266,6 +269,21 @@ export async function book(
         payload: { appointmentId: appointment.id },
         dedupeKey: `appointment_confirmed:${appointment.id}`,
       });
+
+      // The patient confirmation is only half of a booking. A doctor with an
+      // account needs a separate notification record, so it appears in their
+      // bell immediately and survives sign-out. Demo directory profiles have
+      // no account to notify, which is why this is intentionally conditional.
+      if (config.userId) {
+        await clinical.notify({
+          userId: config.userId,
+          type: "appointment_booked",
+          title: "New appointment booked",
+          body: "A patient booked a consultation in your schedule.",
+          payload: { appointmentId: appointment.id, doctorId },
+          dedupeKey: `doctor_appointment_booked:${appointment.id}`,
+        });
+      }
 
       await audit({
         action: "appointment.create",

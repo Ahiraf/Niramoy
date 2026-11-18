@@ -351,6 +351,7 @@ export async function updateAvailability(
 /* -------------------------------------------------------------------------- */
 
 export interface SchedulingConfig {
+  userId: string | null;
   consultationMinutes: number;
   leadMinutes: number;
   cancelWindowMinutes: number;
@@ -361,6 +362,7 @@ export interface SchedulingConfig {
 export async function getSchedulingConfig(doctorId: string): Promise<SchedulingConfig | null> {
   const rows = await getDb()
     .select({
+      userId: t.doctors.userId,
       consultationMinutes: t.doctors.consultationMinutes,
       leadMinutes: t.doctors.leadMinutes,
       cancelWindowMinutes: t.doctors.cancelWindowMinutes,

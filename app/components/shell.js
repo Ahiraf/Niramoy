@@ -202,9 +202,8 @@ export function Topbar({ active, notifications, unread, onReadNotifications, onS
       )}
 
       <div className="topbar-actions">
-        <div style={{ position: "relative" }} ref={popRef}>
-          <LanguageSwitch />
-
+        <LanguageSwitch />
+        <div className="notification-menu" ref={popRef}>
           <button className="icon-button" aria-label={`Notifications, ${unread} unread`} onClick={toggle}>
             <Icon name="bell" size={17} />
             {unread > 0 && <i className="notification-dot" />}

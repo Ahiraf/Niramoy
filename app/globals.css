@@ -63,6 +63,7 @@ a { color: inherit; text-decoration: none; }
 .topbar-search input:focus { border-color: var(--mint); background: #fff; }
 .topbar-search svg { position: absolute; left: 13px; top: 11px; color: #687275; width: 15px; height: 15px; }
 .topbar-actions { display: flex; gap: 12px; align-items: center; }
+.notification-menu { position: relative; flex: 0 0 auto; }
 .icon-button { width: 35px; height: 35px; border: 1px solid var(--line); background: #fff; border-radius: 10px; color: #657479; display: grid; place-items: center; position: relative; }
 .icon-button:hover { color: var(--teal); border-color: var(--mint); }
 .notification-dot { width: 6px; height: 6px; background: var(--red); border: 1px solid #fff; border-radius: 50%; position: absolute; top: 7px; right: 8px; }
@@ -628,12 +629,32 @@ textarea.field, .textarea { height: auto; padding: 10px 12px; line-height: 1.55;
   .rx-editor-row { grid-template-columns: 1fr 1fr; }
   .rx-editor-row .icon-button { grid-column: span 2; width: 100%; }
   .consult-stage { height: min(58dvh, 440px); min-height: 300px; }
+  /* Jitsi chooses its pre-join layout from the iframe's dimensions. A tall
+     portrait frame collapses the local camera into a narrow strip. Give the
+     provider a dependable video viewport on standard/wide phones so the full
+     self preview, name field, and Join button remain visible together. */
+  .consult-stage.embedded {
+    height: auto;
+    min-height: 0;
+    aspect-ratio: 16 / 10;
+  }
+  .consult-stage.embedded .consult-frame { height: 100%; }
   .consult-self { width: 78px; height: 56px; }
   .modal-body { padding: 16px; }
   .directory-table { display: block; overflow-x: auto; white-space: nowrap; }
   .search-strip select.field { flex: 1; }
   .match-row { padding: 11px 0; }
   .chat-area { max-height: 340px; }
+}
+
+/* Very narrow phones still need enough height for Jitsi's pre-join controls.
+   The provider can switch to its compact layout without cropping the camera. */
+@media (max-width: 390px) {
+  .consult-stage.embedded {
+    aspect-ratio: auto;
+    height: min(60dvh, 430px);
+    min-height: 320px;
+  }
 }
 
 /* --- Fixes: badge/inline sizing and search-strip proportions --------------- */
@@ -1549,6 +1570,21 @@ html[data-text-size="larger"] { --text-scale: 1.32; }
   .button.primary:hover { background: #075c51; }
   .button.ghost { background: #f4f8f1; color: #315f53; border-color: #bdd4c7; }
   .button.secondary { background: #d7eade; color: #225b48; }
+  /* The doctor overview has one calm focal point: today's work. Keep its
+     teal summary distinct from the pale dashboard surfaces around it. */
+  .doctor-dashboard .earnings-card.card {
+    background:
+      radial-gradient(circle at 80% -50%, rgba(182, 239, 220, .32), transparent 42%),
+      linear-gradient(112deg, #0d4f49 0%, #08796e 55%, #23917f 100%);
+    border-color: #0b685e;
+    box-shadow: 0 18px 34px rgba(12, 89, 76, .20);
+  }
+  .doctor-dashboard .earnings-card > div:first-child { position: relative; z-index: 1; }
+  .doctor-dashboard .earnings-card h2 { color: #fff; }
+  .doctor-dashboard .earnings-card small,
+  .doctor-dashboard .earnings-card p { color: #d8f3eb; }
+  .doctor-dashboard .mini-chart { opacity: .95; }
+  .doctor-dashboard .section-card { box-shadow: 0 10px 26px rgba(24, 84, 67, .08); }
   .auth-main { background: radial-gradient(ellipse at 85% 15%, #cce8db, transparent 60%), #edf2e8; }
   .auth-aside { background: linear-gradient(155deg, #174d45, #0b7065 65%, #164239); overflow: hidden; }
   .auth-card, .pending-card { border-top: 4px solid #6bab91; box-shadow: 0 20px 55px #224b3820; }
