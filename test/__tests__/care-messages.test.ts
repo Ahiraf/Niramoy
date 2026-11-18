@@ -21,12 +21,24 @@ const send = (actor = world.patientA, input = payload()) => call<{message:{id:st
 it("exchanges persistent messages and read receipts between the two participants", async () => {
   const written = await send();
   expect(written.status).toBe(201);
+  const doctorAlerts = await world.h.db.select({ type: t.notifications.type, payload: t.notifications.payload })
+    .from(t.notifications).where(eq(t.notifications.userId, world.doctor.userId));
+  expect(doctorAlerts).toContainEqual(expect.objectContaining({
+    type: "care_message_received",
+    payload: expect.objectContaining({ appointmentId }),
+  }));
   const inbox = await call<{conversations:{id:string;unread:number}[]}>(GET, requestAs(world.doctor, BASE));
   expect(inbox.body.conversations[0]).toMatchObject({ id: appointmentId, unread: 1 });
   const messages = await call<{messages:{id:string;body:string;mine:boolean}[]}>(GET,
     requestAs(world.doctor, `${BASE}?appointmentId=${appointmentId}`));
   expect(messages.body.messages[0]).toMatchObject({ body: "A question about my visit", mine: false });
   expect(await send(world.doctor, payload("Thank you for your message"))).toMatchObject({status:201});
+  const patientAlerts = await world.h.db.select({ type: t.notifications.type, payload: t.notifications.payload })
+    .from(t.notifications).where(eq(t.notifications.userId, world.patientA.userId));
+  expect(patientAlerts).toContainEqual(expect.objectContaining({
+    type: "care_message_received",
+    payload: expect.objectContaining({ appointmentId }),
+  }));
   expect(await call(PATCH, requestAs(world.doctor, BASE, { method:"PATCH", body:JSON.stringify({appointmentId, ids:[written.body.message.id]}) }))).toMatchObject({status:200});
   const received = await call<{messages:{readAt:string;mine:boolean}[]}>(GET,
     requestAs(world.patientA, `${BASE}?appointmentId=${appointmentId}`));

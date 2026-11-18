@@ -2,6 +2,8 @@ import { and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { getDb } from "../db/client";
 import * as t from "../db/schema";
 import { AppError } from "../errors";
+import { logger } from "../observability/logger";
+import * as clinical from "../repositories/clinical";
 import type { Principal } from "../security/authz";
 
 function scope(principal: Principal) {
@@ -42,8 +44,14 @@ export async function inbox(principal: Principal) {
 
 async function participation(principal: Principal, appointmentId: string) {
   // Apply the participant predicate in SQL, including on reads and receipts.
-  const rows = await getDb().select({ status: t.appointments.status })
-    .from(t.appointments).innerJoin(t.doctors, eq(t.doctors.id, t.appointments.doctorId))
+  const rows = await getDb().select({
+    status: t.appointments.status,
+    doctorUserId: t.doctors.userId,
+    patientUserId: t.patients.userId,
+  })
+    .from(t.appointments)
+    .innerJoin(t.doctors, eq(t.doctors.id, t.appointments.doctorId))
+    .innerJoin(t.patients, eq(t.patients.id, t.appointments.patientId))
     .where(and(scope(principal), eq(t.appointments.id, appointmentId), sql`${t.doctors.userId} is not null`)).limit(1);
   if (!rows[0]) throw new AppError("NOT_FOUND");
   return rows[0];
@@ -70,7 +78,26 @@ export async function send(principal: Principal, input: { appointmentId: string;
   if (appointment.status === "cancelled") throw new AppError("NOT_ELIGIBLE", { message: "This appointment was cancelled. You can still read this conversation." });
   const [message] = await getDb().insert(t.careMessages).values({ ...input, senderId: principal.userId })
     .onConflictDoNothing({ target: [t.careMessages.senderId, t.careMessages.clientId] }).returning();
-  if (message) return { id: message.id };
+  if (message) {
+    const recipientUserId = principal.role === "doctor" ? appointment.patientUserId : appointment.doctorUserId;
+    if (recipientUserId) {
+      // A message is stored before its alert is attempted. A temporary mail or
+      // notification failure must never make an urgent message disappear or
+      // tell the sender to write it again; the recipient will still see it in
+      // the conversation on their next refresh.
+      await clinical.notify({
+        userId: recipientUserId,
+        type: "care_message_received",
+        title: principal.role === "doctor" ? "New message from your doctor" : "New patient message",
+        body: "You have a new message about an appointment.",
+        payload: { appointmentId: input.appointmentId, messageId: message.id },
+        dedupeKey: `care_message_received:${message.id}`,
+      }).catch((err: unknown) => logger.warn("care-message notification failed", {
+        appointmentId: input.appointmentId, recipientUserId, err,
+      }));
+    }
+    return { id: message.id };
+  }
   const [existing] = await getDb().select().from(t.careMessages).where(and(
     eq(t.careMessages.senderId, principal.userId), eq(t.careMessages.clientId, input.clientId),
   ));

@@ -217,9 +217,9 @@ export function Topbar({ active, notifications, unread, onReadNotifications, onS
                 <div className={`notification ${n.read ? "" : "unread"}`} key={n.id}>
                   <i />
                   <p>
-                    <strong>{n.payload?.title}</strong>
+                    <strong>{n.title ?? n.payload?.title}</strong>
                     <br />
-                    {n.payload?.body}
+                    {n.body ?? n.payload?.body}
                   </p>
                 </div>
               ))}

@@ -107,9 +107,9 @@ export function CareMessages({ api, role, onNavigate }) {
   return <>
     <PageHeading title={role === "doctor" ? "Patient messages" : "Message your doctor"}
       subtitle="Private conversations connected to your appointments." />
-    <Banner tone="warn" icon="alert" title="For emergencies, don’t wait for a reply">
+    {role === "patient" && <Banner tone="warn" icon="alert" title="For emergencies, don’t wait for a reply">
       Messages are not monitored continuously. For an emergency in Bangladesh, <a href="tel:999">call 999</a> or seek urgent in-person care.
-    </Banner>
+    </Banner>}
     <div className={`care-chat ${selected ? "thread-open" : ""}`}>
       <aside className="care-inbox card" aria-label="Appointment conversations">
         <h2>Your conversations</h2>
