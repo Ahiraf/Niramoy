@@ -15,8 +15,8 @@
   --teal-dark: #075c59;
   --teal-soft: #e6f4f1;
   --mint: #bfe9df;
-  --cream: #f8faf8;
-  --line: #e7eeec;
+  --cream: #edf5f1;
+  --line: #d5e5de;
   --orange: #ec9b57;
   --red: #d86569;
   --purple: #8379bc;
@@ -1431,3 +1431,76 @@ html[data-text-size="larger"] { --text-scale: 1.32; }
 .rx-guidance { border-top: 1px dashed var(--line); padding-top: 12px; }
 .rx-guidance p { font-size: calc(11px * var(--text-scale)); color: var(--muted); line-height: 1.6; margin: 0 0 6px; }
 .booking-tz { font-size: calc(10.5px * var(--text-scale)); color: var(--muted); margin: -4px 0 10px; }
+
+/* Shared visual theme: sea-glass surfaces, deep teal navigation, warm accents.
+   Screen-only so clinical printouts keep their existing clean paper layout. */
+@media screen {
+  body { background: #edf5f1; }
+  ::selection { background: #b9e3d7; color: #123c38; }
+  .app-shell, .onboarding-shell, .pending-screen {
+    background: radial-gradient(ellipse at 100% 0, #d5ebe3 0, transparent 55%), #edf5f1;
+  }
+  .sidebar { background: #123e3c; border-right-color: #244f4a; color: #f0faf6; }
+  .sidebar .brand-name, .sidebar .brand-name span { color: #f0faf6; }
+  .sidebar .brand-mark { background: #20776a; }
+  .sidebar .nav-label, .sidebar .user-mini-text span { color: #b3d1c8; }
+  .sidebar .nav-item { color: #d0e3dd; }
+  .sidebar .nav-item:hover { background: #20534d; color: #fff; }
+  .sidebar .nav-item.active { background: #d2eee2; color: #164b41; box-shadow: inset 3px 0 #72bca6; }
+  .sidebar-bottom { border-color: #38615a; }
+  .topbar, .onboarding-top { background: #e2eee8f5; border-bottom-color: #c8ded3; }
+  .topbar-search input { background: #f4faf6; border-color: #c9ded3; }
+  .page-heading { padding-bottom: 20px; border-bottom: 1px solid #c7ddd2; }
+  .card { background: #fbfdfb; border-color: #d1e1d8; box-shadow: 0 5px 20px #214d3d08; }
+  .welcome-card { background: linear-gradient(110deg, #124b45, #238475); box-shadow: 0 12px 28px #164e4021; }
+  .next-card, .booking-side { background: #e0f0e8; border-color: #badacb; }
+  .stat-card { border-top: 3px solid #65a98d; background: #e7f3eb; }
+  .stat-card:has(.stat-icon.orange) { border-top-color: #c49a66; background: #f7efdf; }
+  .stat-card:has(.stat-icon.purple) { border-top-color: #9b91b8; background: #eeebf5; }
+  .stat-card:has(.stat-icon.blue) { border-top-color: #78a5ba; background: #e7f0f5; }
+  .doctor-card { border-top: 3px solid #a9cdbd; }
+  .date-chip, .search-strip, .auth-role-tabs { background: #e8f2ec; }
+  .field, .search-field input { background: #f4f8f4; border-color: #cdded4; }
+  .field:focus, .search-field input:focus { border-color: #428d78; background: #fff; }
+  .directory-table th { color: #315e51; }
+  .directory-table tbody tr:hover { background: #eaf4ed; }
+  .button.primary { background: #08796e; box-shadow: 0 6px 14px #155c4726; }
+  .button.primary:hover { background: #075c51; }
+  .button.ghost { background: #f4f8f1; color: #315f53; border-color: #bdd4c7; }
+  .button.secondary { background: #d7eade; color: #225b48; }
+  .auth-main { background: radial-gradient(ellipse at 85% 15%, #cce8db, transparent 60%), #edf2e8; }
+  .auth-aside { background: linear-gradient(155deg, #174d45, #0b7065 65%, #164239); overflow: hidden; }
+  .auth-card, .pending-card { border-top: 4px solid #6bab91; box-shadow: 0 20px 55px #224b3820; }
+  .auth-role-tab.active { background: #165b4f; color: #fff; }
+
+  .landing {
+    background: radial-gradient(ellipse 80% 700px at 85% 200px, #cae4d6 0, transparent 75%), #edf3e9;
+  }
+  .landing-nav { background: #e5eee3f2; border-bottom-color: #c7dacb; box-shadow: 0 4px 18px #244c3610; }
+  .landing-links a { color: #345c4d; }
+  .landing-hero h1 { color: #173d36; }
+  .landing-hero h1 em { color: #14715d; }
+  .landing-hero-copy > p { color: #4c6659; }
+  .landing-eyebrow { background: #d8eadd; border-color: #b4d2bd; color: #235b44; }
+  .landing-figures { border-color: #bfd5c4; gap: 18px 30px; }
+  .landing-figures strong { color: #245e49; }
+  .landing-figures span { color: #4a6656; }
+  .landing-scroll { border: 1px solid #bfd5c4; border-radius: 99px; background: #e1eddd; }
+  .tele-art-frame { border-color: #f2f5e8; box-shadow: 0 24px 50px #254c3526, 8px 8px 0 #a8cbb7; }
+  .tele-note { background: #f6f8ecf5; border-color: #c5d7bc; }
+  .landing-section.tinted { background: #dcebe1; border-color: #c4d9cb; }
+  .landing-role-card { background: #f4f8ef; border-top: 4px solid #6d9f83; }
+  .landing-role-card.doctor { background: #eaf2f3; border-top-color: #79a3ae; }
+  .landing-role-card.admin { background: #efecf5; border-top-color: #a395b7; }
+  .landing-steps li { background: #f3f6ea; border-color: #c3d5c4; }
+  .landing-step-icon { background: #d7e9d5; border-color: #bbd4b8; }
+  .landing-feature { background: #f5f7ed; }
+  .landing-feature-icon { background: #d8e8d7; color: #35694a; }
+  .landing-note { background: #f4ecd9; border-color: #dfd0ac; }
+  .landing-final { background: #174b42; color: #f4f7ec; border-color: #174b42; }
+  .landing-final p { color: #c7ded1; }
+  .landing-final .button.primary { background: #d9ecd5; color: #194f3f; }
+  .landing-final .button.primary:hover { background: #f0f7e7; }
+  .landing-final .button.ghost { background: #286052; border-color: #669180; color: #f4f7ec; }
+  .landing-footer { background: #dce7d8; border-color: #c1d4be; }
+}

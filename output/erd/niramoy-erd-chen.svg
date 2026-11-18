@@ -1,0 +1,168 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2200" height="1500" viewBox="0 0 2200 1500">
+  <rect width="2200" height="1500" fill="#ffffff"/>
+  <style>
+    .entity { fill:#fff; stroke:#111; stroke-width:3; }
+    .entity-title { fill:#f0f0f0; stroke:#111; stroke-width:3; }
+    .relationship { fill:#fff; stroke:#111; stroke-width:3; }
+    .connector { fill:none; stroke:#222; stroke-width:2.5; }
+    .label { font: 24px Georgia, serif; fill:#111; }
+    .small { font: 20px Georgia, serif; fill:#111; }
+    .title { font: bold 34px Georgia, serif; fill:#111; }
+    .entity-name { font: bold 26px Georgia, serif; fill:#111; }
+    .attribute { font: 22px Georgia, serif; fill:#111; }
+    .pk { text-decoration: underline; font-weight: bold; }
+  </style>
+
+  <text x="1100" y="48" text-anchor="middle" class="title">Niramoy Telemedicine Platform — Entity Relationship Diagram</text>
+  <text x="1100" y="82" text-anchor="middle" class="small">Chen notation: rectangles = entities, diamonds = relationships, underlined attributes = primary keys</text>
+
+  <!-- connectors -->
+  <path class="connector" d="M330 300 L430 300 L430 250 L560 250"/>
+  <path class="connector" d="M330 300 L430 300 L430 520 L560 520"/>
+  <path class="connector" d="M790 250 L890 250 L890 330 L970 330"/>
+  <path class="connector" d="M790 520 L900 520 L900 410 L970 410"/>
+  <path class="connector" d="M1210 370 L1320 370 L1320 250 L1450 250"/>
+  <path class="connector" d="M1210 370 L1320 370 L1320 520 L1450 520"/>
+  <path class="connector" d="M1100 500 L1100 590 L1100 650"/>
+  <path class="connector" d="M1100 780 L1100 865 L1100 930"/>
+  <path class="connector" d="M970 1010 L850 1010 L850 1030 L720 1030"/>
+  <path class="connector" d="M1230 1010 L1350 1010 L1350 1030 L1480 1030"/>
+  <path class="connector" d="M1100 1120 L1100 1200 L1100 1270"/>
+  <path class="connector" d="M720 300 L820 300 L820 1130 L900 1130"/>
+  <path class="connector" d="M1480 300 L1380 300 L1380 1130 L1300 1130"/>
+  <path class="connector" d="M560 520 L470 520 L470 1270 L700 1270"/>
+  <path class="connector" d="M1450 520 L1560 520 L1560 1270 L1500 1270"/>
+
+  <!-- cardinalities -->
+  <text x="350" y="285" class="small">1</text><text x="535" y="235" class="small">0..1</text>
+  <text x="350" y="490" class="small">1</text><text x="535" y="505" class="small">0..1</text>
+  <text x="815" y="235" class="small">1</text><text x="945" y="320" class="small">1..*</text>
+  <text x="815" y="505" class="small">1</text><text x="945" y="400" class="small">1..*</text>
+  <text x="1230" y="355" class="small">1</text><text x="1425" y="235" class="small">0..*</text>
+  <text x="1230" y="495" class="small">1</text><text x="1425" y="505" class="small">0..*</text>
+  <text x="1115" y="545" class="small">1</text><text x="1115" y="640" class="small">0..1</text>
+  <text x="1115" y="815" class="small">1</text><text x="1115" y="920" class="small">0..*</text>
+  <text x="940" y="995" class="small">1</text><text x="735" y="1015" class="small">0..*</text>
+  <text x="1260" y="995" class="small">1</text><text x="1460" y="1015" class="small">0..*</text>
+  <text x="1115" y="1160" class="small">1</text><text x="1115" y="1260" class="small">0..*</text>
+  <text x="750" y="285" class="small">1</text><text x="875" y="1115" class="small">0..*</text>
+  <text x="1450" y="285" class="small">1</text><text x="1325" y="1115" class="small">0..*</text>
+  <text x="530" y="505" class="small">1</text><text x="680" y="1260" class="small">0..*</text>
+  <text x="1580" y="505" class="small">1</text><text x="1510" y="1260" class="small">0..*</text>
+
+  <!-- relationships -->
+  <polygon class="relationship" points="500,250 560,210 620,250 560,290"/><text x="560" y="258" text-anchor="middle" class="label">owns</text>
+  <polygon class="relationship" points="500,520 560,480 620,520 560,560"/><text x="560" y="528" text-anchor="middle" class="label">has</text>
+  <polygon class="relationship" points="890,330 970,290 1050,330 970,370"/><text x="970" y="338" text-anchor="middle" class="label">books</text>
+  <polygon class="relationship" points="890,410 970,370 1050,410 970,450"/><text x="970" y="418" text-anchor="middle" class="label">attends</text>
+  <polygon class="relationship" points="1320,250 1400,210 1480,250 1400,290"/><text x="1400" y="258" text-anchor="middle" class="label">specializes in</text>
+  <polygon class="relationship" points="1320,520 1400,480 1480,520 1400,560"/><text x="1400" y="528" text-anchor="middle" class="label">practices at</text>
+  <polygon class="relationship" points="1040,650 1100,610 1160,650 1100,690"/><text x="1100" y="658" text-anchor="middle" class="label">opens</text>
+  <polygon class="relationship" points="1040,930 1100,890 1160,930 1100,970"/><text x="1100" y="938" text-anchor="middle" class="label">produces</text>
+  <polygon class="relationship" points="790,1030 850,990 910,1030 850,1070"/><text x="850" y="1038" text-anchor="middle" class="label">creates</text>
+  <polygon class="relationship" points="1290,1030 1350,990 1410,1030 1350,1070"/><text x="1350" y="1038" text-anchor="middle" class="label">receives</text>
+  <polygon class="relationship" points="1040,1270 1100,1230 1160,1270 1100,1310"/><text x="1100" y="1278" text-anchor="middle" class="label">records</text>
+  <polygon class="relationship" points="820,1130 880,1090 940,1130 880,1170"/><text x="880" y="1138" text-anchor="middle" class="label">initiates</text>
+  <polygon class="relationship" points="1260,1130 1320,1090 1380,1130 1320,1170"/><text x="1320" y="1138" text-anchor="middle" class="label">reviews</text>
+  <polygon class="relationship" points="560,1270 620,1230 680,1270 620,1310"/><text x="620" y="1278" text-anchor="middle" class="label">writes</text>
+  <polygon class="relationship" points="1500,1270 1560,1230 1620,1270 1560,1310"/><text x="1560" y="1278" text-anchor="middle" class="label">receives</text>
+
+  <!-- entities -->
+  <g transform="translate(70 150)">
+    <rect class="entity" width="260" height="300" rx="8"/><rect class="entity-title" width="260" height="52" rx="8"/>
+    <text x="130" y="34" text-anchor="middle" class="entity-name">User</text>
+    <text x="18" y="88" class="attribute pk">user_id : UUID</text><text x="18" y="120" class="attribute">name : text</text><text x="18" y="152" class="attribute">email : text</text><text x="18" y="184" class="attribute">phone : text</text><text x="18" y="216" class="attribute">role : enum</text><text x="18" y="248" class="attribute">status : enum</text>
+  </g>
+
+  <g transform="translate(560 150)">
+    <rect class="entity" width="230" height="230" rx="8"/><rect class="entity-title" width="230" height="52" rx="8"/>
+    <text x="115" y="34" text-anchor="middle" class="entity-name">Patient</text>
+    <text x="18" y="88" class="attribute pk">patient_id : UUID</text><text x="18" y="120" class="attribute">user_id : UUID</text><text x="18" y="152" class="attribute">patient_code : text</text><text x="18" y="184" class="attribute">date_of_birth</text>
+  </g>
+
+  <g transform="translate(560 420)">
+    <rect class="entity" width="230" height="270" rx="8"/><rect class="entity-title" width="230" height="52" rx="8"/>
+    <text x="115" y="34" text-anchor="middle" class="entity-name">Doctor</text>
+    <text x="18" y="88" class="attribute pk">doctor_id : UUID</text><text x="18" y="120" class="attribute">user_id : UUID</text><text x="18" y="152" class="attribute">display_name</text><text x="18" y="184" class="attribute">specialty_id</text><text x="18" y="216" class="attribute">verification_status</text><text x="18" y="248" class="attribute">fee_amount</text>
+  </g>
+
+  <g transform="translate(1450 150)">
+    <rect class="entity" width="260" height="230" rx="8"/><rect class="entity-title" width="260" height="52" rx="8"/>
+    <text x="130" y="34" text-anchor="middle" class="entity-name">Specialty</text>
+    <text x="18" y="88" class="attribute pk">specialty_id : text</text><text x="18" y="120" class="attribute">name : text</text><text x="18" y="152" class="attribute">name_bn : text</text><text x="18" y="184" class="attribute">is_active : boolean</text>
+  </g>
+
+  <g transform="translate(1450 420)">
+    <rect class="entity" width="260" height="230" rx="8"/><rect class="entity-title" width="260" height="52" rx="8"/>
+    <text x="130" y="34" text-anchor="middle" class="entity-name">Facility</text>
+    <text x="18" y="88" class="attribute pk">facility_id : text</text><text x="18" y="120" class="attribute">name : text</text><text x="18" y="152" class="attribute">kind : text</text><text x="18" y="184" class="attribute">district_id</text>
+  </g>
+
+  <g transform="translate(970 250)">
+    <rect class="entity" width="260" height="250" rx="8"/><rect class="entity-title" width="260" height="52" rx="8"/>
+    <text x="130" y="34" text-anchor="middle" class="entity-name">Appointment</text>
+    <text x="18" y="88" class="attribute pk">appointment_id : UUID</text><text x="18" y="120" class="attribute">reference : text</text><text x="18" y="152" class="attribute">doctor_id</text><text x="18" y="184" class="attribute">patient_id</text><text x="18" y="216" class="attribute">start_utc / end_utc</text>
+  </g>
+
+  <g transform="translate(970 650)">
+    <rect class="entity" width="260" height="260" rx="8"/><rect class="entity-title" width="260" height="52" rx="8"/>
+    <text x="130" y="34" text-anchor="middle" class="entity-name">Video_Session</text>
+    <text x="18" y="88" class="attribute pk">appointment_id : UUID</text><text x="18" y="120" class="attribute">provider : text</text><text x="18" y="152" class="attribute">room_name : text</text><text x="18" y="184" class="attribute">expires_at : timestamp</text><text x="18" y="216" class="attribute">ended_at : timestamp</text>
+  </g>
+
+  <g transform="translate(970 930)">
+    <rect class="entity" width="260" height="260" rx="8"/><rect class="entity-title" width="260" height="52" rx="8"/>
+    <text x="130" y="34" text-anchor="middle" class="entity-name">Medical_Record</text>
+    <text x="18" y="88" class="attribute pk">record_id : UUID</text><text x="18" y="120" class="attribute">patient_id</text><text x="18" y="152" class="attribute">appointment_id</text><text x="18" y="184" class="attribute">author_user_id</text><text x="18" y="216" class="attribute">kind : enum</text>
+  </g>
+
+  <g transform="translate(520 1000)">
+    <rect class="entity" width="260" height="250" rx="8"/><rect class="entity-title" width="260" height="52" rx="8"/>
+    <text x="130" y="34" text-anchor="middle" class="entity-name">Prescription</text>
+    <text x="18" y="88" class="attribute pk">prescription_id : UUID</text><text x="18" y="120" class="attribute">prescription_number</text><text x="18" y="152" class="attribute">appointment_id</text><text x="18" y="184" class="attribute">patient_id / doctor_id</text><text x="18" y="216" class="attribute">status : enum</text>
+  </g>
+
+  <g transform="translate(1480 1000)">
+    <rect class="entity" width="260" height="250" rx="8"/><rect class="entity-title" width="260" height="52" rx="8"/>
+    <text x="130" y="34" text-anchor="middle" class="entity-name">Review</text>
+    <text x="18" y="88" class="attribute pk">review_id : UUID</text><text x="18" y="120" class="attribute">appointment_id</text><text x="18" y="152" class="attribute">patient_id / doctor_id</text><text x="18" y="184" class="attribute">rating : smallint</text><text x="18" y="216" class="attribute">status : enum</text>
+  </g>
+
+  <g transform="translate(650 1240)">
+    <rect class="entity" width="260" height="230" rx="8"/><rect class="entity-title" width="260" height="52" rx="8"/>
+    <text x="130" y="34" text-anchor="middle" class="entity-name">AI_Triage_Session</text>
+    <text x="18" y="88" class="attribute pk">triage_id : UUID</text><text x="18" y="120" class="attribute">user_id / patient_id</text><text x="18" y="152" class="attribute">urgency : enum</text><text x="18" y="184" class="attribute">red_flag_triggered</text>
+  </g>
+
+  <g transform="translate(1290 1240)">
+    <rect class="entity" width="260" height="230" rx="8"/><rect class="entity-title" width="260" height="52" rx="8"/>
+    <text x="130" y="34" text-anchor="middle" class="entity-name">AI_Visit_Summary</text>
+    <text x="18" y="88" class="attribute pk">summary_id : UUID</text><text x="18" y="120" class="attribute">appointment_id</text><text x="18" y="152" class="attribute">doctor_id / patient_id</text><text x="18" y="184" class="attribute">review_status : enum</text>
+  </g>
+
+  <!-- payment and notification entities -->
+  <g transform="translate(70 700)">
+    <rect class="entity" width="260" height="250" rx="8"/><rect class="entity-title" width="260" height="52" rx="8"/>
+    <text x="130" y="34" text-anchor="middle" class="entity-name">Payment</text>
+    <text x="18" y="88" class="attribute pk">payment_id : UUID</text><text x="18" y="120" class="attribute">appointment_id</text><text x="18" y="152" class="attribute">amount / currency</text><text x="18" y="184" class="attribute">method : enum</text><text x="18" y="216" class="attribute">status : enum</text>
+  </g>
+
+  <g transform="translate(1790 700)">
+    <rect class="entity" width="260" height="250" rx="8"/><rect class="entity-title" width="260" height="52" rx="8"/>
+    <text x="130" y="34" text-anchor="middle" class="entity-name">Notification</text>
+    <text x="18" y="88" class="attribute pk">notification_id : UUID</text><text x="18" y="120" class="attribute">user_id</text><text x="18" y="152" class="attribute">type : text</text><text x="18" y="184" class="attribute">channel : enum</text><text x="18" y="216" class="attribute">status : enum</text>
+  </g>
+
+  <!-- payment and notification relationship diamonds -->
+  <polygon class="relationship" points="330,825 390,785 450,825 390,865"/><text x="390" y="833" text-anchor="middle" class="label">pays for</text>
+  <path class="connector" d="M330 825 L390 825 L390 500 L970 500"/>
+  <text x="345" y="810" class="small">0..*</text><text x="930" y="490" class="small">1</text>
+  <polygon class="relationship" points="1710,825 1770,785 1830,825 1770,865"/><text x="1770" y="833" text-anchor="middle" class="label">notifies</text>
+  <path class="connector" d="M1710 825 L1770 825 L1770 300 L330 300"/>
+  <text x="1690" y="810" class="small">0..*</text><text x="350" y="315" class="small">1</text>
+
+  <!-- legend -->
+  <line x1="80" y1="1485" x2="160" y2="1485" class="connector"/><text x="175" y="1492" class="small">relationship connector</text>
+  <polygon class="relationship" points="470,1485 520,1455 570,1485 520,1515"/><text x="610" y="1492" class="small">relationship</text>
+  <text x="900" y="1492" class="small">1, 0..1, 0..* = cardinality</text>
+</svg>

@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1800" viewBox="0 0 2400 1800">
+<rect width="2400" height="1800" fill="white"/>
+<style>
+.e{fill:#fff;stroke:#111;stroke-width:3}.h{fill:#eee;stroke:#111;stroke-width:3}.r{fill:#fff;stroke:#111;stroke-width:3}.l{fill:none;stroke:#222;stroke-width:3}.t{font:26px Georgia,serif;fill:#111}.n{font:bold 29px Georgia,serif;fill:#111}.a{font:23px Georgia,serif;fill:#111}.k{text-decoration:underline;font-weight:bold}.c{font:20px Georgia,serif;fill:#111}.title{font:bold 36px Georgia,serif;fill:#111}
+</style>
+<text x="1200" y="52" text-anchor="middle" class="title">Niramoy Core ERD — Chen Notation</text>
+<text x="1200" y="88" text-anchor="middle" class="c">Rectangles: entities  |  diamonds: relationships  |  underlined fields: primary keys  |  labels: cardinality</text>
+
+<!-- relationship connectors: all are local and non-crossing -->
+<path class="l" d="M300 300H430"/><path class="l" d="M300 720H430"/>
+<path class="l" d="M700 300H900"/><path class="l" d="M700 720H900"/>
+<path class="l" d="M1220 470H1390"/><path class="l" d="M1220 720H1390"/>
+<path class="l" d="M1000 630V800"/><path class="l" d="M1000 990V1130"/>
+<path class="l" d="M550 1130V1260"/><path class="l" d="M1450 1130V1260"/>
+<path class="l" d="M1000 1380V1510"/><path class="l" d="M550 1380V1510"/>
+<path class="l" d="M1450 1380V1510"/>
+
+<!-- cardinalities -->
+<text x="315" y="285" class="c">1</text><text x="410" y="285" class="c">0..1</text>
+<text x="315" y="705" class="c">1</text><text x="410" y="705" class="c">0..1</text>
+<text x="715" y="285" class="c">1</text><text x="875" y="285" class="c">0..*</text>
+<text x="715" y="705" class="c">1</text><text x="875" y="705" class="c">0..*</text>
+<text x="1235" y="455" class="c">1</text><text x="1365" y="455" class="c">0..*</text>
+<text x="1235" y="705" class="c">1</text><text x="1365" y="705" class="c">0..*</text>
+<text x="1015" y="655" class="c">1</text><text x="1015" y="790" class="c">0..1</text>
+<text x="1015" y="1015" class="c">1</text><text x="1015" y="1120" class="c">0..*</text>
+<text x="565" y="1145" class="c">1</text><text x="565" y="1250" class="c">0..*</text>
+<text x="1465" y="1145" class="c">1</text><text x="1465" y="1250" class="c">0..1</text>
+<text x="1015" y="1400" class="c">1</text><text x="1015" y="1500" class="c">0..*</text>
+<text x="565" y="1400" class="c">1</text><text x="565" y="1500" class="c">0..*</text>
+<text x="1465" y="1400" class="c">1</text><text x="1465" y="1500" class="c">0..*</text>
+
+<!-- relationship diamonds -->
+<polygon class="r" points="430,300 500,255 570,300 500,345"/><text x="500" y="309" text-anchor="middle" class="t">owns</text>
+<polygon class="r" points="430,720 500,675 570,720 500,765"/><text x="500" y="729" text-anchor="middle" class="t">has</text>
+<polygon class="r" points="900,300 1000,250 1100,300 1000,350"/><text x="1000" y="309" text-anchor="middle" class="t">books</text>
+<polygon class="r" points="900,720 1000,670 1100,720 1000,770"/><text x="1000" y="729" text-anchor="middle" class="t">attends</text>
+<polygon class="r" points="1390,470 1490,420 1590,470 1490,520"/><text x="1490" y="479" text-anchor="middle" class="t">specializes in</text>
+<polygon class="r" points="1390,720 1490,670 1590,720 1490,770"/><text x="1490" y="729" text-anchor="middle" class="t">practices at</text>
+<polygon class="r" points="930,800 1000,755 1070,800 1000,845"/><text x="1000" y="809" text-anchor="middle" class="t">opens</text>
+<polygon class="r" points="930,1130 1000,1085 1070,1130 1000,1175"/><text x="1000" y="1139" text-anchor="middle" class="t">produces</text>
+<polygon class="r" points="480,1260 550,1215 620,1260 550,1305"/><text x="550" y="1269" text-anchor="middle" class="t">creates</text>
+<polygon class="r" points="1380,1260 1450,1215 1520,1260 1450,1305"/><text x="1450" y="1269" text-anchor="middle" class="t">receives</text>
+<polygon class="r" points="930,1510 1000,1465 1070,1510 1000,1555"/><text x="1000" y="1519" text-anchor="middle" class="t">records</text>
+<polygon class="r" points="480,1510 550,1465 620,1510 550,1555"/><text x="550" y="1519" text-anchor="middle" class="t">initiates</text>
+<polygon class="r" points="1380,1510 1450,1465 1520,1510 1450,1555"/><text x="1450" y="1519" text-anchor="middle" class="t">reviews</text>
+
+<!-- entities -->
+<g transform="translate(70 150)"><rect class="e" width="230" height="300" rx="8"/><rect class="h" width="230" height="55" rx="8"/><text x="115" y="36" text-anchor="middle" class="n">User</text><text x="16" y="95" class="a k">user_id : UUID</text><text x="16" y="130" class="a">name : text</text><text x="16" y="165" class="a">email : text</text><text x="16" y="200" class="a">phone : text</text><text x="16" y="235" class="a">role : enum</text><text x="16" y="270" class="a">status : enum</text></g>
+<g transform="translate(570 150)"><rect class="e" width="230" height="300" rx="8"/><rect class="h" width="230" height="55" rx="8"/><text x="115" y="36" text-anchor="middle" class="n">Patient</text><text x="16" y="95" class="a k">patient_id : UUID</text><text x="16" y="130" class="a">user_id : UUID</text><text x="16" y="165" class="a">patient_code</text><text x="16" y="200" class="a">date_of_birth</text><text x="16" y="235" class="a">district_id</text></g>
+<g transform="translate(70 570)"><rect class="e" width="230" height="300" rx="8"/><rect class="h" width="230" height="55" rx="8"/><text x="115" y="36" text-anchor="middle" class="n">Doctor</text><text x="16" y="95" class="a k">doctor_id : UUID</text><text x="16" y="130" class="a">user_id : UUID</text><text x="16" y="165" class="a">display_name</text><text x="16" y="200" class="a">specialty_id</text><text x="16" y="235" class="a">verification_status</text><text x="16" y="270" class="a">fee_amount</text></g>
+<g transform="translate(570 570)"><rect class="e" width="230" height="300" rx="8"/><rect class="h" width="230" height="55" rx="8"/><text x="115" y="36" text-anchor="middle" class="n">Appointment</text><text x="16" y="95" class="a k">appointment_id : UUID</text><text x="16" y="130" class="a">reference : text</text><text x="16" y="165" class="a">doctor_id</text><text x="16" y="200" class="a">patient_id</text><text x="16" y="235" class="a">start_utc</text><text x="16" y="270" class="a">end_utc / status</text></g>
+<g transform="translate(1320 270)"><rect class="e" width="260" height="260" rx="8"/><rect class="h" width="260" height="55" rx="8"/><text x="130" y="36" text-anchor="middle" class="n">Specialty</text><text x="16" y="95" class="a k">specialty_id : text</text><text x="16" y="130" class="a">name : text</text><text x="16" y="165" class="a">name_bn : text</text><text x="16" y="200" class="a">is_active</text></g>
+<g transform="translate(1320 570)"><rect class="e" width="260" height="260" rx="8"/><rect class="h" width="260" height="55" rx="8"/><text x="130" y="36" text-anchor="middle" class="n">Facility</text><text x="16" y="95" class="a k">facility_id : text</text><text x="16" y="130" class="a">name : text</text><text x="16" y="165" class="a">kind : text</text><text x="16" y="200" class="a">district_id</text></g>
+<g transform="translate(870 850)"><rect class="e" width="260" height="260" rx="8"/><rect class="h" width="260" height="55" rx="8"/><text x="130" y="36" text-anchor="middle" class="n">Video_Session</text><text x="16" y="95" class="a k">appointment_id</text><text x="16" y="130" class="a">provider</text><text x="16" y="165" class="a">room_name</text><text x="16" y="200" class="a">expires_at</text><text x="16" y="235" class="a">ended_at</text></g>
+<g transform="translate(870 1180)"><rect class="e" width="260" height="260" rx="8"/><rect class="h" width="260" height="55" rx="8"/><text x="130" y="36" text-anchor="middle" class="n">Medical_Record</text><text x="16" y="95" class="a k">record_id : UUID</text><text x="16" y="130" class="a">patient_id</text><text x="16" y="165" class="a">appointment_id</text><text x="16" y="200" class="a">author_user_id</text><text x="16" y="235" class="a">kind / is_current</text></g>
+<g transform="translate(420 1180)"><rect class="e" width="260" height="260" rx="8"/><rect class="h" width="260" height="55" rx="8"/><text x="130" y="36" text-anchor="middle" class="n">Prescription</text><text x="16" y="95" class="a k">prescription_id</text><text x="16" y="130" class="a">prescription_number</text><text x="16" y="165" class="a">appointment_id</text><text x="16" y="200" class="a">patient_id / doctor_id</text><text x="16" y="235" class="a">status : enum</text></g>
+<g transform="translate(1320 1180)"><rect class="e" width="260" height="260" rx="8"/><rect class="h" width="260" height="55" rx="8"/><text x="130" y="36" text-anchor="middle" class="n">Review</text><text x="16" y="95" class="a k">review_id : UUID</text><text x="16" y="130" class="a">appointment_id</text><text x="16" y="165" class="a">patient_id / doctor_id</text><text x="16" y="200" class="a">rating : smallint</text><text x="16" y="235" class="a">status : enum</text></g>
+<g transform="translate(420 1570)"><rect class="e" width="260" height="180" rx="8"/><rect class="h" width="260" height="55" rx="8"/><text x="130" y="36" text-anchor="middle" class="n">AI_Triage</text><text x="16" y="95" class="a k">triage_id : UUID</text><text x="16" y="130" class="a">patient_id / user_id</text><text x="16" y="165" class="a">urgency / red_flag</text></g>
+<g transform="translate(870 1570)"><rect class="e" width="260" height="180" rx="8"/><rect class="h" width="260" height="55" rx="8"/><text x="130" y="36" text-anchor="middle" class="n">AI_Summary</text><text x="16" y="95" class="a k">summary_id : UUID</text><text x="16" y="130" class="a">appointment_id</text><text x="16" y="165" class="a">review_status</text></g>
+<g transform="translate(1320 1570)"><rect class="e" width="260" height="180" rx="8"/><rect class="h" width="260" height="55" rx="8"/><text x="130" y="36" text-anchor="middle" class="n">Payment</text><text x="16" y="95" class="a k">payment_id : UUID</text><text x="16" y="130" class="a">appointment_id</text><text x="16" y="165" class="a">amount / status</text></g>
+
+<!-- relationship paths to bottom entities -->
+<path class="l" d="M550 1440V1510"/><path class="l" d="M1000 1440V1510"/><path class="l" d="M1450 1440V1510"/>
+<text x="1200" y="1785" text-anchor="middle" class="c">Core workflow: User → Patient/Doctor → Appointment → Video / Records / Prescription / Review / AI / Payment</text>
+</svg>
