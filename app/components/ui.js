@@ -553,8 +553,8 @@ export function Select({ value, onChange, options, ...rest }) {
 
 export function StatusPill({ status }) {
   const label = {
-    confirmed: "Confirmed", pending: "Pending", completed: "Completed",
-    cancelled: "Cancelled", no_show: "No-show", in_progress: "In progress",
+    confirmed: "Confirmed", pending: "Pending", completed: "Consulted",
+    cancelled: "Cancelled", no_show: "Missed", in_progress: "In progress",
     verified: "Verified", rejected: "Rejected",
     /*
      * A sign-up approval that has been spent. Deliberately NOT "Verified":

@@ -75,7 +75,7 @@ export function Dashboard({ loading, user, appointments, doctors, records, stats
               <div className="card-top"><span className="eyebrow">Next appointment</span></div>
               <Empty
                 icon="calendar"
-                title="Nothing booked yet"
+                title="No upcoming appointments"
                 hint="Find a doctor and pick a time that suits you."
                 action={
                   <button className="button primary small" onClick={() => onNavigate("doctors")}>

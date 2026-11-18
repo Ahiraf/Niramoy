@@ -20,6 +20,7 @@ import { DoctorWorkspace, useDoctorSelf } from "./doctor-workspace.js";
 import { AdminWorkspace } from "./admin-workspace.js";
 import { Landing } from "./landing.js";
 import { AuthPage } from "./auth-page.js";
+import { appointmentStatus } from "../../lib/scheduling/appointment-status";
 
 const HOME = { patient: "dashboard", doctor: "doctor-home", admin: "admin-home" };
 
@@ -53,7 +54,11 @@ export function Workspace({ portal = "public" }) {
 
   // Server-backed state.
   const [reference, setReference] = useState(null);
-  const [appointments, setAppointments] = useState([]);
+  const [storedAppointments, setAppointments] = useState([]);
+  const [appointmentClock, setAppointmentClock] = useState(() => Date.now());
+  const appointments = useMemo(() => storedAppointments.map((a) => ({
+    ...a, status: appointmentStatus(a, appointmentClock),
+  })), [storedAppointments, appointmentClock]);
   const [topDoctors, setTopDoctors] = useState([]);
   const [records, setRecords] = useState([]);
   const [prescriptions, setPrescriptions] = useState([]);
@@ -110,8 +115,23 @@ export function Workspace({ portal = "public" }) {
     const data = await api.appointments();
     if (data.ok === false) return false;
     setAppointments(data.appointments ?? []);
+    setAppointmentClock(Date.now());
     return true;
   }, []);
+
+  useEffect(() => {
+    if (screen !== "app") return;
+    const tick = () => setAppointmentClock(Date.now());
+    const refresh = () => { tick(); void refreshAppointments(); };
+    const timer = setInterval(tick, 1000);
+    const poll = setInterval(refresh, 30_000);
+    window.addEventListener("focus", refresh);
+    return () => {
+      clearInterval(timer);
+      clearInterval(poll);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [screen, refreshAppointments]);
 
   const refreshNotifications = useCallback(async () => {
     const data = await api.notifications();
@@ -475,9 +495,14 @@ export function Workspace({ portal = "public" }) {
   }, [navigate, showToast]);
 
   const completeCall = useCallback(async (id) => {
-    await api.updateAppointment(id, { action: "complete" });
+    const result = await api.updateAppointment(id, { action: "complete" });
+    if (!result.ok) {
+      showToast(result.message ?? "Could not complete the consultation", "error");
+      return false;
+    }
     await refreshAppointments();
     showToast("Consultation completed");
+    return true;
   }, [refreshAppointments, showToast]);
 
   const submitReview = useCallback(async (payload) => {

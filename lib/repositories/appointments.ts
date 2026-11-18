@@ -10,6 +10,7 @@ import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { getDb, type Database } from "../db/client";
 import * as t from "../db/schema";
 import type { Interval } from "../scheduling/engine";
+import { appointmentStatus } from "../scheduling/appointment-status";
 
 /** Statuses that still occupy a doctor's time. */
 export const LIVE_STATUSES = ["pending", "confirmed", "in_progress", "completed"] as const;
@@ -205,7 +206,7 @@ export async function list(
     startUtc: r.startUtc.toISOString(),
     endUtc: r.endUtc.toISOString(),
     durationMinutes: r.durationMinutes,
-    status: r.status,
+    status: appointmentStatus(r) as AppointmentRow["status"],
     type: r.type,
     reason: r.reason,
     feeAmount: r.feeAmount,

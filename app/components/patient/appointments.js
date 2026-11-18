@@ -494,11 +494,11 @@ export function Consultation({ appointment, onNavigate, onComplete }) {
             <button
               className="button leave-button"
               onClick={async () => {
-                if (appointment) await onComplete(appointment.id);
+                if (viewerIsDoctor && appointment && !(await onComplete(appointment.id))) return;
                 onNavigate("appointments");
               }}
             >
-              End consultation
+              {viewerIsDoctor ? "End consultation" : "Leave consultation"}
             </button>
           </div>
         </div>
