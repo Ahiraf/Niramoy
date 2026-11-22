@@ -172,6 +172,20 @@ export function Workspace({ portal = "public" }) {
     return true;
   }, []);
 
+  useEffect(() => {
+    if (screen !== "app" || role !== "patient") return;
+    const refresh = () => { if (!document.hidden) void refreshRecords(); };
+    refresh();
+    const timer = setInterval(refresh, 15_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [screen, role, active, refreshRecords]);
+
   /**
    * Session first: the landing page needs the reference stats either way, but
    * nothing personal is fetched until we know who is asking.
@@ -542,7 +556,7 @@ export function Workspace({ portal = "public" }) {
     const result = await api.addPrescription(prescription);
     if (!result.ok) {
       showToast(result.message ?? "Could not issue the prescription", "error");
-      return;
+      return false;
     }
 
     /**
@@ -558,8 +572,9 @@ export function Workspace({ portal = "public" }) {
       if (!approved.ok) showToast("Prescription saved, but the summary wasn't published", "error");
     }
 
-    await Promise.all([refreshRecords(), refreshNotifications()]);
-  }, [refreshRecords, refreshNotifications, showToast]);
+    await refreshNotifications();
+    return true;
+  }, [refreshNotifications, showToast]);
 
   const joinWaitlist = useCallback(async (doctor) => {
     const dateKey = new Date(Date.now() + 86400000).toISOString().slice(0, 10);

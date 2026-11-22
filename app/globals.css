@@ -629,14 +629,12 @@ textarea.field, .textarea { height: auto; padding: 10px 12px; line-height: 1.55;
   .rx-editor-row { grid-template-columns: 1fr 1fr; }
   .rx-editor-row .icon-button { grid-column: span 2; width: 100%; }
   .consult-stage { height: min(58dvh, 440px); min-height: 300px; }
-  /* Jitsi chooses its pre-join layout from the iframe's dimensions. A tall
-     portrait frame collapses the local camera into a narrow strip. Give the
-     provider a dependable video viewport on standard/wide phones so the full
-     self preview, name field, and Join button remain visible together. */
+  /* Leave enough vertical space for the provider's preview and join controls.
+     The page may scroll; a landscape aspect ratio clips the pre-join screen. */
   .consult-stage.embedded {
-    height: auto;
-    min-height: 0;
-    aspect-ratio: 16 / 10;
+    height: max(780px, 100svh);
+    min-height: 780px;
+    aspect-ratio: auto;
   }
   .consult-stage.embedded .consult-frame { height: 100%; }
   .consult-self { width: 78px; height: 56px; }
@@ -652,8 +650,8 @@ textarea.field, .textarea { height: auto; padding: 10px 12px; line-height: 1.55;
 @media (max-width: 390px) {
   .consult-stage.embedded {
     aspect-ratio: auto;
-    height: min(60dvh, 430px);
-    min-height: 320px;
+    height: max(820px, 100svh);
+    min-height: 820px;
   }
 }
 

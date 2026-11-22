@@ -291,7 +291,7 @@ function Schedule({ self, appointments, loading, onJoinCall, onIssuePrescription
         notify={notify}
         onClose={() => setWriting(null)}
         onSubmit={async (payload) => {
-          await onIssuePrescription(payload);
+          if (!(await onIssuePrescription(payload))) return;
           setWriting(null);
           notify?.("Prescription published to the patient's records");
         }}
@@ -310,6 +310,7 @@ function PrescriptionWriter({ appointment, self, api, onClose, onSubmit, notify 
   const [transcript, setTranscript] = useState("");
   const [aiSummary, setAiSummary] = useState("");
   const [drafting, setDrafting] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   /** The AI draft awaiting this doctor's confirmation, if one was generated. */
   const [summaryId, setSummaryId] = useState(null);
   const [items, setItems] = useState([{ drug: "", dose: "", frequency: "", duration: "" }]);
@@ -351,12 +352,13 @@ function PrescriptionWriter({ appointment, self, api, onClose, onSubmit, notify 
       open wide title="Write prescription" onClose={onClose}
       footer={
         <>
-          <button className="button ghost" onClick={onClose}>Cancel</button>
+          <button className="button ghost" onClick={onClose} disabled={publishing}>Cancel</button>
           <button
             className="button primary"
-            disabled={!items.some((i) => i.drug.trim())}
-            onClick={() =>
-              onSubmit({
+            disabled={publishing || !items.some((i) => i.drug.trim())}
+            onClick={async () => {
+              setPublishing(true);
+              try { await onSubmit({
                 appointmentId: appointment.id,
                 doctorId: appointment.doctorId,
                 diagnosis, notes, aiSummary,
@@ -364,10 +366,10 @@ function PrescriptionWriter({ appointment, self, api, onClose, onSubmit, notify 
                 // prescription is what publishes the reviewed summary.
                 summaryId,
                 items: items.filter((i) => i.drug.trim()),
-              })
-            }
+              }); } finally { setPublishing(false); }
+            }}
           >
-            Publish to patient
+            {publishing ? "Publishing…" : "Publish to patient"}
           </button>
         </>
       }

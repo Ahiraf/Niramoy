@@ -148,7 +148,13 @@ export function Appointments({
   const [cancelling, setCancelling] = useState(null);
   const [policyFor, setPolicyFor] = useState(null);
 
-  const shown = appointments.filter(TABS.find((t) => t.id === tab).match);
+  // The dashboard keeps its own nearest-upcoming ordering. In the full list,
+  // show the most recently scheduled consultation first so a new booking never
+  // disappears beneath older visits in the same tab.
+  const shown = appointments
+    .filter(TABS.find((t) => t.id === tab).match)
+    .slice()
+    .sort((a, b) => String(b.startUtc).localeCompare(String(a.startUtc)));
 
   return (
     <>

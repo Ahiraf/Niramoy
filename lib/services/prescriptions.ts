@@ -166,11 +166,13 @@ export async function issuePrescription(
     appointmentId: appointment.id,
   });
 
-  await clinical.notify({
-    userId: principal.userId,
+  const [patient] = await db.select({ userId: t.patients.userId }).from(t.patients)
+    .where(eq(t.patients.id, appointment.patientId)).limit(1);
+  if (patient?.userId) await clinical.notify({
+    userId: patient.userId,
     type: "prescription_ready",
-    title: "Prescription issued",
-    body: `A prescription was added to the consultation record.`,
+    title: "Your prescription is ready",
+    body: "Your doctor has published a prescription. Open Medical records to view it.",
     payload: { prescriptionId: id },
   });
 
