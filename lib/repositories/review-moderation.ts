@@ -3,12 +3,13 @@ import { getDb } from "../db/client";
 import * as t from "../db/schema";
 import { AppError } from "../errors";
 
-export async function listPendingReviews() {
+/** Admin history: pending, published and declined reviews, newest first. */
+export async function listReviewsForModeration() {
   return getDb().select({ id: t.reviews.id, rating: t.reviews.rating, comment: t.reviews.comment,
     status: t.reviews.status, createdAt: t.reviews.createdAt, doctorName: t.doctors.displayName, patientName: t.patients.displayName,
   }).from(t.reviews).innerJoin(t.doctors, eq(t.reviews.doctorId, t.doctors.id))
     .innerJoin(t.patients, eq(t.reviews.patientId, t.patients.id))
-    .where(eq(t.reviews.status, "pending_moderation")).orderBy(desc(t.reviews.createdAt));
+    .orderBy(desc(t.reviews.createdAt));
 }
 
 export async function moderateReview(id: string, approve: boolean, adminId: string) {

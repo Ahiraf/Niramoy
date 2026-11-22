@@ -1502,6 +1502,10 @@ html[data-text-size="larger"] { --text-scale: 1.32; }
 .notification time { display: block; font-size: 11px; margin-top: 7px; color: var(--muted); }
 .notification-empty { text-align: center; padding: 28px 12px; font-size: 13px; }
 .notification-empty p { font-weight: 700; color: var(--ink); font-size: 16px; }
+.review-moderation-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0; }
+.review-moderation-status { border-radius: 999px; padding: 5px 10px; font-size: 12px; font-weight: 700; background: #fff0cf; color: #895b12; }
+.review-moderation-status.published { background: #dcefe5; color: #17694d; }
+.review-moderation-status.removed { background: #f7e4e3; color: #98413a; }
 @media (max-width: 760px) { .notification-popover { width: auto; max-height: calc(100dvh - 100px); } }
 
 /* Calendar: colored markers keep the month compact; the agenda gives details. */

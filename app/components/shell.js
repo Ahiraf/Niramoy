@@ -27,7 +27,7 @@ export const NAV = {
     { id: "approvals", label: "Sign-up approvals", icon: "check" },
     { id: "verification", label: "Doctor verification", icon: "shield", badge: "pending" },
     { id: "directory", label: "Directory", icon: "users" },
-    { id: "review-moderation", label: "Review approvals", icon: "star" },
+    { id: "review-moderation", label: "Reviews", icon: "star" },
     { id: "specialties", label: "Specialties", icon: "heart" },
   ],
 };
@@ -55,6 +55,7 @@ const TITLES = {
   "doctor-schedule": ["Appointments", "Your consultation schedule"],
   availability: ["Availability", "Recurring hours and exceptions"],
   "doctor-reviews": ["Your Reviews", "Patient feedback about your consultations"],
+  "review-moderation": ["Reviews", "Review and manage patient feedback"],
   earnings: ["Earnings", "Completed consultations"],
   "admin-home": ["Admin overview", "Platform health"],
   approvals: ["Sign-up approvals", "Who may register as a doctor"],

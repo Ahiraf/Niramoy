@@ -1,5 +1,5 @@
 import { json, ok, withRoute } from "../../../../lib/api/respond";
-import { listPendingReviews, moderateReview } from "../../../../lib/repositories/review-moderation";
+import { listReviewsForModeration, moderateReview } from "../../../../lib/repositories/review-moderation";
 import { requireAdmin } from "../../../../lib/security/authz";
 import { AppError } from "../../../../lib/errors";
 import { audit } from "../../../../lib/audit";
@@ -7,7 +7,7 @@ import { audit } from "../../../../lib/audit";
 export const dynamic = "force-dynamic";
 export const GET = withRoute("GET /api/admin/reviews", async (request) => {
   await requireAdmin(request);
-  const reviews = await listPendingReviews();
+  const reviews = await listReviewsForModeration();
   return ok({ reviews });
 });
 

@@ -37,19 +37,19 @@ function ReviewApprovals({ api, notify }) {
     try {
       const result = await api.moderateReview({ id, approve });
       if (!result.ok) { setError(result.message || "Could not save the decision."); return; }
-      setRows((all) => all.filter((r) => r.id !== id));
-      notify(approve ? "Review approved and published" : "Review rejected");
+      setRows((all) => all.map((r) => r.id === id ? { ...r, status: approve ? "published" : "removed" } : r));
+      notify(approve ? "Review approved and published" : "Review declined");
     } finally { setBusy(null); }
   };
   return <>
-    <PageHeading title="Review approvals" subtitle="Only approved reviews appear on doctor profiles and count towards ratings." />
+    <PageHeading title="Reviews" subtitle="All patient feedback, newest first. Only approved reviews appear on doctor profiles and count towards ratings." />
     {error && <div role="alert" className="care-chat-error">{error} <button className="text-link" onClick={() => setRevision((n) => n + 1)}>Retry</button></div>}
     {loading ? <Loading rows={3} /> : rows.length ? rows.map((r) => <section className="section-card card" key={r.id}>
-      <SectionHead title={r.doctorName} note={`Review by ${r.patientName}`} /><Rating value={r.rating} />
+      <SectionHead title={r.doctorName} note={`Review by ${r.patientName}`} /><div className="review-moderation-meta"><Rating value={r.rating} /><span className={`review-moderation-status ${r.status}`}>{r.status === "pending_moderation" ? "Awaiting review" : r.status === "published" ? "Approved" : "Declined"}</span></div>
       <p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{r.comment || "Rating only; no written comment."}</p>
-      <div className="page-heading-actions"><button className="button secondary" disabled={Boolean(busy)} onClick={() => decide(r.id, false)}>Reject</button>
-        <button className="button primary" disabled={Boolean(busy)} onClick={() => decide(r.id, true)}>{busy === r.id ? "Saving…" : "Approve and publish"}</button></div>
-    </section>) : <Empty icon="check" title="All reviews checked" hint="New patient reviews will appear here for approval." />}
+      {r.status === "pending_moderation" && <div className="page-heading-actions"><button className="button secondary" disabled={Boolean(busy)} onClick={() => decide(r.id, false)}>{busy === r.id ? "Saving…" : "Decline"}</button>
+        <button className="button primary" disabled={Boolean(busy)} onClick={() => decide(r.id, true)}>{busy === r.id ? "Saving…" : "Approve"}</button></div>}
+    </section>) : <Empty icon="star" title="No reviews yet" hint="Patient reviews will appear here after a completed consultation." />}
   </>;
 }
 

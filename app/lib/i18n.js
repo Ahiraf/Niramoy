@@ -57,6 +57,7 @@ const STRINGS = {
   "nav.approvals": { en: "Sign-up approvals", bn: "সাইন-আপ অনুমোদন" },
   "nav.verification": { en: "Doctor verification", bn: "ডাক্তার যাচাই" },
   "nav.directory": { en: "Directory", bn: "ডিরেক্টরি" },
+  "nav.review-moderation": { en: "Reviews", bn: "রিভিউ" },
   "nav.specialties": { en: "Specialties", bn: "বিশেষত্ব" },
   "nav.profile": { en: "Settings", bn: "সেটিংস" },
   "nav.family": { en: "Family members", bn: "পরিবারের সদস্য" },

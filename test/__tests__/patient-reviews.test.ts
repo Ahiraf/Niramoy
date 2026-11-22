@@ -19,8 +19,8 @@ import { requestAs, seedAppointment, type World } from "../fixtures";
 const BASE = "http://localhost:3000";
 
 async function approvePending() {
-  const queue = await call<{ reviews: { id: string }[] }>(moderationGet, requestAs(world.admin, `${BASE}/api/admin/reviews`));
-  for (const review of queue.body.reviews) {
+  const queue = await call<{ reviews: { id: string; status: string }[] }>(moderationGet, requestAs(world.admin, `${BASE}/api/admin/reviews`));
+  for (const review of queue.body.reviews.filter((review) => review.status === "pending_moderation")) {
     const result = await call(moderationPatch, requestAs(world.admin, `${BASE}/api/admin/reviews`, { method: "PATCH", body: JSON.stringify({ id: review.id, approve: true }) }));
     expect(result.status).toBe(200);
   }
@@ -61,6 +61,10 @@ describe("a patient reviews a doctor, and other patients see it", () => {
     }
     const rejected = await call(moderationPatch, requestAs(world.admin, `${BASE}/api/admin/reviews`, { method: "PATCH", body: JSON.stringify({ id: written.body.review.id, approve: false }) }));
     expect(rejected.status).toBe(200);
+    const history = await call<{ reviews: { id: string; status: string }[] }>(moderationGet, requestAs(world.admin, `${BASE}/api/admin/reviews`));
+    expect(history.body.reviews).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: written.body.review.id, status: "removed" }),
+    ]));
     const [stored] = await world.h.db.select().from(t.reviews).where(eq(t.reviews.id, written.body.review.id));
     expect(stored?.status).toBe("removed");
     const repeated = await call(moderationPatch, requestAs(world.admin, `${BASE}/api/admin/reviews`, { method: "PATCH", body: JSON.stringify({ id: written.body.review.id, approve: true }) }));
