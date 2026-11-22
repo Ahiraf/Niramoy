@@ -158,6 +158,21 @@ describe("believing a callback", () => {
     }
   });
 
+  it("verifies a transaction reference when a return omits val_id", async () => {
+    const stub = stubFetch(() => ({ element: [{
+      status: "VALID", val_id: "v-by-transaction", tran_id: "nmyabc", amount: "500.00", currency: "BDT",
+    }] }));
+    try {
+      const result = await provider.validateByProviderPaymentId?.("nmyabc");
+      expect(stub.calls[0]).toContain("merchantTransIDvalidationAPI.php");
+      expect(result).toMatchObject({
+        valid: true, status: "succeeded", eventId: "v-by-transaction", amount: 500,
+      });
+    } finally {
+      stub.restore();
+    }
+  });
+
   it("does not settle when the gateway cannot be reached", async () => {
     const stub = stubFetch(() => new Error("ECONNRESET"));
     try {

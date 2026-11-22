@@ -136,8 +136,8 @@ const STRINGS = {
   },
   "pay.checking": { en: "Checking with bKash…", bn: "bKash-এর সঙ্গে যাচাই করা হচ্ছে…" },
   "pay.returnSuccess": {
-    en: "Payment confirmed by bKash.",
-    bn: "bKash পেমেন্ট নিশ্চিত করেছে।",
+    en: "Payment successful — your appointment is confirmed.",
+    bn: "পেমেন্ট সফল হয়েছে — আপনার অ্যাপয়েন্টমেন্ট নিশ্চিত হয়েছে।",
   },
   "pay.returnUnconfirmed": {
     en: "We couldn't confirm that payment yet. Your appointment is still booked — check again in a moment.",
@@ -212,7 +212,7 @@ const STRINGS = {
   "landing.figures.districts": { en: "Districts covered", bn: "যত জেলায় সেবা" },
   "landing.figures.triage": { en: "AI triage", bn: "এআই প্রাথমিক পরামর্শ" },
 
-  "landing.roles.eyebrow": { en: "Three workspaces", bn: "তিনটি ওয়ার্কস্পেস" },
+  "landing.roles.eyebrow": { en: "Care, connected", bn: "সেবার সংযোগ" },
   "landing.roles.title": {
     en: "One platform, whichever side of care you're on",
     bn: "চিকিৎসার যে দিকেই থাকুন, প্ল্যাটফর্ম একটাই",

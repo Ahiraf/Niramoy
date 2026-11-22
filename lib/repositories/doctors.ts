@@ -60,7 +60,7 @@ const publicColumns = {
   specialty: t.specialties.name,
   degrees: t.doctors.degrees,
   bio: t.doctors.bio,
-  facility: t.facilities.name,
+  facility: sql<string | null>`coalesce(${t.facilities.name}, (select v.claimed_facility from doctor_verifications v where v.doctor_id = ${t.doctors.id} and v.status = 'verified' order by v.submitted_at desc limit 1))`,
   district: t.districts.name,
   division: t.divisions.name,
   divisionId: t.doctors.divisionId,

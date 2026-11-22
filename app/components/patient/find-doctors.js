@@ -366,16 +366,16 @@ export function DoctorProfile({ doctor, reviews = [], onBook, onBack, onNavigate
             <div><span>Experience</span><strong>{doctor.experienceYears} years</strong></div>
             <div><span>Consultation fee</span><strong>{doctor.feeLabel}</strong></div>
             <div><span>Session length</span><strong>{doctor.consultationMinutes} min</strong></div>
-            <div><span>Languages</span><strong>{doctor.languages.join(", ")}</strong></div>
-            <div><span>BM&amp;DC no.</span><strong>{doctor.bmdcNumber}</strong></div>
-            <div><span>Next available</span><strong>{doctor.nextAvailableHint}</strong></div>
+            <div><span>Languages</span><strong>{doctor.languages?.join(", ") || "Not provided"}</strong></div>
+            <div><span>Registration</span><strong>{doctor.verified ? "BM&DC verified" : "Not verified"}</strong></div>
+            <div><span>Next available</span><button className="text-link" onClick={() => onBook(doctor)}>Check available slots</button></div>
           </div>
 
           <SectionHead title="Where they practise" />
           <div className="facility-row">
             <div className="stat-icon"><Icon name="building" size={17} /></div>
             <div>
-              <strong>{doctor.facility}</strong>
+              <strong>{doctor.facility || "Practice details not provided"}</strong>
               <span>{placeLabel(doctor, { withDivisionWord: true })}</span>
             </div>
           </div>

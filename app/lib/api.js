@@ -115,6 +115,8 @@ export const api = {
   slots: (id, days = 14) => request(`/api/doctors/${id}/slots${qs({ days })}`),
   doctorAvailability: () => request("/api/doctor/availability"),
   doctorReviews: () => request("/api/doctor/reviews"),
+  pendingReviews: () => request("/api/admin/reviews"),
+  moderateReview: (body) => request("/api/admin/reviews", { method: "PATCH", body }),
   addDoctorAvailability: (body) => request("/api/doctor/availability", { method: "POST", body }),
   updateDoctorAvailability: (id, body) =>
     request(`/api/doctor/availability?id=${encodeURIComponent(id)}`, { method: "PATCH", body }),

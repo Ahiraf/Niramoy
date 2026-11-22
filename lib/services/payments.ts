@@ -731,16 +731,28 @@ export async function getPayment(
  * two is resolved by the event-id replay guard rather than by whoever wins.
  */
 export async function settleFromReturn(
-  valId: string,
+  input: { valId?: string | null; providerPaymentId?: string | null },
   context: { requestId?: string },
 ): Promise<{ handled: boolean; reason?: string }> {
   const provider = getPaymentProvider();
 
-  if (!provider.validateByValId) {
+  if (!input.valId && !input.providerPaymentId) {
+    return { handled: false, reason: "missing_gateway_reference" };
+  }
+  if (!provider.validateByValId && !provider.validateByProviderPaymentId) {
     return { handled: false, reason: "provider_has_no_validation" };
   }
 
-  const verification = await provider.validateByValId(valId);
+  let verification = input.valId && provider.validateByValId
+    ? await provider.validateByValId(input.valId)
+    : { valid: false, eventId: null, providerPaymentId: null, status: null, reason: "no_validation_id" };
+
+  // SSLCommerz normally returns val_id. Some successful browser redirects carry
+  // only tran_id, so verify that transaction directly with SSLCommerz instead
+  // of showing a false negative to the payer.
+  if (!verification.valid && input.providerPaymentId && provider.validateByProviderPaymentId) {
+    verification = await provider.validateByProviderPaymentId(input.providerPaymentId);
+  }
 
   if (!verification.valid) {
     logger.warn("rejected a payment return that did not validate", {

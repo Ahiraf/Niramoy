@@ -18,7 +18,7 @@ export function Dashboard({ loading, user, appointments, doctors, records, stats
         subtitle="Here's what's happening with your care today."
         actions={
           <>
-            <button className="button ghost" onClick={() => onNavigate("appointments")}>
+            <button className="button ghost" onClick={() => onNavigate("calendar")}>
               <Icon name="calendar" size={14} />View calendar
             </button>
             <button className="button primary" onClick={() => onNavigate("doctors")}>

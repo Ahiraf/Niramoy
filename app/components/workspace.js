@@ -5,6 +5,7 @@ import { api } from "../lib/api.js";
 import { Sidebar, Topbar } from "./shell.js";
 import { ErrorState, OfflineBar, Toast, useOnline } from "./ui.js";
 import { Dashboard } from "./patient/dashboard.js";
+import { AppointmentCalendar } from "./patient/appointment-calendar.js";
 import { FindDoctors, DoctorProfile } from "./patient/find-doctors.js";
 import { Booking } from "./patient/booking.js";
 import { BkashCheckout } from "./patient/bkash-checkout.js";
@@ -525,9 +526,10 @@ export function Workspace({ portal = "public" }) {
 
   const submitReview = useCallback(async (payload) => {
     const result = await api.addReview(payload);
-    showToast(result.ok ? "Thanks for your review" : (result.message ?? "Could not save review"), result.ok ? "success" : "error");
-    if (result.ok) await refreshReference();
-  }, [showToast, refreshReference]);
+    showToast(result.ok ? "Review submitted for admin approval" : (result.message ?? "Could not save review"), result.ok ? "success" : "error");
+    if (result.ok) await Promise.all([refreshReference(), refreshAppointments()]);
+    return result.ok;
+  }, [showToast, refreshReference, refreshAppointments]);
 
   const addRecord = useCallback(async (payload) => {
     await api.addRecord(payload);
@@ -784,6 +786,9 @@ export function Workspace({ portal = "public" }) {
     if (active === "profile") view = <Settings {...settingsProps} />;
   } else {
     switch (active) {
+      case "calendar":
+        view = <AppointmentCalendar appointments={appointments} loading={loading} onNavigate={navigate} />;
+        break;
       case "messages":
         view = <CareMessages api={api} role={role} onNavigate={navigate} />;
         break;

@@ -112,6 +112,7 @@ export function sslcommerzProvider(config: SslcommerzConfig): PaymentProvider {
     url.searchParams.set("val_id", valId);
     url.searchParams.set("store_id", config.storeId);
     url.searchParams.set("store_passwd", config.storePassword);
+    url.searchParams.set("v", "1");
     url.searchParams.set("format", "json");
 
     let payload: Record<string, unknown>;
@@ -254,6 +255,7 @@ export function sslcommerzProvider(config: SslcommerzConfig): PaymentProvider {
       url.searchParams.set("tran_id", providerPaymentId);
       url.searchParams.set("store_id", config.storeId);
       url.searchParams.set("store_passwd", config.storePassword);
+      url.searchParams.set("v", "1");
       url.searchParams.set("format", "json");
 
       const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
@@ -262,6 +264,42 @@ export function sslcommerzProvider(config: SslcommerzConfig): PaymentProvider {
       const payload = (await res.json()) as { element?: Array<{ status?: string }> };
       const status = payload.element?.[0]?.status ?? "";
       return SETTLED[status] ?? "pending";
+    },
+
+    async validateByProviderPaymentId(providerPaymentId: string): Promise<WebhookVerification> {
+      const url = new URL(`${base}/validator/api/merchantTransIDvalidationAPI.php`);
+      url.searchParams.set("tran_id", providerPaymentId);
+      url.searchParams.set("store_id", config.storeId);
+      url.searchParams.set("store_passwd", config.storePassword);
+      url.searchParams.set("v", "1");
+      url.searchParams.set("format", "json");
+
+      try {
+        const res = await fetch(url, { method: "GET", signal: AbortSignal.timeout(15_000) });
+        if (!res.ok) return reject(`transaction_validation_http_${res.status}`);
+        const payload = (await res.json()) as { element?: Array<Record<string, unknown>> };
+        const transaction = payload.element?.[0];
+        const status = String(transaction?.status ?? "");
+        const mapped = SETTLED[status];
+        if (!transaction || !mapped) return reject(`unexpected_transaction_status_${status || "empty"}`);
+
+        const transactionId = transaction.tran_id ? String(transaction.tran_id) : providerPaymentId;
+        return {
+          valid: true,
+          eventId: transaction.val_id
+            ? String(transaction.val_id)
+            : `${transactionId}:${status}:${String(transaction.bank_tran_id ?? "gateway")}`,
+          providerPaymentId: transactionId,
+          status: mapped,
+          amount: transaction.amount === undefined ? null : Number(transaction.amount),
+          currency: transaction.currency ? String(transaction.currency) : null,
+        };
+      } catch (err) {
+        logger.warn("sslcommerz transaction validation call failed", {
+          reason: err instanceof Error ? err.message : "unknown",
+        });
+        return reject("transaction_validation_unreachable");
+      }
     },
 
     async refundPayment(): Promise<PaymentStatus> {

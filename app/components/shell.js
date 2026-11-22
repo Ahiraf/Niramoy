@@ -27,6 +27,7 @@ export const NAV = {
     { id: "approvals", label: "Sign-up approvals", icon: "check" },
     { id: "verification", label: "Doctor verification", icon: "shield", badge: "pending" },
     { id: "directory", label: "Directory", icon: "users" },
+    { id: "review-moderation", label: "Review approvals", icon: "star" },
     { id: "specialties", label: "Specialties", icon: "heart" },
   ],
 };
@@ -211,15 +212,17 @@ export function Topbar({ active, notifications, unread, onReadNotifications, onS
 
           {showNotifications && (
             <div className="notification-popover">
-              <h3>Notifications {unread > 0 && <span>· {unread} new</span>}</h3>
-              {notifications.length === 0 && <p className="notification-empty">Nothing yet.</p>}
+              <div className="notification-heading"><h3>Notifications</h3><button className="icon-button" aria-label="Close notifications" onClick={() => setShowNotifications(false)}><Icon name="x" size={18} /></button></div>
+              <p className="notification-summary">Your appointments and care updates</p>
+              {notifications.length === 0 && <div className="notification-empty"><Icon name="bell" size={28} /><p>You’re all caught up.</p><span>New care updates will appear here.</span></div>}
               {notifications.map((n) => (
                 <div className={`notification ${n.read ? "" : "unread"}`} key={n.id}>
-                  <i />
+                  <span className="notification-symbol"><Icon name={n.type?.includes("message") ? "send" : "bell"} size={18} /></span>
                   <p>
                     <strong>{n.title ?? n.payload?.title}</strong>
                     <br />
                     {n.body ?? n.payload?.body}
+                    {n.createdAt && <time>{new Date(n.createdAt).toLocaleString("en-BD", { timeZone: "Asia/Dhaka", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</time>}
                   </p>
                 </div>
               ))}

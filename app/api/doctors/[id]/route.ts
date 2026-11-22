@@ -16,6 +16,8 @@ export const GET = withRoute(
     const doctor = await directory.getDoctor(id);
     if (!doctor) throw new AppError("DOCTOR_NOT_FOUND");
 
-    return ok({ doctor, reviews: await clinical.listReviews(doctor.id) });
+    const availability = await directory.getAvailability(doctor.id);
+    const clock = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+    return ok({ doctor: { ...doctor, availability: availability.map((rule) => ({ ...rule, localStart: clock(rule.startMinute), localEnd: clock(rule.endMinute) })) }, reviews: await clinical.listReviews(doctor.id) });
   },
 );

@@ -9,7 +9,8 @@
  *   - It does not believe the outcome in the URL. Anyone can open
  *     /api/payments/return/success in a tab. The path only decides where the
  *     payer is sent next; whether the payment settled is decided by a
- *     server-to-server validation call on the `val_id`.
+ *     server-to-server validation call using the gateway validation or
+ *     transaction reference.
  *   - It does not require a session. The payer is arriving mid-redirect from a
  *     third party, and their cookies may not survive a cross-site POST. There
  *     is nothing here worth protecting with one: the endpoint reveals nothing
@@ -29,16 +30,19 @@ export const dynamic = "force-dynamic";
 const OUTCOMES = new Set(["success", "fail", "cancel"]);
 
 /** Gateways post form-encoded; some configurations send the payer back by GET. */
-async function readValId(request: Request): Promise<string | null> {
-  const fromQuery = new URL(request.url).searchParams.get("val_id");
-  if (fromQuery) return fromQuery;
-
-  if (request.method !== "POST") return null;
+async function readGatewayReferences(request: Request): Promise<{ valId: string | null; providerPaymentId: string | null }> {
+  const query = new URL(request.url).searchParams;
+  let valId = query.get("val_id");
+  let providerPaymentId = query.get("tran_id");
+  if (request.method !== "POST") return { valId, providerPaymentId };
   try {
-    return new URLSearchParams(await request.text()).get("val_id");
+    const body = new URLSearchParams(await request.text());
+    valId ??= body.get("val_id");
+    providerPaymentId ??= body.get("tran_id");
   } catch {
-    return null;
+    // With no readable form body, only query values can be verified.
   }
+  return { valId, providerPaymentId };
 }
 
 async function handle(
@@ -65,16 +69,16 @@ async function handle(
     return NextResponse.redirect(destination, 303);
   }
 
-  const valId = await readValId(request);
-  if (!valId) {
-    // A "success" return carrying no val_id is not a success. Most likely
+  const references = await readGatewayReferences(request);
+  if (!references.valId && !references.providerPaymentId) {
+    // A success return carrying no gateway reference is not a success. Most likely
     // someone opened the URL by hand.
-    logger.warn("payment return claimed success with no val_id", { requestId });
+    logger.warn("payment return claimed success with no gateway reference", { requestId });
     destination.searchParams.set("payment", "unconfirmed");
     return NextResponse.redirect(destination, 303);
   }
 
-  const result = await settleFromReturn(valId, { requestId });
+  const result = await settleFromReturn(references, { requestId });
 
   // `duplicate_event` means the IPN got here first and already settled it,
   // which is a success from the payer's point of view rather than a problem.

@@ -339,6 +339,24 @@ describe("the payer coming back from the gateway", () => {
     }
   });
 
+  it("settles a success return that supplies only the gateway transaction id", async () => {
+    const restoreEnv = useSslcommerz();
+    const gateway = stubGateway({ status: { element: [{
+      status: "VALID", val_id: "val-by-transaction", tran_id: "nmytxn001", amount: "800.00", currency: "BDT",
+    }] } });
+    try {
+      await world.h.client.exec(`
+        INSERT INTO payments (provider, is_mock, amount, currency, status, idempotency_key, provider_payment_id, method)
+        VALUES ('sslcommerz', 'false', '800', 'BDT', 'pending', 'return-transaction-key', 'nmytxn001', 'bkash');
+      `);
+      const res = await returnRoute("success", "tran_id=nmytxn001");
+      expect(outcomeOf(res)).toBe("success");
+    } finally {
+      gateway.restore();
+      restoreEnv();
+    }
+  });
+
   it("reports a cancellation without asking the gateway anything", async () => {
     const restoreEnv = useSslcommerz();
     const gateway = stubGateway();

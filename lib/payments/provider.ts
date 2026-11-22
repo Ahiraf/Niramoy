@@ -129,6 +129,12 @@ export interface PaymentProvider {
    * check — it is a second route to the same authority, not a shortcut past it.
    */
   validateByValId?(valId: string): Promise<WebhookVerification>;
+  /**
+   * Verified fallback for a browser return that contains only the merchant
+   * transaction id. A browser-provided id still cannot settle anything by
+   * itself: the provider must return the gateway's amount and currency.
+   */
+  validateByProviderPaymentId?(providerPaymentId: string): Promise<WebhookVerification>;
 }
 
 /* -------------------------------------------------------------------------- */

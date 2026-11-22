@@ -1492,6 +1492,91 @@ html[data-text-size="larger"] { --text-scale: 1.32; }
   .care-message { max-width: 94%; }
 }
 
+.notification-popover { width: min(390px, calc(100vw - 24px)); max-height: 72dvh; overflow-y: auto; padding: 18px; border-radius: 18px; box-shadow: 0 18px 50px #123d3029; }
+.notification-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.notification-heading h3 { margin: 0; font-size: 20px; }
+.notification-summary { color: var(--muted); font-size: 13px; margin: 4px 0 16px; }
+.notification { gap: 12px; padding: 16px 4px; }
+.notification.unread { background: #ecf6f0; border-radius: 10px; }
+.notification-symbol { flex: 0 0 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; color: #126d60; background: #e0eee8; }
+.notification p { font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.notification strong { font-size: 14px; }
+.notification time { display: block; font-size: 11px; margin-top: 7px; color: var(--muted); }
+.notification-empty { text-align: center; padding: 28px 12px; font-size: 13px; }
+.notification-empty p { font-weight: 700; color: var(--ink); font-size: 16px; }
+@media (max-width: 760px) { .notification-popover { width: auto; max-height: calc(100dvh - 100px); } }
+
+/* Calendar: colored markers keep the month compact; the agenda gives details. */
+.appointment-calendar { padding: 24px; }
+.calendar-toolbar, .calendar-toolbar > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.calendar-toolbar h2 { margin: 0; font-size: 24px; }
+.calendar-legend { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0; }
+.calendar-tag { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border-radius: 6px; font-size: 12px; font-weight: 700; }
+.calendar-tag.booked { background: #dcf1ea; color: #12624f; }
+.calendar-tag.missed { background: #ffe8e5; color: #a33930; }
+.calendar-tag.rescheduled { background: #eee8ff; color: #6741a2; }
+.calendar-tag.consulted { background: #e2effa; color: #2c628e; }
+.calendar-tag.cancelled { background: #ebedef; color: #5c636b; }
+.calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.calendar-weekday { text-align: center; font-size: 13px; color: var(--muted); padding: 10px 0; }
+.calendar-day { min-height: 95px; border: 1px solid var(--line); border-radius: 10px; background: #f8fbf9; color: var(--ink); padding: 10px; text-align: left; cursor: pointer; }
+.calendar-day strong { font-size: 16px; }
+.calendar-day.today strong { text-decoration: underline; text-underline-offset: 5px; }
+.calendar-day.selected { border-color: #087c73; background: #dcefe9; box-shadow: inset 0 0 0 1px #087c73; }
+.calendar-day:focus-visible, .care-thread:focus-visible { outline: 3px solid #07887f; outline-offset: 2px; }
+.calendar-day small { display: block; color: var(--muted); margin-top: 4px; font-size: 11px; }
+.calendar-markers { display: flex; flex-wrap: wrap; gap: 3px; min-height: 7px; margin-top: 9px; }
+.calendar-dot { width: 7px; height: 7px; border-radius: 50%; background: #16866a; }
+.calendar-dot.missed { background: #be4c40; border-radius: 0; }
+.calendar-dot.rescheduled { background: #8053bb; border-radius: 2px; transform: rotate(45deg); }
+.calendar-dot.consulted { background: #417fab; }
+.calendar-dot.cancelled { background: #777e86; }
+.calendar-agenda { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 14px; }
+.calendar-visit { display: flex; align-items: center; gap: 20px; padding: 18px 0; border-bottom: 1px solid var(--line); }
+.calendar-visit > div { flex: 1; }
+.calendar-visit time { font-weight: 700; color: var(--teal-dark); }
+.calendar-visit p { margin: 5px 0; font-size: 13px; color: var(--muted); }
+.calendar-agenda > button { margin-top: 16px; }
+.care-safety { background: #fff7e9; border: 1px solid #ead6b6; color: #7d5b28; border-radius: 10px; padding: 12px 16px; font-size: 13px; }
+.care-safety summary { cursor: pointer; font-weight: 600; }
+.care-safety summary svg { vertical-align: middle; margin-right: 7px; }
+.care-safety p { line-height: 1.6; margin-bottom: 0; }
+.care-chat .care-inbox { padding: 18px 10px; }
+.care-inbox h2 { padding: 0 10px; }
+.care-chat .care-thread { display: flex; align-items: center; gap: 12px; border: 0; border-bottom: 1px solid var(--line); border-radius: 8px; background: transparent; padding: 16px 10px; margin: 0; }
+.care-chat .care-thread.active { background: #e0f0e9; }
+.care-thread .care-thread-avatar { display: grid; place-items: center; width: 42px; height: 42px; flex: 0 0 42px; border-radius: 50%; background: #cce7de; color: #17584d; font-weight: 700; font-size: 18px; }
+.care-thread .care-thread-content { flex: 1; min-width: 0; margin: 0; }
+.care-thread-content strong { color: var(--ink); }
+.care-thread .care-preview { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.care-thread b { flex-shrink: 0; }
+.care-conversation header { display: flex; align-items: center; gap: 16px; background: #e0eee9; }
+.care-conversation header h2 { margin: 0 0 5px; }
+.care-conversation .care-back { display: inline-flex; flex-shrink: 0; margin: 0; }
+.care-message-log { background: #f6faf8; gap: 10px; }
+.care-message { box-shadow: 0 1px 2px #153d3010; }
+.care-message.mine { background: #d4ece2; }
+.care-compose { background: #fff; }
+.care-compose textarea { min-height: 58px; max-height: 120px; }
+@media (max-width: 760px) {
+  .appointment-calendar { padding: 12px; }
+  .calendar-toolbar h2 { font-size: 18px; }
+  .calendar-toolbar .button { padding: 9px; min-width: 38px; }
+  .calendar-grid { gap: 3px; }
+  .calendar-day { min-height: 68px; padding: 6px; }
+  .calendar-day small span { display: none; }
+  .calendar-visit { flex-wrap: wrap; gap: 10px; }
+  .calendar-visit time { width: 100%; }
+  .care-page.has-thread > .page-heading { margin-bottom: 12px; padding-bottom: 12px; }
+  .care-conversation header { gap: 10px; }
+  .care-conversation header h2 { font-size: 17px; }
+  .care-conversation .care-back { padding: 8px; font-size: 13px; }
+  .care-chat.thread-open .care-conversation { display: flex; flex-direction: column; height: 74dvh; min-height: 430px; }
+  .care-chat.thread-open .care-message-log { flex: 1; height: auto; min-height: 120px; }
+  .care-chat.thread-open .care-compose { flex-shrink: 0; padding: 12px; }
+  .care-compose label { font-size: 12px; margin-bottom: 4px; }
+}
+
 /* A focused, single-column care conversation; details are progressive. */
 .ai-layout.assistant-comfort { grid-template-columns: minmax(0, 1fr); max-width: 840px; margin-inline: auto; gap: 20px; }
 .assistant-comfort .ai-panel { min-height: 0; padding: 24px; }
@@ -1620,4 +1705,48 @@ html[data-text-size="larger"] { --text-scale: 1.32; }
   .landing-final .button.primary:hover { background: #f0f7e7; }
   .landing-final .button.ghost { background: #286052; border-color: #669180; color: #f4f7ec; }
   .landing-footer { background: #dce7d8; border-color: #c1d4be; }
+}
+
+/* A brighter public front door, scoped away from the clinical workspace. */
+.landing.landing-vibrant { background: #f3faf7; }
+.landing-vibrant .landing-nav { background: #f6fcf9f5; }
+.landing-vibrant .landing-hero { background: radial-gradient(ellipse at 90% 25%, #bbe5df 0, transparent 55%), radial-gradient(ellipse at 0 70%, #e1ddfa 0, transparent 50%); }
+.landing-vibrant .landing-section { padding-block: clamp(42px, 6vw, 82px); }
+.landing-vibrant .landing-head { max-width: 820px; }
+.landing-vibrant .landing-head h2 { line-height: 1.2; text-wrap: balance; }
+.landing-vibrant .landing-eyebrow.plain { background: #d1eee3; color: #145c4c; }
+.landing-vibrant .landing-role-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.landing-vibrant .landing-role-card { background: #096c60; color: #fff; border: 0; padding: clamp(24px, 3vw, 38px); border-radius: 24px; box-shadow: 0 15px 30px #174a3615; }
+.landing-vibrant .landing-role-card.doctor { background: #254f9b; }
+.landing-vibrant .landing-role-card h3 { color: #fff; font-size: calc(25px * var(--text-scale)); }
+.landing-vibrant .landing-role-card > p, .landing-vibrant .landing-role-card li { color: #eef7ff; }
+.landing-vibrant .landing-role-card li svg { color: #bcefdc; }
+.landing-vibrant .landing-role-icon { background: #ffffff22; color: #fff; width: 54px; height: 54px; border-radius: 17px; }
+.landing-vibrant .landing-role-card .button { background: #f4fff9; color: #145849; border-color: transparent; margin-top: auto; }
+.landing-vibrant .landing-role-card.doctor .button { background: #e7efff; color: #204585; }
+.landing-vibrant .landing-section.tinted { background: #e5eff8; border-color: #ccdeed; }
+.landing-vibrant .landing-steps li, .landing-vibrant .landing-feature { --card-accent: #13735f; --card-fill: #d8f1e5; background: var(--card-fill); border: 1px solid #ffffffaa; border-top: 4px solid var(--card-accent); box-shadow: 0 6px 20px #1c354708; }
+.landing-vibrant .landing-steps li:nth-child(2), .landing-vibrant .landing-feature:nth-child(2) { --card-accent: #345f9e; --card-fill: #dceaff; }
+.landing-vibrant .landing-steps li:nth-child(3), .landing-vibrant .landing-feature:nth-child(3) { --card-accent: #7650a4; --card-fill: #ece0fa; }
+.landing-vibrant .landing-steps li:nth-child(4), .landing-vibrant .landing-feature:nth-child(4) { --card-accent: #a54b3c; --card-fill: #ffded3; }
+.landing-vibrant .landing-feature:nth-child(5) { --card-accent: #8c6513; --card-fill: #faedbc; }
+.landing-vibrant .landing-feature:nth-child(6) { --card-accent: #276a83; --card-fill: #d6eef5; }
+.landing-vibrant .landing-step-icon, .landing-vibrant .landing-feature-icon { background: var(--card-accent); color: #fff; border: 0; width: 44px; height: 44px; border-radius: 14px; }
+.landing-vibrant .landing-step-no { color: var(--card-accent); }
+.landing-vibrant .landing-steps p, .landing-vibrant .landing-feature p { color: #354c59; }
+.landing-vibrant .landing-feature { padding: 26px; border-radius: 18px; }
+.landing-vibrant .landing-feature strong { font-size: calc(15px * var(--text-scale)); }
+.landing-vibrant .landing-note { background: #fff0d8; border-color: #e7cf9f; }
+.landing-vibrant .landing-final { background: #144e63; }
+.landing-vibrant .landing-footer { background: #e3f0eb; }
+@keyframes landing-headline-arrive { from { opacity: .25; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: no-preference) {
+  .landing-vibrant .headline-arrived { animation: landing-headline-arrive .75s ease-out both; }
+  .landing-vibrant .landing-feature, .landing-vibrant .landing-role-card { transition: transform .2s ease, box-shadow .2s ease; }
+  .landing-vibrant .landing-feature:hover, .landing-vibrant .landing-role-card:hover { transform: translateY(-4px); box-shadow: 0 15px 28px #1b3d4a18; }
+}
+@media (max-width: 640px) {
+  .landing-vibrant .landing-role-grid { grid-template-columns: 1fr; gap: 16px; }
+  .landing-vibrant .landing-role-card h3 { font-size: 25px; }
+  .landing-vibrant .landing-feature { padding: 22px; }
 }

@@ -175,6 +175,7 @@ export async function list(
     .select({
       ...columns,
       doctorName: t.doctors.displayName,
+      reviewStatus: sql<string | null>`(select r.status from reviews r where r.appointment_id = ${t.appointments.id} limit 1)`,
       doctorInitials: t.doctors.initials,
       doctorAvatar: t.doctors.avatar,
       doctorFee: t.doctors.feeAmount,
@@ -212,6 +213,7 @@ export async function list(
     feeAmount: r.feeAmount,
     currency: r.currency,
     rescheduleCount: r.rescheduleCount,
+    reviewStatus: r.reviewStatus,
     createdAt: r.createdAt.toISOString(),
     doctor: r.doctorName
       ? {

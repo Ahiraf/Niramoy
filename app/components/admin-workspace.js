@@ -8,11 +8,49 @@ import {
 } from "./ui.js";
 
 export function AdminWorkspace({ active, reference, api, notify, onRefresh }) {
+  if (active === "review-moderation") return <ReviewApprovals api={api} notify={notify} />;
   if (active === "approvals") return <Approvals api={api} notify={notify} />;
   if (active === "verification") return <Verification api={api} notify={notify} onRefresh={onRefresh} />;
   if (active === "directory") return <Directory api={api} reference={reference} />;
   if (active === "specialties") return <Specialties reference={reference} />;
   return <AdminHome reference={reference} api={api} />;
+}
+
+function ReviewApprovals({ api, notify }) {
+  const [rows, setRows] = useState([]);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(null);
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    api.pendingReviews().then((result) => {
+      if (!alive) return;
+      setLoading(false);
+      if (result.ok) { setRows(result.reviews); setError(""); }
+      else setError(result.message || "Could not load reviews.");
+    });
+    return () => { alive = false; };
+  }, [api, revision]);
+  const decide = async (id, approve) => {
+    setBusy(id);
+    try {
+      const result = await api.moderateReview({ id, approve });
+      if (!result.ok) { setError(result.message || "Could not save the decision."); return; }
+      setRows((all) => all.filter((r) => r.id !== id));
+      notify(approve ? "Review approved and published" : "Review rejected");
+    } finally { setBusy(null); }
+  };
+  return <>
+    <PageHeading title="Review approvals" subtitle="Only approved reviews appear on doctor profiles and count towards ratings." />
+    {error && <div role="alert" className="care-chat-error">{error} <button className="text-link" onClick={() => setRevision((n) => n + 1)}>Retry</button></div>}
+    {loading ? <Loading rows={3} /> : rows.length ? rows.map((r) => <section className="section-card card" key={r.id}>
+      <SectionHead title={r.doctorName} note={`Review by ${r.patientName}`} /><Rating value={r.rating} />
+      <p style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{r.comment || "Rating only; no written comment."}</p>
+      <div className="page-heading-actions"><button className="button secondary" disabled={Boolean(busy)} onClick={() => decide(r.id, false)}>Reject</button>
+        <button className="button primary" disabled={Boolean(busy)} onClick={() => decide(r.id, true)}>{busy === r.id ? "Saving…" : "Approve and publish"}</button></div>
+    </section>) : <Empty icon="check" title="All reviews checked" hint="New patient reviews will appear here for approval." />}
+  </>;
 }
 
 function AdminHome({ reference, api }) {

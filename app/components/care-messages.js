@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "./icons.js";
-import { Banner, Empty, PageHeading } from "./ui.js";
+import { Empty, PageHeading } from "./ui.js";
 
 const date = (value) => new Date(value).toLocaleString("en-BD", {
   timeZone: "Asia/Dhaka", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
@@ -104,12 +104,13 @@ export function CareMessages({ api, role, onNavigate }) {
     } finally { sendRef.current = false; setSending(false); }
   };
 
-  return <>
+  return <div className={`care-page ${selected ? "has-thread" : ""}`}>
     <PageHeading title={role === "doctor" ? "Patient messages" : "Message your doctor"}
-      subtitle="Private conversations connected to your appointments." />
-    {role === "patient" && <Banner tone="warn" icon="alert" title="For emergencies, don’t wait for a reply">
-      Messages are not monitored continuously. For an emergency in Bangladesh, <a href="tel:999">call 999</a> or seek urgent in-person care.
-    </Banner>}
+      subtitle="Your care team, one conversation away."
+      actions={<button className="button ghost small" onClick={() => onNavigate(role === "doctor" ? "doctor-home" : "dashboard")}><Icon name="back" size={16} />Back to overview</button>} />
+    {role === "patient" && <details className="care-safety"><summary><Icon name="alert" size={16} />For emergencies, don’t wait for a reply</summary>
+      <p>Messages are not monitored continuously. For an emergency in Bangladesh, <a href="tel:999">call 999</a> or seek urgent in-person care.</p>
+    </details>}
     <div className={`care-chat ${selected ? "thread-open" : ""}`}>
       <aside className="care-inbox card" aria-label="Appointment conversations">
         <h2>Your conversations</h2>
@@ -118,15 +119,16 @@ export function CareMessages({ api, role, onNavigate }) {
             action={role === "patient" ? <button className="button secondary" onClick={() => onNavigate("doctors")}>Find a doctor</button> : null} /> :
           conversations.map((c) => <button className={`care-thread ${selected === c.id ? "active" : ""}`} key={c.id}
             aria-current={selected === c.id ? "true" : undefined} onClick={() => { selectedRef.current = c.id; setSelected(c.id); }} disabled={sending}>
-            <strong>{c.peerName}</strong><span>{date(c.startUtc)} · Bangladesh time</span>
-            <span>{c.reference}{c.status === "cancelled" ? " · Read only" : ""}</span>
+            <span className="care-thread-avatar" aria-hidden="true">{c.peerName?.replace(/^Dr\.\s*/, "").slice(0, 1)}</span>
+            <span className="care-thread-content"><strong>{c.peerName}</strong><span>Visit: {date(c.startUtc)}</span>
+            <span className="care-preview">{c.latestBody || (c.status === "cancelled" ? "Read-only conversation" : "Start a conversation")}</span></span>
             {c.unread > 0 && <b>{c.unread} unread</b>}
           </button>)}
       </aside>
       <section className="care-conversation card" aria-label="Direct messages">
         {conversation ? <>
-          <header><button className="button ghost small care-back" onClick={() => setSelected(null)} disabled={sending}>All conversations</button>
-            <h2>{conversation.peerName}</h2><p>Replies depend on availability · Bangladesh time</p></header>
+          <header><button className="button ghost small care-back" onClick={() => setSelected(null)} disabled={sending}><Icon name="back" size={18} />Messages</button>
+            <div><h2>{conversation.peerName}</h2><p>Visit: {date(conversation.startUtc)}</p></div></header>
           <div className="care-message-log" ref={logRef} role="log" aria-live="polite" aria-label={`Messages with ${conversation.peerName}`}
             onScroll={(e) => { const el = e.currentTarget; followRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }}>
             {hasMore && <button className="button ghost small" disabled={olderLoading} onClick={async () => {
@@ -135,14 +137,14 @@ export function CareMessages({ api, role, onNavigate }) {
             }}>{olderLoading ? "Loading…" : "Earlier messages"}</button>}
             {threadLoading ? <p role="status">Loading messages…</p> : !messages.length && <p className="care-chat-empty">Start a conversation. Include your question and any changes since your appointment.</p>}
             {messages.map((m) => <article className={`care-message ${m.mine ? "mine" : ""}`} key={m.id}>
-              <span className="care-sender">{m.mine ? "You" : conversation.peerName}</span><p>{m.body}</p>
+              <p>{m.body}</p>
               <small>{date(m.createdAt)}{m.mine ? (m.readAt ? " · Read" : " · Sent") : ""}</small>
             </article>)}
           </div>
           {conversation.status === "cancelled" ? <p className="care-chat-empty">This appointment was cancelled. Conversation history is still available.</p> :
             <form className="care-compose" onSubmit={send}>
               <label htmlFor="care-message">Your message</label>
-              <textarea id="care-message" rows={3} maxLength={2000} value={draft} disabled={sending}
+              <textarea id="care-message" rows={2} maxLength={2000} value={draft} disabled={sending}
                 placeholder="Write to your care team…" onChange={(e) => setDrafts((all) => ({ ...all, [selected]: e.target.value }))} />
               <div><small>{draft.length}/2000</small><button className="button primary" disabled={sending || !draft.trim()}><Icon name="send" size={16} />{sending ? "Sending…" : "Send message"}</button></div>
             </form>}
@@ -150,5 +152,5 @@ export function CareMessages({ api, role, onNavigate }) {
       </section>
     </div>
     {error && <div className="care-chat-error" role="alert">{error} <button className="text-link" onClick={() => { setRevision((n) => n + 1); if (selected) void receive(selected); }}>Retry</button></div>}
-  </>;
+  </div>;
 }

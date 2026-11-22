@@ -1,6 +1,7 @@
 "use client";
 
 import { TelemedicineScene } from "./telemedicine-scene.js";
+import { useEffect, useRef } from "react";
 
 import { Icon } from "./icons.js";
 import { LanguageSwitch } from "./shell.js";
@@ -31,6 +32,20 @@ const FEATURE_ICONS = ["shield", "clock", "bot", "file", "users", "pin"];
 
 export function Landing({ stats, onSignIn, onSignUp }) {
   const { lang, t } = useT();
+  const rootRef = useRef(null);
+  useEffect(() => {
+    if (!rootRef.current || !window.IntersectionObserver || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("headline-arrived");
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.25 });
+    rootRef.current.querySelectorAll("h1, .landing-head h2, .landing-final h2").forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
+  }, []);
 
   /** Counts are read, not dialled, so they take Bangla numerals in Bangla. */
   const num = (value) => (lang === "bn" ? banglaDigits(value) : String(value));
@@ -51,7 +66,7 @@ export function Landing({ stats, onSignIn, onSignUp }) {
   ];
 
   return (
-    <div className="landing">
+    <div className="landing landing-vibrant" ref={rootRef}>
       <header className="landing-nav">
         <div className="brand">
           <div className="brand-mark"><Icon name="heart" size={20} strokeWidth={2.2} /></div>

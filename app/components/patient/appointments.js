@@ -78,6 +78,7 @@ function primaryAction(a, { onPay, onJoinCall, setReviewing, onNavigate, payingI
     };
   }
   if (a.status === "completed") {
+    if (a.reviewStatus) return null;
     return {
       label: "Leave review",
       icon: "star",
@@ -130,7 +131,7 @@ function secondaryActions(a, {
   if (a.status === "completed") {
     return [
       { label: "View notes", icon: "file", onClick: () => onNavigate("records") },
-      { label: "Leave review", icon: "star", onClick: () => setReviewing(a) },
+      ...(!a.reviewStatus ? [{ label: "Leave review", icon: "star", onClick: () => setReviewing(a) }] : []),
       { label: "Book again", icon: "calendar", onClick: () => onNavigate("doctors") },
     ];
   }
@@ -217,6 +218,7 @@ export function Appointments({
                     ? <span className="status confirmed">Appointment confirmed</span>
                     : <StatusPill status={a.status} />}
                   <PaymentNote payment={a.payment} />
+                  {a.reviewStatus && <span className="pay-note">{a.reviewStatus === "pending_moderation" ? "Review awaiting admin approval" : a.reviewStatus === "published" ? "Review published" : "Review not approved"}</span>}
                 </div>
               </div>
 
@@ -288,8 +290,7 @@ export function Appointments({
         appointment={reviewing}
         onClose={() => setReviewing(null)}
         onSubmit={async (payload) => {
-          await onReview(payload);
-          setReviewing(null);
+          if (await onReview(payload)) setReviewing(null);
         }}
       />
 
@@ -382,7 +383,8 @@ function ReviewModal({ appointment, onClose, onSubmit }) {
         </div>
       </Field>
 
-      <Field label="Anything you'd like to add?" hint="Optional. Visible to other patients.">
+      <p className="muted-note">An admin will check your review before it appears on the doctor’s profile or contributes to their rating.</p>
+      <Field label="Anything you'd like to add?" hint="Optional. Published only after admin approval.">
         <textarea
           className="field textarea"
           rows={4}

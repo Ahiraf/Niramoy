@@ -36,10 +36,19 @@ export async function inbox(principal: Principal) {
     inArray(t.careMessages.appointmentId, rows.map((r) => r.id)),
     ne(t.careMessages.senderId, principal.userId), isNull(t.careMessages.readAt),
   )).groupBy(t.careMessages.appointmentId);
+  const latest = await getDb().selectDistinctOn([t.careMessages.appointmentId], {
+    appointmentId: t.careMessages.appointmentId,
+    body: t.careMessages.body,
+    createdAt: t.careMessages.createdAt,
+  }).from(t.careMessages)
+    .where(inArray(t.careMessages.appointmentId, rows.map((r) => r.id)))
+    .orderBy(t.careMessages.appointmentId, desc(t.careMessages.createdAt), desc(t.careMessages.id));
   return rows.map(({ doctorUserId: _doctorUserId, ...r }) => ({
     ...r, unread: counts.find((c) => c.appointmentId === r.id)?.unread ?? 0,
+    latestBody: latest.find((m) => m.appointmentId === r.id)?.body ?? null,
+    latestAt: latest.find((m) => m.appointmentId === r.id)?.createdAt ?? null,
     peerName: principal.role === "doctor" ? r.patientName : r.doctorName,
-  }));
+  })).sort((a, b) => (b.latestAt?.getTime() ?? 0) - (a.latestAt?.getTime() ?? 0));
 }
 
 async function participation(principal: Principal, appointmentId: string) {

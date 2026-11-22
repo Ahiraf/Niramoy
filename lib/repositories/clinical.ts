@@ -698,8 +698,7 @@ export async function listReviews(
 }
 
 /**
- * Record a review and update the doctor's aggregate in one transaction, so the
- * average can never drift from the rows it is computed from.
+ * New reviews stay private until an admin publishes them.
  */
 export async function createReview(
   input: {
@@ -721,19 +720,9 @@ export async function createReview(
       authorUserId: input.authorUserId,
       rating: input.rating,
       comment: input.comment ?? null,
-      status: "published",
+      status: "pending_moderation",
     })
     .returning({ id: t.reviews.id });
-
-  await db
-    .update(t.doctors)
-    .set({
-      ratingCount: sql`${t.doctors.ratingCount} + 1`,
-      ratingAvg: sql`round(
-        ((${t.doctors.ratingAvg} * ${t.doctors.ratingCount}) + ${input.rating})
-        / (${t.doctors.ratingCount} + 1), 2)`,
-    })
-    .where(eq(t.doctors.id, input.doctorId));
 
   return rows[0]!.id;
 }
